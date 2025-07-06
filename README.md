@@ -102,7 +102,7 @@ Follow the Linux instructions above within your WSL environment.
 Before configuring Claude Desktop, ensure you have:
 
 1. **Installed dependencies**: Run `uv sync` in the project directory
-2. **Verified installation**: Check `uv pip list` shows `immanuel` and `mcp[cli]`
+2. **Verified installation**: Check `uv pip list` shows `immanuel`, `mcp[cli]` and `tzdata`
 3. **Tested the server**: Run `uv run immanuel_server.py` to verify it starts without errors
 
 ### Windows
