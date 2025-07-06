@@ -1,0 +1,13 @@
+{
+  "total_tests": 1,
+  "passed": 1,
+  "failed": 0,
+  "tests": [
+    {
+      "test_name": "cache_key_generation",
+      "result": "PASSED",
+      "error": null
+    }
+  ],
+  "success_rate": 100.0
+}

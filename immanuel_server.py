@@ -24,6 +24,7 @@ from immanuel.classes.serialize import ToJSON
 from immanuel.tools import convert
 from mcp.server.fastmcp import FastMCP
 from mcp.types import TextContent
+from compact_serializer import CompactJSONSerializer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -218,6 +219,57 @@ def create_cache_key(*args) -> str:
     key_string = "|".join(str(arg) for arg in args)
     return hashlib.md5(key_string.encode()).hexdigest()
 
+
+@mcp.tool()
+def generate_compact_natal_chart(
+    date_time: str,
+    latitude: str,
+    longitude: str,
+) -> Dict[str, Any]:
+    """
+    Generates a compact natal chart with essential information.
+
+    This tool provides a streamlined version of the natal chart, focusing on the most critical
+    astrological data: major celestial objects, their positions, and major aspects. It omits
+    more detailed data like weightings and chart shape for a faster and more concise output.
+
+    Args:
+        date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
+        latitude: The latitude of the birth location, e.g., '32n43' or '32.71'.
+        longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
+
+    Returns:
+        A compact Natal chart object serialized to a JSON dictionary, including simplified
+        objects, houses, and aspects.
+    """
+    try:
+        logger.info(f"Generating compact natal chart for {date_time} at {latitude}, {longitude}")
+
+        # Validate inputs first
+        validate_inputs(date_time, latitude, longitude)
+
+        # Parse coordinates
+        lat = parse_coordinate(latitude, is_latitude=True)
+        lon = parse_coordinate(longitude, is_latitude=False)
+
+        # Create subject
+        subject = charts.Subject(
+            date_time=date_time,
+            latitude=lat,
+            longitude=lon
+        )
+
+        # Generate natal chart
+        natal = charts.Natal(subject)
+
+        # Serialize to JSON using the compact serializer
+        result = json.loads(json.dumps(natal, cls=CompactJSONSerializer))
+        logger.info("Compact natal chart generated successfully")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error generating compact natal chart: {str(e)}")
+        return handle_chart_error(e)
 
 @mcp.tool()
 def generate_natal_chart(
@@ -426,6 +478,63 @@ def generate_solar_return_chart(
 
 
 @mcp.tool()
+def generate_compact_solar_return_chart(
+    date_time: str,
+    latitude: str,
+    longitude: str,
+    return_year: int
+) -> Dict[str, Any]:
+    """
+    Generates a compact solar return chart for a given year.
+    
+    This tool provides a streamlined version of the solar return chart, focusing on the most critical
+    astrological data: major celestial objects, their positions, and major aspects. It omits
+    more detailed data like weightings and chart shape for a faster and more concise output.
+    
+    Args:
+        date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
+        latitude: The latitude of the birth location, e.g., '32n43' or '32.71'.
+        longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
+        return_year: The year for which to calculate the solar return.
+    
+    Returns:
+        A compact SolarReturn chart object serialized to a JSON dictionary.
+    """
+    try:
+        logger.info(f"Generating compact solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
+        
+        # Validate inputs first
+        validate_inputs(date_time, latitude, longitude)
+        
+        # Validate return year
+        if not 1900 <= return_year <= 2100:
+            raise ValueError(f"Return year must be between 1900 and 2100. Got: {return_year}")
+        
+        # Parse coordinates
+        lat = parse_coordinate(latitude, is_latitude=True)
+        lon = parse_coordinate(longitude, is_latitude=False)
+        
+        # Create subject
+        subject = charts.Subject(
+            date_time=date_time,
+            latitude=lat,
+            longitude=lon
+        )
+        
+        # Generate solar return chart
+        solar_return = charts.SolarReturn(subject, return_year)
+        
+        # Serialize to JSON using the compact serializer
+        result = json.loads(json.dumps(solar_return, cls=CompactJSONSerializer))
+        logger.info("Compact solar return chart generated successfully")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error generating compact solar return chart: {str(e)}")
+        return handle_chart_error(e)
+
+
+@mcp.tool()
 def generate_progressed_chart(
     date_time: str,
     latitude: str,
@@ -472,6 +581,60 @@ def generate_progressed_chart(
 
     except Exception as e:
         logger.error(f"Error generating progressed chart: {str(e)}")
+        return handle_chart_error(e)
+
+
+@mcp.tool()
+def generate_compact_progressed_chart(
+    date_time: str,
+    latitude: str,
+    longitude: str,
+    progression_date_time: str
+) -> Dict[str, Any]:
+    """
+    Generates a compact secondary progression chart for a native chart to a specific future date.
+    
+    This tool provides a streamlined version of the progressed chart, focusing on the most critical
+    astrological data: major celestial objects, their positions, and major aspects. It omits
+    more detailed data like weightings and chart shape for a faster and more concise output.
+    
+    Args:
+        date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
+        latitude: The latitude of the birth location, e.g., '32n43' or '32.71'.
+        longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
+        progression_date_time: The date and time to progress the chart to, in ISO format.
+    
+    Returns:
+        A compact Progressed chart object serialized to a JSON dictionary.
+    """
+    try:
+        logger.info(f"Generating compact progressed chart from {date_time} to {progression_date_time} at {latitude}, {longitude}")
+        
+        # Validate inputs
+        validate_inputs(date_time, latitude, longitude)
+        validate_inputs(progression_date_time, latitude, longitude)  # Reuse validation for progression date
+        
+        # Parse coordinates
+        lat = parse_coordinate(latitude, is_latitude=True)
+        lon = parse_coordinate(longitude, is_latitude=False)
+        
+        # Create subject
+        subject = charts.Subject(
+            date_time=date_time,
+            latitude=lat,
+            longitude=lon
+        )
+        
+        # Generate progressed chart
+        progressed = charts.Progressed(subject, progression_date_time)
+        
+        # Serialize to JSON using the compact serializer
+        result = json.loads(json.dumps(progressed, cls=CompactJSONSerializer))
+        logger.info("Compact progressed chart generated successfully")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error generating compact progressed chart: {str(e)}")
         return handle_chart_error(e)
 
 
@@ -536,6 +699,74 @@ def generate_composite_chart(
 
     except Exception as e:
         logger.error(f"Error generating composite chart: {str(e)}")
+        return handle_chart_error(e)
+
+
+@mcp.tool()
+def generate_compact_composite_chart(
+    native_date_time: str,
+    native_latitude: str,
+    native_longitude: str,
+    partner_date_time: str,
+    partner_latitude: str,
+    partner_longitude: str
+) -> Dict[str, Any]:
+    """
+    Generates a compact composite (midpoint) chart for two subjects.
+    
+    This tool provides a streamlined version of the composite chart, focusing on the most critical
+    astrological data: major celestial objects, their positions, and major aspects. It omits
+    more detailed data like weightings and chart shape for a faster and more concise output.
+    
+    Args:
+        native_date_time: The birth date and time of the first subject in ISO format.
+        native_latitude: The latitude of the first subject's birth location.
+        native_longitude: The longitude of the first subject's birth location.
+        partner_date_time: The birth date and time of the second subject in ISO format.
+        partner_latitude: The latitude of the second subject's birth location.
+        partner_longitude: The longitude of the second subject's birth location.
+    
+    Returns:
+        A compact Composite chart object serialized to a JSON dictionary.
+    """
+    try:
+        logger.info(f"Generating compact composite chart between {native_date_time} and {partner_date_time}")
+        
+        # Validate inputs for both subjects
+        validate_inputs(native_date_time, native_latitude, native_longitude)
+        validate_inputs(partner_date_time, partner_latitude, partner_longitude)
+        
+        # Parse coordinates for native
+        native_lat = parse_coordinate(native_latitude, is_latitude=True)
+        native_lon = parse_coordinate(native_longitude, is_latitude=False)
+        
+        # Parse coordinates for partner
+        partner_lat = parse_coordinate(partner_latitude, is_latitude=True)
+        partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
+        
+        # Create subjects
+        native = charts.Subject(
+            date_time=native_date_time,
+            latitude=native_lat,
+            longitude=native_lon
+        )
+        
+        partner = charts.Subject(
+            date_time=partner_date_time,
+            latitude=partner_lat,
+            longitude=partner_lon
+        )
+        
+        # Generate composite chart
+        composite = charts.Composite(native, partner)
+        
+        # Serialize to JSON using the compact serializer
+        result = json.loads(json.dumps(composite, cls=CompactJSONSerializer))
+        logger.info("Compact composite chart generated successfully")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error generating compact composite chart: {str(e)}")
         return handle_chart_error(e)
 
 
@@ -608,6 +839,80 @@ def generate_synastry_aspects(
 
 
 @mcp.tool()
+def generate_compact_synastry_aspects(
+    native_date_time: str,
+    native_latitude: str,
+    native_longitude: str,
+    partner_date_time: str,
+    partner_latitude: str,
+    partner_longitude: str
+) -> Dict[str, Any]:
+    """
+    Calculates compact synastry aspects between two charts, filtered to show only major aspects between major objects.
+    
+    This tool provides a streamlined version of synastry aspects, focusing on the most critical
+    astrological connections: major aspects between major celestial objects only. It omits
+    minor aspects and minor objects for a faster and more concise output.
+    
+    Args:
+        native_date_time: The birth date and time of the first subject (whose chart will contain the aspects).
+        native_latitude: The latitude of the first subject's birth location.
+        native_longitude: The longitude of the first subject's birth location.
+        partner_date_time: The birth date and time of the second subject (whose planets are being aspected).
+        partner_latitude: The latitude of the second subject's birth location.
+        partner_longitude: The longitude of the second subject's birth location.
+    
+    Returns:
+        Filtered synastry aspects showing only major aspects between major objects.
+    """
+    try:
+        logger.info(f"Generating compact synastry aspects between {native_date_time} and {partner_date_time}")
+        
+        # Validate inputs for both subjects
+        validate_inputs(native_date_time, native_latitude, native_longitude)
+        validate_inputs(partner_date_time, partner_latitude, partner_longitude)
+        
+        # Parse coordinates for native
+        native_lat = parse_coordinate(native_latitude, is_latitude=True)
+        native_lon = parse_coordinate(native_longitude, is_latitude=False)
+        
+        # Parse coordinates for partner
+        partner_lat = parse_coordinate(partner_latitude, is_latitude=True)
+        partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
+        
+        # Create subjects
+        native_subject = charts.Subject(
+            date_time=native_date_time,
+            latitude=native_lat,
+            longitude=native_lon
+        )
+        
+        partner_subject = charts.Subject(
+            date_time=partner_date_time,
+            latitude=partner_lat,
+            longitude=partner_lon
+        )
+        
+        # Create partner chart first
+        partner_chart = charts.Natal(partner_subject)
+        
+        # Create native chart with aspects to partner
+        native_chart = charts.Natal(native_subject, aspects_to=partner_chart)
+        
+        # Serialize the entire chart using compact serializer to get filtered aspects
+        compact_chart_data = json.loads(json.dumps(native_chart, cls=CompactJSONSerializer))
+        filtered_aspects = compact_chart_data.get('aspects', [])
+        
+        result = {"aspects": filtered_aspects}
+        logger.info("Compact synastry aspects generated successfully")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error generating compact synastry aspects: {str(e)}")
+        return handle_chart_error(e)
+
+
+@mcp.tool()
 def generate_transit_chart(
     latitude: str,
     longitude: str
@@ -639,6 +944,45 @@ def generate_transit_chart(
 
     except Exception as e:
         logger.error(f"Error generating transit chart: {str(e)}")
+        return handle_chart_error(e)
+
+
+@mcp.tool()
+def generate_compact_transit_chart(
+    latitude: str,
+    longitude: str
+) -> Dict[str, Any]:
+    """
+    Generates a compact chart for the current moment for a given location, showing current planetary positions with filtering.
+    
+    This tool provides a streamlined version of the transit chart, focusing on the most critical
+    astrological data: major celestial objects and their current positions. It omits
+    minor objects and detailed properties for a faster and more concise output.
+    
+    Args:
+        latitude: The latitude of the location, e.g., '32n43'.
+        longitude: The longitude of the location, e.g., '117w09'.
+    
+    Returns:
+        A compact Transits chart object serialized to a JSON dictionary.
+    """
+    try:
+        logger.info(f"Generating compact transit chart for current time at {latitude}, {longitude}")
+        
+        # Parse coordinates
+        lat = parse_coordinate(latitude, is_latitude=True)
+        lon = parse_coordinate(longitude, is_latitude=False)
+        
+        # Generate transits chart
+        transits = charts.Transits(latitude=lat, longitude=lon)
+        
+        # Serialize to JSON using the compact serializer
+        result = json.loads(json.dumps(transits, cls=CompactJSONSerializer))
+        logger.info("Compact transit chart generated successfully")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error generating compact transit chart: {str(e)}")
         return handle_chart_error(e)
 
 

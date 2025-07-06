@@ -1,0 +1,43 @@
+{
+  "total_tests": 7,
+  "passed": 7,
+  "failed": 0,
+  "tests": [
+    {
+      "test_name": "latitude_out_of_range",
+      "result": "PASSED",
+      "error": null
+    },
+    {
+      "test_name": "longitude_out_of_range",
+      "result": "PASSED",
+      "error": null
+    },
+    {
+      "test_name": "decimal_positive_latitude",
+      "result": "PASSED",
+      "error": null
+    },
+    {
+      "test_name": "decimal_negative_longitude",
+      "result": "PASSED",
+      "error": null
+    },
+    {
+      "test_name": "invalid_format",
+      "result": "PASSED",
+      "error": null
+    },
+    {
+      "test_name": "traditional_north_latitude",
+      "result": "PASSED",
+      "error": null
+    },
+    {
+      "test_name": "traditional_west_longitude",
+      "result": "PASSED",
+      "error": null
+    }
+  ],
+  "success_rate": 100.0
+}

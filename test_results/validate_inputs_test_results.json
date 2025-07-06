@@ -1,0 +1,23 @@
+{
+  "total_tests": 3,
+  "passed": 3,
+  "failed": 0,
+  "tests": [
+    {
+      "test_name": "invalid_coordinates",
+      "result": "PASSED",
+      "error": null
+    },
+    {
+      "test_name": "invalid_datetime",
+      "result": "PASSED",
+      "error": null
+    },
+    {
+      "test_name": "valid_inputs",
+      "result": "PASSED",
+      "error": null
+    }
+  ],
+  "success_rate": 100.0
+}

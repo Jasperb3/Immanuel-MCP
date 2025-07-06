@@ -1,0 +1,18 @@
+{
+  "total_tests": 2,
+  "passed": 2,
+  "failed": 0,
+  "tests": [
+    {
+      "test_name": "invalid_year",
+      "result": "PASSED",
+      "error": null
+    },
+    {
+      "test_name": "success_case",
+      "result": "PASSED",
+      "error": null
+    }
+  ],
+  "success_rate": 100.0
+}
