@@ -51,8 +51,8 @@ A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python
 
 3. **Clone or download this repository**:
    ```powershell
-   git clone https://github.com/yourusername/immanuel-mcp-server.git
-   cd immanuel-mcp-server
+   git clone https://github.com/Jasperb3/Immanuel-MCP.git
+   cd Immanuel-MCP
    ```
 
 #### Linux/macOS
@@ -68,8 +68,8 @@ A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python
 
 3. **Clone or download this repository**:
    ```bash
-   git clone https://github.com/yourusername/immanuel-mcp-server.git
-   cd immanuel-mcp-server
+   git clone https://github.com/Jasperb3/Immanuel-MCP.git
+   cd Immanuel-MCP
    ```
 
 #### Windows Subsystem for Linux (WSL)
