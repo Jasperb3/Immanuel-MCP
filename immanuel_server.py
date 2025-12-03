@@ -9,11 +9,10 @@ input validation, and additional helper functions.
 
 import json
 import sys
-import hashlib
 import logging
+import re
 from datetime import datetime
-from functools import lru_cache
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Union
 
 import immanuel
 from immanuel import charts
@@ -73,8 +72,6 @@ def parse_coordinate(coord: str, is_latitude: bool = True) -> float:
         pass
     
     # Parse traditional format with improved regex
-    import re
-    
     # Pattern for formats like: 32n43, 32N43, 32n43'30, 117w09, etc.
     pattern = r'^(\d+)([nsewNSEW])(\d+)(?:[\'\"]*(\d+))?[\'\"]*$'
     match = re.match(pattern, coord.replace(' ', ''))
@@ -204,20 +201,6 @@ def handle_chart_error(e: Exception) -> Dict[str, Any]:
         "type": error_type,
         "suggestion": get_error_suggestion(error_type, str(e))
     }
-
-
-def create_cache_key(*args) -> str:
-    """
-    Create a cache key from arguments.
-    
-    Args:
-        *args: Arguments to create cache key from
-        
-    Returns:
-        MD5 hash string as cache key
-    """
-    key_string = "|".join(str(arg) for arg in args)
-    return hashlib.md5(key_string.encode()).hexdigest()
 
 
 @mcp.tool()
