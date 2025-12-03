@@ -4,6 +4,16 @@ Comprehensive test suite for immanuel_server.py functions.
 
 This test suite provides thorough testing of all functions in the immanuel_server.py file,
 including utility functions, MCP tool functions, and error handling.
+
+Running the tests:
+    Using pytest (recommended):
+        uv run pytest test_immanuel_server.py -v
+
+    Using Python directly:
+        uv run python test_immanuel_server.py
+
+The test suite will generate detailed JSON reports in the test_results/ directory,
+with one file per function containing test results and success rates.
 """
 
 import json
