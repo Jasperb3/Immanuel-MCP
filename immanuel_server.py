@@ -11,6 +11,7 @@ import json
 import sys
 import logging
 import re
+import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 
@@ -22,12 +23,27 @@ from immanuel.const import data as data_const
 from immanuel.classes.serialize import ToJSON
 from immanuel.tools import convert
 from mcp.server.fastmcp import FastMCP
-from mcp.types import TextContent
 from compact_serializer import CompactJSONSerializer
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# Configure logging to file only (CRITICAL: logging to stdout/stderr breaks stdio transport)
+# Create logs directory if it doesn't exist
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'immanuel_server.log')
+
+# Configure file-only logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, encoding='utf-8')
+    ]
+)
 logger = logging.getLogger(__name__)
+
+# Suppress any third-party library logging that might go to stdout/stderr
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
 
 # Initialize the MCP server
 mcp = FastMCP("immanuel-astrology-server")
@@ -55,48 +71,49 @@ def parse_coordinate(coord: str, is_latitude: bool = True) -> float:
         >>> parse_coordinate("51°23'30\"N")
         51.39166666666667
     """
+    coord_type = "latitude" if is_latitude else "longitude"
+    original_coord = coord  # Keep original for logging
     coord = coord.strip().replace('°', ' ').replace("'", ' ').replace('"', ' ')
-    
-    # Try direct float conversion first
-    try:
-        result = float(coord)
-        # Validate range
-        if is_latitude and not -90 <= result <= 90:
-            raise ValueError(f"Latitude must be between -90 and 90 degrees. Got: {result}")
-        elif not is_latitude and not -180 <= result <= 180:
-            raise ValueError(f"Longitude must be between -180 and 180 degrees. Got: {result}")
-        return result
-    except ValueError as e:
-        if "must be between" in str(e):
-            raise  # Re-raise range validation errors
-        pass
-    
-    # Parse traditional format with improved regex
+
+    logger.debug(f"Parsing {coord_type}: original='{original_coord}', cleaned='{coord}'")
+
+    # Check for DMS pattern FIRST (before float conversion) to avoid scientific notation issues
+    # Pattern for formats like: 32n43, 32N43, 32n43'30, 117w09, 117e09, etc.
     # Pattern for formats like: 32n43, 32N43, 32n43'30, 117w09, etc.
     pattern = r'^(\d+)([nsewNSEW])(\d+)(?:[\'\"]*(\d+))?[\'\"]*$'
     match = re.match(pattern, coord.replace(' ', ''))
-    
+
     if match:
         degrees = int(match.group(1))
         direction = match.group(2).lower()
         minutes = int(match.group(3)) if match.group(3) else 0
         seconds = int(match.group(4)) if match.group(4) else 0
-        
+
+        logger.debug(f"Matched DMS pattern: {degrees}° {minutes}' {seconds}\" {direction.upper()}")
+
         decimal = degrees + (minutes / 60) + (seconds / 3600)
-        
+
         # Apply sign based on direction
         if direction in ['s', 'w']:
             decimal = -decimal
-        
+
+        logger.debug(f"Converted to decimal: {decimal}")
+
         # Validate range
         if is_latitude and not -90 <= decimal <= 90:
-            raise ValueError(f"Latitude must be between -90 and 90 degrees. Got: {decimal}")
+            error_msg = f"Latitude must be between -90 and 90 degrees. Got: {decimal}"
+            logger.error(f"DMS range validation failed: {error_msg}")
+            raise ValueError(error_msg)
         elif not is_latitude and not -180 <= decimal <= 180:
-            raise ValueError(f"Longitude must be between -180 and 180 degrees. Got: {decimal}")
-            
+            error_msg = f"Longitude must be between -180 and 180 degrees. Got: {decimal}"
+            logger.error(f"DMS range validation failed: {error_msg}")
+            raise ValueError(error_msg)
+
+        logger.debug(f"Successfully parsed and validated {coord_type}: {decimal}")
         return decimal
     
     # Try space-separated format: "32 43 30 N" or "32 43 N"
+    logger.debug(f"DMS pattern failed, trying space-separated format")
     parts = coord.upper().split()
     if len(parts) >= 3 and parts[-1] in ['N', 'S', 'E', 'W']:
         try:
@@ -104,24 +121,60 @@ def parse_coordinate(coord: str, is_latitude: bool = True) -> float:
             minutes = int(parts[1]) if len(parts) > 2 else 0
             seconds = int(parts[2]) if len(parts) > 3 else 0
             direction = parts[-1].lower()
-            
+
+            logger.debug(f"Matched space-separated: {degrees}° {minutes}' {seconds}\" {direction.upper()}")
+
             decimal = degrees + (minutes / 60) + (seconds / 3600)
             if direction in ['s', 'w']:
                 decimal = -decimal
-            
+
+            logger.debug(f"Converted to decimal: {decimal}")
+
             # Validate range
             if is_latitude and not -90 <= decimal <= 90:
-                raise ValueError(f"Latitude must be between -90 and 90 degrees. Got: {decimal}")
+                error_msg = f"Latitude must be between -90 and 90 degrees. Got: {decimal}"
+                logger.error(f"Space-separated range validation failed: {error_msg}")
+                raise ValueError(error_msg)
             elif not is_latitude and not -180 <= decimal <= 180:
-                raise ValueError(f"Longitude must be between -180 and 180 degrees. Got: {decimal}")
-                
+                error_msg = f"Longitude must be between -180 and 180 degrees. Got: {decimal}"
+                logger.error(f"Space-separated range validation failed: {error_msg}")
+                raise ValueError(error_msg)
+
+            logger.debug(f"Successfully parsed and validated {coord_type}: {decimal}")
             return decimal
-        except (ValueError, IndexError):
+        except (ValueError, IndexError) as e:
+            logger.debug(f"Space-separated parsing failed: {e}")
             pass
-    
-    raise ValueError(f"Invalid coordinate format: {coord}. "
-                    f"Supported formats: decimal (32.71), DMS (32n43, 32°43'30\"), "
-                    f"or space-separated (32 43 30 N)")
+
+    # Finally, try parsing as decimal (after DMS to avoid scientific notation confusion)
+    logger.debug(f"Space-separated format failed, trying decimal format")
+    try:
+        result = float(coord)
+        logger.debug(f"Successfully parsed as decimal: {result}")
+
+        # Validate range
+        if is_latitude and not -90 <= result <= 90:
+            error_msg = f"Latitude must be between -90 and 90 degrees. Got: {result}"
+            logger.error(f"Decimal range validation failed: {error_msg}")
+            raise ValueError(error_msg)
+        elif not is_latitude and not -180 <= result <= 180:
+            error_msg = f"Longitude must be between -180 and 180 degrees. Got: {result}"
+            logger.error(f"Decimal range validation failed: {error_msg}")
+            raise ValueError(error_msg)
+
+        logger.debug(f"Successfully validated {coord_type}: {result}")
+        return result
+    except ValueError as e:
+        if "must be between" in str(e):
+            raise  # Re-raise range validation errors
+        logger.debug(f"Decimal parsing failed: {e}")
+
+    error_msg = (f"Invalid {coord_type} format: '{original_coord}'. "
+                f"Supported formats: decimal (32.71 or -117.15), "
+                f"DMS with direction (32n43 or 117w09), "
+                f"or space-separated (32 43 30 N)")
+    logger.error(error_msg)
+    raise ValueError(error_msg)
 
 
 def validate_inputs(date_time: str, latitude: str, longitude: str) -> None:
@@ -175,15 +228,15 @@ def get_error_suggestion(error_type: str, message: str) -> str:
 def handle_chart_error(e: Exception) -> Dict[str, Any]:
     """
     Enhanced error response with more helpful information.
-    
+
     Args:
         e: The exception that occurred
-        
+
     Returns:
         Structured error response dictionary
     """
     error_type = type(e).__name__
-    
+
     # Provide more specific error messages
     if "No time zone found" in str(e):
         message = (f"Timezone error: {str(e)}. "
@@ -194,7 +247,7 @@ def handle_chart_error(e: Exception) -> Dict[str, Any]:
         message = str(e)
     else:
         message = str(e)
-    
+
     return {
         "error": True,
         "message": message,
@@ -203,11 +256,35 @@ def handle_chart_error(e: Exception) -> Dict[str, Any]:
     }
 
 
+def create_subject(date_time: str, latitude: float, longitude: float, timezone: str = None) -> charts.Subject:
+    """
+    Create an Immanuel Subject with optional timezone.
+
+    Args:
+        date_time: Date and time string in ISO format
+        latitude: Parsed latitude as float
+        longitude: Parsed longitude as float
+        timezone: Optional IANA timezone name
+
+    Returns:
+        Configured Subject instance
+    """
+    subject_kwargs = {
+        'date_time': date_time,
+        'latitude': latitude,
+        'longitude': longitude
+    }
+    if timezone:
+        subject_kwargs['timezone'] = timezone
+    return charts.Subject(**subject_kwargs)
+
+
 @mcp.tool()
 def generate_compact_natal_chart(
     date_time: str,
     latitude: str,
     longitude: str,
+    timezone: str = None
 ) -> Dict[str, Any]:
     """
     Generates a compact natal chart with essential information.
@@ -220,13 +297,15 @@ def generate_compact_natal_chart(
         date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
         latitude: The latitude of the birth location, e.g., '32n43' or '32.71'.
         longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
+        timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
+                  If not provided, timezone is inferred from coordinates.
 
     Returns:
         A compact Natal chart object serialized to a JSON dictionary, including simplified
         objects, houses, and aspects.
     """
     try:
-        logger.info(f"Generating compact natal chart for {date_time} at {latitude}, {longitude}")
+        logger.info(f"Generating compact natal chart for {date_time} at {latitude}, {longitude} (tz: {timezone})")
 
         # Validate inputs first
         validate_inputs(date_time, latitude, longitude)
@@ -235,12 +314,8 @@ def generate_compact_natal_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        # Create subject
-        subject = charts.Subject(
-            date_time=date_time,
-            latitude=lat,
-            longitude=lon
-        )
+        # Create subject with optional timezone
+        subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate natal chart
         natal = charts.Natal(subject)
@@ -259,35 +334,34 @@ def generate_natal_chart(
     date_time: str,
     latitude: str,
     longitude: str,
+    timezone: str = None
 ) -> Dict[str, Any]:
     """
     Generates a natal (birth) chart for a specific person or event.
-    
+
     Args:
         date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
         latitude: The latitude of the birth location, e.g., '32n43' or '32.71'.
         longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
-    
+        timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
+                  If not provided, timezone is inferred from coordinates.
+
     Returns:
         The full Natal chart object serialized to a JSON dictionary.
     """
     try:
-        logger.info(f"Generating natal chart for {date_time} at {latitude}, {longitude}")
-        
+        logger.info(f"Generating natal chart for {date_time} at {latitude}, {longitude} (tz: {timezone})")
+
         # Validate inputs first
         validate_inputs(date_time, latitude, longitude)
-        
+
         # Parse coordinates
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
-        
-        # Create subject
-        subject = charts.Subject(
-            date_time=date_time,
-            latitude=lat,
-            longitude=lon
-        )
-        
+
+        # Create subject with optional timezone
+        subject = create_subject(date_time, lat, lon, timezone)
+
         # Generate natal chart
         natal = charts.Natal(subject)
         
@@ -306,45 +380,86 @@ def get_chart_summary(
     date_time: str,
     latitude: str,
     longitude: str,
+    timezone: str = None
 ) -> Dict[str, Any]:
     """
     Get a simplified summary of key chart information.
-    
+
     Args:
         date_time: The birth date and time in ISO format
         latitude: The latitude of the birth location
         longitude: The longitude of the birth location
-    
+        timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York')
+
     Returns:
         A simplified summary with just the essential information.
     """
     try:
         logger.info(f"Generating chart summary for {date_time} at {latitude}, {longitude}")
-        
+
         validate_inputs(date_time, latitude, longitude)
-        
+
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
-        
-        subject = charts.Subject(date_time=date_time, latitude=lat, longitude=lon)
+
+        subject = create_subject(date_time, lat, lon, timezone)
         natal = charts.Natal(subject)
-        
-        # Extract key information
-        sun = natal.objects.get(4000001)  # Sun
-        moon = natal.objects.get(4000002)  # Moon
-        asc = natal.objects.get(3000001)  # Ascendant
-        
+
+        # Extract key information with defensive error handling
+        logger.debug(f"Natal chart created successfully. Objects type: {type(natal.objects)}")
+
+        # Access celestial objects
+        sun = natal.objects.get(chart_const.SUN)  # Use constant instead of magic number
+        moon = natal.objects.get(chart_const.MOON)
+        asc = natal.objects.get(chart_const.ASC)
+
+        logger.debug(f"Retrieved objects - Sun: {sun}, Moon: {moon}, Asc: {asc}")
+
+        # Extract sign names with error handling
+        try:
+            sun_sign = sun.sign.name if (sun and hasattr(sun, 'sign') and hasattr(sun.sign, 'name')) else "Unknown"
+            moon_sign = moon.sign.name if (moon and hasattr(moon, 'sign') and hasattr(moon.sign, 'name')) else "Unknown"
+            rising_sign = asc.sign.name if (asc and hasattr(asc, 'sign') and hasattr(asc.sign, 'name')) else "Unknown"
+        except AttributeError as e:
+            logger.error(f"Error accessing sign names: {e}")
+            sun_sign = moon_sign = rising_sign = "Unknown"
+
+        # Extract other chart properties with error handling
+        try:
+            chart_shape = natal.shape if hasattr(natal, 'shape') else "Unknown"
+        except Exception as e:
+            logger.error(f"Error accessing chart shape: {e}")
+            chart_shape = "Unknown"
+
+        try:
+            moon_phase = natal.moon_phase.formatted if (hasattr(natal, 'moon_phase') and hasattr(natal.moon_phase, 'formatted')) else "Unknown"
+        except Exception as e:
+            logger.error(f"Error accessing moon phase: {e}")
+            moon_phase = "Unknown"
+
+        try:
+            diurnal = natal.diurnal if hasattr(natal, 'diurnal') else None
+        except Exception as e:
+            logger.error(f"Error accessing diurnal: {e}")
+            diurnal = None
+
+        try:
+            house_system = natal.house_system if hasattr(natal, 'house_system') else "Unknown"
+        except Exception as e:
+            logger.error(f"Error accessing house system: {e}")
+            house_system = "Unknown"
+
         result = {
-            "sun_sign": sun.sign.name if sun else "Unknown",
-            "moon_sign": moon.sign.name if moon else "Unknown", 
-            "rising_sign": asc.sign.name if asc else "Unknown",
-            "chart_shape": natal.shape,
-            "moon_phase": natal.moon_phase.formatted,
-            "diurnal": natal.diurnal,
-            "house_system": natal.house_system
+            "sun_sign": sun_sign,
+            "moon_sign": moon_sign,
+            "rising_sign": rising_sign,
+            "chart_shape": chart_shape,
+            "moon_phase": moon_phase,
+            "diurnal": diurnal,
+            "house_system": house_system
         }
-        
-        logger.info("Chart summary generated successfully")
+
+        logger.info(f"Chart summary generated successfully: {result}")
         return result
         
     except Exception as e:
@@ -357,27 +472,29 @@ def get_planetary_positions(
     date_time: str,
     latitude: str,
     longitude: str,
+    timezone: str = None
 ) -> Dict[str, Any]:
     """
     Get just the planetary positions in a simplified format.
-    
+
     Args:
         date_time: The birth date and time in ISO format
         latitude: The latitude of the birth location
         longitude: The longitude of the birth location
-    
+        timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York')
+
     Returns:
         Dictionary containing planetary positions in signs and houses.
     """
     try:
         logger.info(f"Getting planetary positions for {date_time} at {latitude}, {longitude}")
-        
+
         validate_inputs(date_time, latitude, longitude)
-        
+
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
-        
-        subject = charts.Subject(date_time=date_time, latitude=lat, longitude=lon)
+
+        subject = create_subject(date_time, lat, lon, timezone)
         natal = charts.Natal(subject)
         
         planets = {}
@@ -412,41 +529,39 @@ def generate_solar_return_chart(
     date_time: str,
     latitude: str,
     longitude: str,
-    return_year: int
+    return_year: int,
+    timezone: str = None
 ) -> Dict[str, Any]:
     """
     Generates a solar return chart for a given year.
-    
+
     Args:
         date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
         latitude: The latitude of the birth location, e.g., '32n43' or '32.71'.
         longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
         return_year: The year for which to calculate the solar return.
-    
+        timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
+
     Returns:
         The full SolarReturn chart object serialized to a JSON dictionary.
     """
     try:
         logger.info(f"Generating solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
-        
+
         # Validate inputs first
         validate_inputs(date_time, latitude, longitude)
-        
+
         # Validate return year
         if not 1900 <= return_year <= 2100:
             raise ValueError(f"Return year must be between 1900 and 2100. Got: {return_year}")
-        
+
         # Parse coordinates
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
-        
-        # Create subject
-        subject = charts.Subject(
-            date_time=date_time,
-            latitude=lat,
-            longitude=lon
-        )
-        
+
+        # Create subject with optional timezone
+        subject = create_subject(date_time, lat, lon, timezone)
+
         # Generate solar return chart
         solar_return = charts.SolarReturn(subject, return_year)
         
@@ -465,45 +580,43 @@ def generate_compact_solar_return_chart(
     date_time: str,
     latitude: str,
     longitude: str,
-    return_year: int
+    return_year: int,
+    timezone: str = None
 ) -> Dict[str, Any]:
     """
     Generates a compact solar return chart for a given year.
-    
+
     This tool provides a streamlined version of the solar return chart, focusing on the most critical
     astrological data: major celestial objects, their positions, and major aspects. It omits
     more detailed data like weightings and chart shape for a faster and more concise output.
-    
+
     Args:
         date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
         latitude: The latitude of the birth location, e.g., '32n43' or '32.71'.
         longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
         return_year: The year for which to calculate the solar return.
-    
+        timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
+
     Returns:
         A compact SolarReturn chart object serialized to a JSON dictionary.
     """
     try:
         logger.info(f"Generating compact solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
-        
+
         # Validate inputs first
         validate_inputs(date_time, latitude, longitude)
-        
+
         # Validate return year
         if not 1900 <= return_year <= 2100:
             raise ValueError(f"Return year must be between 1900 and 2100. Got: {return_year}")
-        
+
         # Parse coordinates
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
-        
-        # Create subject
-        subject = charts.Subject(
-            date_time=date_time,
-            latitude=lat,
-            longitude=lon
-        )
-        
+
+        # Create subject with optional timezone
+        subject = create_subject(date_time, lat, lon, timezone)
+
         # Generate solar return chart
         solar_return = charts.SolarReturn(subject, return_year)
         
@@ -522,38 +635,36 @@ def generate_progressed_chart(
     date_time: str,
     latitude: str,
     longitude: str,
-    progression_date_time: str
+    progression_date_time: str,
+    timezone: str = None
 ) -> Dict[str, Any]:
     """
     Generates a secondary progression chart for a native chart to a specific future date.
-    
+
     Args:
         date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
         latitude: The latitude of the birth location, e.g., '32n43' or '32.71'.
         longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
         progression_date_time: The date and time to progress the chart to, in ISO format.
-    
+        timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
+
     Returns:
         The full Progressed chart object serialized to a JSON dictionary.
     """
     try:
         logger.info(f"Generating progressed chart from {date_time} to {progression_date_time} at {latitude}, {longitude}")
-        
+
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
         validate_inputs(progression_date_time, latitude, longitude)  # Reuse validation for progression date
-        
+
         # Parse coordinates
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
-        
-        # Create subject
-        subject = charts.Subject(
-            date_time=date_time,
-            latitude=lat,
-            longitude=lon
-        )
-        
+
+        # Create subject with optional timezone
+        subject = create_subject(date_time, lat, lon, timezone)
+
         # Generate progressed chart
         progressed = charts.Progressed(subject, progression_date_time)
         
@@ -572,42 +683,40 @@ def generate_compact_progressed_chart(
     date_time: str,
     latitude: str,
     longitude: str,
-    progression_date_time: str
+    progression_date_time: str,
+    timezone: str = None
 ) -> Dict[str, Any]:
     """
     Generates a compact secondary progression chart for a native chart to a specific future date.
-    
+
     This tool provides a streamlined version of the progressed chart, focusing on the most critical
     astrological data: major celestial objects, their positions, and major aspects. It omits
     more detailed data like weightings and chart shape for a faster and more concise output.
-    
+
     Args:
         date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
         latitude: The latitude of the birth location, e.g., '32n43' or '32.71'.
         longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
         progression_date_time: The date and time to progress the chart to, in ISO format.
-    
+        timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
+
     Returns:
         A compact Progressed chart object serialized to a JSON dictionary.
     """
     try:
         logger.info(f"Generating compact progressed chart from {date_time} to {progression_date_time} at {latitude}, {longitude}")
-        
+
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
         validate_inputs(progression_date_time, latitude, longitude)  # Reuse validation for progression date
-        
+
         # Parse coordinates
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
-        
-        # Create subject
-        subject = charts.Subject(
-            date_time=date_time,
-            latitude=lat,
-            longitude=lon
-        )
-        
+
+        # Create subject with optional timezone
+        subject = create_subject(date_time, lat, lon, timezone)
+
         # Generate progressed chart
         progressed = charts.Progressed(subject, progression_date_time)
         
@@ -628,11 +737,13 @@ def generate_composite_chart(
     native_longitude: str,
     partner_date_time: str,
     partner_latitude: str,
-    partner_longitude: str
+    partner_longitude: str,
+    native_timezone: str = None,
+    partner_timezone: str = None
 ) -> Dict[str, Any]:
     """
     Generates a composite (midpoint) chart for two subjects.
-    
+
     Args:
         native_date_time: The birth date and time of the first subject in ISO format.
         native_latitude: The latitude of the first subject's birth location.
@@ -640,41 +751,34 @@ def generate_composite_chart(
         partner_date_time: The birth date and time of the second subject in ISO format.
         partner_latitude: The latitude of the second subject's birth location.
         partner_longitude: The longitude of the second subject's birth location.
-    
+        native_timezone: Optional IANA timezone for first subject (e.g., 'Europe/London').
+        partner_timezone: Optional IANA timezone for second subject (e.g., 'America/New_York').
+
     Returns:
         The full Composite chart object serialized to a JSON dictionary.
     """
     try:
         logger.info(f"Generating composite chart between {native_date_time} and {partner_date_time}")
-        
+
         # Validate inputs for both subjects
         validate_inputs(native_date_time, native_latitude, native_longitude)
         validate_inputs(partner_date_time, partner_latitude, partner_longitude)
-        
+
         # Parse coordinates for native
         native_lat = parse_coordinate(native_latitude, is_latitude=True)
         native_lon = parse_coordinate(native_longitude, is_latitude=False)
-        
+
         # Parse coordinates for partner
         partner_lat = parse_coordinate(partner_latitude, is_latitude=True)
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
         
-        # Create subjects
-        native = charts.Subject(
-            date_time=native_date_time,
-            latitude=native_lat,
-            longitude=native_lon
-        )
-        
-        partner = charts.Subject(
-            date_time=partner_date_time,
-            latitude=partner_lat,
-            longitude=partner_lon
-        )
-        
+        # Create subjects with optional timezones
+        native = create_subject(native_date_time, native_lat, native_lon, native_timezone)
+        partner = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
+
         # Generate composite chart
         composite = charts.Composite(native, partner)
-        
+
         # Serialize to JSON
         result = json.loads(json.dumps(composite, cls=ToJSON))
         logger.info("Composite chart generated successfully")
@@ -692,15 +796,17 @@ def generate_compact_composite_chart(
     native_longitude: str,
     partner_date_time: str,
     partner_latitude: str,
-    partner_longitude: str
+    partner_longitude: str,
+    native_timezone: str = None,
+    partner_timezone: str = None
 ) -> Dict[str, Any]:
     """
     Generates a compact composite (midpoint) chart for two subjects.
-    
+
     This tool provides a streamlined version of the composite chart, focusing on the most critical
     astrological data: major celestial objects, their positions, and major aspects. It omits
     more detailed data like weightings and chart shape for a faster and more concise output.
-    
+
     Args:
         native_date_time: The birth date and time of the first subject in ISO format.
         native_latitude: The latitude of the first subject's birth location.
@@ -708,41 +814,34 @@ def generate_compact_composite_chart(
         partner_date_time: The birth date and time of the second subject in ISO format.
         partner_latitude: The latitude of the second subject's birth location.
         partner_longitude: The longitude of the second subject's birth location.
-    
+        native_timezone: Optional IANA timezone for first subject (e.g., 'Europe/London').
+        partner_timezone: Optional IANA timezone for second subject (e.g., 'America/New_York').
+
     Returns:
         A compact Composite chart object serialized to a JSON dictionary.
     """
     try:
         logger.info(f"Generating compact composite chart between {native_date_time} and {partner_date_time}")
-        
+
         # Validate inputs for both subjects
         validate_inputs(native_date_time, native_latitude, native_longitude)
         validate_inputs(partner_date_time, partner_latitude, partner_longitude)
-        
+
         # Parse coordinates for native
         native_lat = parse_coordinate(native_latitude, is_latitude=True)
         native_lon = parse_coordinate(native_longitude, is_latitude=False)
-        
+
         # Parse coordinates for partner
         partner_lat = parse_coordinate(partner_latitude, is_latitude=True)
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
-        
-        # Create subjects
-        native = charts.Subject(
-            date_time=native_date_time,
-            latitude=native_lat,
-            longitude=native_lon
-        )
-        
-        partner = charts.Subject(
-            date_time=partner_date_time,
-            latitude=partner_lat,
-            longitude=partner_lon
-        )
-        
+
+        # Create subjects with optional timezones
+        native = create_subject(native_date_time, native_lat, native_lon, native_timezone)
+        partner = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
+
         # Generate composite chart
         composite = charts.Composite(native, partner)
-        
+
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(composite, cls=CompactJSONSerializer))
         logger.info("Compact composite chart generated successfully")
@@ -760,11 +859,13 @@ def generate_synastry_aspects(
     native_longitude: str,
     partner_date_time: str,
     partner_latitude: str,
-    partner_longitude: str
+    partner_longitude: str,
+    native_timezone: str = None,
+    partner_timezone: str = None
 ) -> Dict[str, Any]:
     """
     Calculates the synastry aspects between two charts. This shows how one person's planets aspect another's.
-    
+
     Args:
         native_date_time: The birth date and time of the first subject (whose chart will contain the aspects).
         native_latitude: The latitude of the first subject's birth location.
@@ -772,37 +873,30 @@ def generate_synastry_aspects(
         partner_date_time: The birth date and time of the second subject (whose planets are being aspected).
         partner_latitude: The latitude of the second subject's birth location.
         partner_longitude: The longitude of the second subject's birth location.
-    
+        native_timezone: Optional IANA timezone for first subject (e.g., 'Europe/London').
+        partner_timezone: Optional IANA timezone for second subject (e.g., 'America/New_York').
+
     Returns:
         The aspects dictionary from the primary (native) Natal chart object, serialized to JSON.
     """
     try:
         logger.info(f"Generating synastry aspects between {native_date_time} and {partner_date_time}")
-        
+
         # Validate inputs for both subjects
         validate_inputs(native_date_time, native_latitude, native_longitude)
         validate_inputs(partner_date_time, partner_latitude, partner_longitude)
-        
+
         # Parse coordinates for native
         native_lat = parse_coordinate(native_latitude, is_latitude=True)
         native_lon = parse_coordinate(native_longitude, is_latitude=False)
-        
+
         # Parse coordinates for partner
         partner_lat = parse_coordinate(partner_latitude, is_latitude=True)
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
-        
-        # Create subjects
-        native_subject = charts.Subject(
-            date_time=native_date_time,
-            latitude=native_lat,
-            longitude=native_lon
-        )
-        
-        partner_subject = charts.Subject(
-            date_time=partner_date_time,
-            latitude=partner_lat,
-            longitude=partner_lon
-        )
+
+        # Create subjects with optional timezones
+        native_subject = create_subject(native_date_time, native_lat, native_lon, native_timezone)
+        partner_subject = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
         
         # Create partner chart first
         partner_chart = charts.Natal(partner_subject)
@@ -828,15 +922,18 @@ def generate_compact_synastry_aspects(
     native_longitude: str,
     partner_date_time: str,
     partner_latitude: str,
-    partner_longitude: str
+    partner_longitude: str,
+    native_timezone: str = None,
+    partner_timezone: str = None,
+    include_interpretations: bool = True
 ) -> Dict[str, Any]:
     """
     Calculates compact synastry aspects between two charts, filtered to show only major aspects between major objects.
-    
+
     This tool provides a streamlined version of synastry aspects, focusing on the most critical
     astrological connections: major aspects between major celestial objects only. It omits
     minor aspects and minor objects for a faster and more concise output.
-    
+
     Args:
         native_date_time: The birth date and time of the first subject (whose chart will contain the aspects).
         native_latitude: The latitude of the first subject's birth location.
@@ -844,52 +941,50 @@ def generate_compact_synastry_aspects(
         partner_date_time: The birth date and time of the second subject (whose planets are being aspected).
         partner_latitude: The latitude of the second subject's birth location.
         partner_longitude: The longitude of the second subject's birth location.
-    
+        native_timezone: Optional IANA timezone for first subject (e.g., 'Europe/London').
+        partner_timezone: Optional IANA timezone for second subject (e.g., 'America/New_York').
+        include_interpretations: Include aspect interpretation keywords (default: True).
+
     Returns:
         Filtered synastry aspects showing only major aspects between major objects.
     """
     try:
         logger.info(f"Generating compact synastry aspects between {native_date_time} and {partner_date_time}")
-        
+
         # Validate inputs for both subjects
         validate_inputs(native_date_time, native_latitude, native_longitude)
         validate_inputs(partner_date_time, partner_latitude, partner_longitude)
-        
+
         # Parse coordinates for native
         native_lat = parse_coordinate(native_latitude, is_latitude=True)
         native_lon = parse_coordinate(native_longitude, is_latitude=False)
-        
+
         # Parse coordinates for partner
         partner_lat = parse_coordinate(partner_latitude, is_latitude=True)
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
-        
-        # Create subjects
-        native_subject = charts.Subject(
-            date_time=native_date_time,
-            latitude=native_lat,
-            longitude=native_lon
-        )
-        
-        partner_subject = charts.Subject(
-            date_time=partner_date_time,
-            latitude=partner_lat,
-            longitude=partner_lon
-        )
+
+        # Create subjects with optional timezones
+        native_subject = create_subject(native_date_time, native_lat, native_lon, native_timezone)
+        partner_subject = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
         
         # Create partner chart first
         partner_chart = charts.Natal(partner_subject)
-        
+
         # Create native chart with aspects to partner
         native_chart = charts.Natal(native_subject, aspects_to=partner_chart)
-        
+
         # Serialize the entire chart using compact serializer to get filtered aspects
         compact_chart_data = json.loads(json.dumps(native_chart, cls=CompactJSONSerializer))
         filtered_aspects = compact_chart_data.get('aspects', [])
-        
+
+        # Add interpretation hints if requested
+        if include_interpretations:
+            filtered_aspects = add_aspect_interpretations(filtered_aspects)
+
         result = {"aspects": filtered_aspects}
         logger.info("Compact synastry aspects generated successfully")
         return result
-        
+
     except Exception as e:
         logger.error(f"Error generating compact synastry aspects: {str(e)}")
         return handle_chart_error(e)
@@ -902,11 +997,11 @@ def generate_transit_chart(
 ) -> Dict[str, Any]:
     """
     Generates a chart for the current moment for a given location, showing current planetary positions.
-    
+
     Args:
         latitude: The latitude of the location, e.g., '32n43'.
         longitude: The longitude of the location, e.g., '117w09'.
-    
+
     Returns:
         The full Transits chart object serialized to a JSON dictionary.
     """
@@ -966,6 +1061,394 @@ def generate_compact_transit_chart(
 
     except Exception as e:
         logger.error(f"Error generating compact transit chart: {str(e)}")
+        return handle_chart_error(e)
+
+
+# Aspect interpretation keywords for enhanced output
+ASPECT_INTERPRETATIONS = {
+    'conjunction': {
+        'keywords': ['fusion', 'intensity', 'new beginnings'],
+        'nature': 'variable',
+        'description': 'Merging of energies, can be harmonious or challenging depending on planets'
+    },
+    'opposition': {
+        'keywords': ['tension', 'awareness', 'projection', 'relationships'],
+        'nature': 'challenging',
+        'description': 'Polarization requiring integration and balance'
+    },
+    'square': {
+        'keywords': ['friction', 'action', 'challenge', 'growth'],
+        'nature': 'challenging',
+        'description': 'Dynamic tension that motivates change and development'
+    },
+    'trine': {
+        'keywords': ['harmony', 'flow', 'ease', 'talent'],
+        'nature': 'benefic',
+        'description': 'Natural gifts and smooth energy flow'
+    },
+    'sextile': {
+        'keywords': ['opportunity', 'cooperation', 'skill'],
+        'nature': 'benefic',
+        'description': 'Supportive energy that requires activation'
+    },
+    'quincunx': {
+        'keywords': ['adjustment', 'health', 'service'],
+        'nature': 'variable',
+        'description': 'Requires adaptation and fine-tuning'
+    },
+    'semi-sextile': {
+        'keywords': ['subtle', 'growth', 'awareness'],
+        'nature': 'minor',
+        'description': 'Mild supportive influence requiring attention'
+    },
+    'semi-square': {
+        'keywords': ['irritation', 'minor friction', 'motivation'],
+        'nature': 'minor challenging',
+        'description': 'Minor tension that prompts small adjustments'
+    },
+    'sesquiquadrate': {
+        'keywords': ['agitation', 'restlessness', 'drive'],
+        'nature': 'minor challenging',
+        'description': 'Persistent tension requiring resolution'
+    }
+}
+
+
+def normalize_aspects_to_list(aspects: Union[List[Dict[str, Any]], Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Normalize aspects data to a flat list format.
+
+    The compact serializer returns aspects as a list for regular charts,
+    but synastry/transit charts with aspects_to may return nested dicts.
+
+    Args:
+        aspects: Either a list of aspect dicts, or a nested dict structure
+                 from synastry/transit charts
+
+    Returns:
+        Flat list of aspect dictionaries
+    """
+    if isinstance(aspects, list):
+        return aspects
+
+    if isinstance(aspects, dict):
+        # Handle nested dict format: {from_id: {to_id: aspect_data}}
+        flat_list = []
+        for from_key, to_aspects in aspects.items():
+            if isinstance(to_aspects, dict):
+                for to_key, aspect_data in to_aspects.items():
+                    if isinstance(aspect_data, dict):
+                        flat_list.append(aspect_data)
+        return flat_list
+
+    return []
+
+
+def add_aspect_interpretations(aspects: Union[List[Dict[str, Any]], Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Enhance aspect data with interpretation hints.
+
+    Args:
+        aspects: List of aspect dictionaries or nested dict structure
+
+    Returns:
+        Enhanced aspect list with interpretation keywords
+    """
+    # Normalize to list first
+    aspect_list = normalize_aspects_to_list(aspects)
+
+    enhanced = []
+    for aspect in aspect_list:
+        if not isinstance(aspect, dict):
+            continue
+        aspect_type = aspect.get('type', '').lower()
+        if aspect_type in ASPECT_INTERPRETATIONS:
+            interp = ASPECT_INTERPRETATIONS[aspect_type]
+            aspect['keywords'] = interp['keywords']
+            aspect['nature'] = interp['nature']
+        enhanced.append(aspect)
+    return enhanced
+
+
+@mcp.tool()
+def generate_transit_to_natal(
+    natal_date_time: str,
+    natal_latitude: str,
+    natal_longitude: str,
+    transit_date_time: str,
+    transit_latitude: str = None,
+    transit_longitude: str = None,
+    timezone: str = None
+) -> Dict[str, Any]:
+    """
+    Calculates transiting planet aspects to a natal chart for a specific date.
+
+    This is the most commonly used predictive technique in astrology. It shows how
+    current planetary positions interact with the birth chart.
+
+    Args:
+        natal_date_time: Birth date and time in ISO format, e.g., '1990-01-15 12:00:00'.
+        natal_latitude: Birth location latitude, e.g., '51n30' or '51.5'.
+        natal_longitude: Birth location longitude, e.g., '0w10' or '-0.17'.
+        transit_date_time: Date/time for transits in ISO format, e.g., '2024-12-18 12:00:00'.
+        transit_latitude: Optional transit location latitude (defaults to natal location).
+        transit_longitude: Optional transit location longitude (defaults to natal location).
+        timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
+
+    Returns:
+        Dictionary containing natal chart summary, transit positions, and aspects between them.
+    """
+    try:
+        logger.info(f"[TRANSIT-FULL] Starting transit-to-natal for natal {natal_date_time} with transits at {transit_date_time}")
+
+        # Validate natal inputs
+        logger.debug(f"[TRANSIT-FULL] Validating inputs")
+        validate_inputs(natal_date_time, natal_latitude, natal_longitude)
+
+        # Parse natal coordinates
+        logger.debug(f"[TRANSIT-FULL] Parsing coordinates: natal_lat={natal_latitude}, natal_lon={natal_longitude}")
+        natal_lat = parse_coordinate(natal_latitude, is_latitude=True)
+        natal_lon = parse_coordinate(natal_longitude, is_latitude=False)
+
+        # Use natal location for transits if not specified
+        transit_lat = parse_coordinate(transit_latitude, is_latitude=True) if transit_latitude else natal_lat
+        transit_lon = parse_coordinate(transit_longitude, is_latitude=False) if transit_longitude else natal_lon
+        logger.debug(f"[TRANSIT-FULL] Transit coords: lat={transit_lat}, lon={transit_lon}")
+
+        # Create natal subject
+        logger.debug(f"[TRANSIT-FULL] Creating natal subject")
+        natal_subject = charts.Subject(
+            date_time=natal_date_time,
+            latitude=natal_lat,
+            longitude=natal_lon
+        )
+
+        # Create transit subject for the specified date
+        logger.debug(f"[TRANSIT-FULL] Creating transit subject")
+        transit_subject = charts.Subject(
+            date_time=transit_date_time,
+            latitude=transit_lat,
+            longitude=transit_lon
+        )
+
+        # Generate natal chart
+        logger.debug(f"[TRANSIT-FULL] Generating natal chart")
+        natal_chart = charts.Natal(natal_subject)
+
+        # Generate transit chart with aspects to natal
+        logger.debug(f"[TRANSIT-FULL] Generating transit chart with aspects to natal")
+        transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart)
+
+        # Serialize both charts
+        logger.debug(f"[TRANSIT-FULL] Serializing natal chart with ToJSON")
+        natal_data = json.loads(json.dumps(natal_chart, cls=ToJSON))
+        logger.debug(f"[TRANSIT-FULL] Serializing transit chart with ToJSON")
+        transit_data = json.loads(json.dumps(transit_chart, cls=ToJSON))
+        logger.debug(f"[TRANSIT-FULL] Serialization complete")
+
+        # Extract natal summary using direct chart object access (not from JSON)
+        # This avoids the "Unknown" bug by accessing objects before serialization
+        logger.debug(f"[TRANSIT-FULL] Extracting natal summary")
+        sun_sign = "Unknown"
+        moon_sign = "Unknown"
+        rising_sign = "Unknown"
+
+        try:
+            sun = natal_chart.objects.get(chart_const.SUN)
+            if sun and hasattr(sun, 'sign') and hasattr(sun.sign, 'name'):
+                sun_sign = sun.sign.name
+        except Exception as e:
+            logger.debug(f"Could not extract sun sign: {e}")
+
+        try:
+            moon = natal_chart.objects.get(chart_const.MOON)
+            if moon and hasattr(moon, 'sign') and hasattr(moon.sign, 'name'):
+                moon_sign = moon.sign.name
+        except Exception as e:
+            logger.debug(f"Could not extract moon sign: {e}")
+
+        try:
+            asc = natal_chart.objects.get(chart_const.ASC)
+            if asc and hasattr(asc, 'sign') and hasattr(asc.sign, 'name'):
+                rising_sign = asc.sign.name
+        except Exception as e:
+            logger.debug(f"Could not extract rising sign: {e}")
+
+        # Build result with natal summary and transit aspects
+        logger.debug(f"[TRANSIT-FULL] Building result dictionary")
+
+        # Convert aspects from nested dict structure to flat list for MCP compatibility
+        # ToJSON returns aspects as dict[str, dict[str, aspect_data]], which causes MCP issues
+        # We need to flatten to list[aspect_data] like CompactJSONSerializer does
+        aspects_dict = transit_data.get('aspects', {})
+        aspects_list = []
+
+        if isinstance(aspects_dict, dict):
+            # Flatten the nested dict structure: dict of dicts -> flat list
+            for active_obj_aspects in aspects_dict.values():
+                if isinstance(active_obj_aspects, dict):
+                    # Each value is another dict of aspects for this object
+                    aspects_list.extend(active_obj_aspects.values())
+                else:
+                    # Shouldn't happen, but handle gracefully
+                    aspects_list.append(active_obj_aspects)
+        else:
+            # Already a list (shouldn't happen with ToJSON but handle it)
+            aspects_list = aspects_dict
+
+        logger.info(f"[TRANSIT-FULL] Flattened aspects to list with {len(aspects_list)} items")
+
+        result = {
+            "natal_summary": {
+                "date_time": natal_date_time,
+                "sun_sign": sun_sign,
+                "moon_sign": moon_sign,
+                "rising_sign": rising_sign
+            },
+            "transit_date": transit_date_time,
+            "transit_positions": transit_data.get('objects', {}),
+            "transit_to_natal_aspects": aspects_list,
+            "timezone": timezone
+        }
+
+        # Verify result is JSON serializable before returning
+        logger.debug(f"[TRANSIT-FULL] Verifying JSON serializability")
+        try:
+            json_test = json.dumps(result)
+            result_size = len(json_test) / 1024
+            logger.info(f"[TRANSIT-FULL] Result successfully serialized, size: {result_size:.2f} KB")
+        except (TypeError, ValueError) as e:
+            logger.error(f"[TRANSIT-FULL] CRITICAL: Result not JSON serializable: {e}")
+            raise
+
+        logger.info(f"[TRANSIT-FULL] Transit-to-natal generated successfully, returning result")
+        return result
+
+    except Exception as e:
+        logger.error(f"[TRANSIT-FULL] Error generating transit-to-natal: {str(e)}", exc_info=True)
+        return handle_chart_error(e)
+
+
+@mcp.tool()
+def generate_compact_transit_to_natal(
+    natal_date_time: str,
+    natal_latitude: str,
+    natal_longitude: str,
+    transit_date_time: str,
+    transit_latitude: str = None,
+    transit_longitude: str = None,
+    timezone: str = None,
+    include_interpretations: bool = True
+) -> Dict[str, Any]:
+    """
+    Calculates compact transiting planet aspects to a natal chart with interpretation hints.
+
+    This streamlined version focuses on major planets and major aspects only, with optional
+    interpretation keywords to aid understanding.
+
+    Args:
+        natal_date_time: Birth date and time in ISO format, e.g., '1990-01-15 12:00:00'.
+        natal_latitude: Birth location latitude, e.g., '51n30' or '51.5'.
+        natal_longitude: Birth location longitude, e.g., '0w10' or '-0.17'.
+        transit_date_time: Date/time for transits in ISO format, e.g., '2024-12-18 12:00:00'.
+        transit_latitude: Optional transit location latitude (defaults to natal location).
+        transit_longitude: Optional transit location longitude (defaults to natal location).
+        timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
+        include_interpretations: Include aspect interpretation keywords (default: True).
+
+    Returns:
+        Compact dictionary with natal summary, transit positions, and filtered major aspects
+        with interpretation hints.
+    """
+    try:
+        logger.info(f"Generating compact transit-to-natal for natal {natal_date_time} with transits at {transit_date_time}")
+
+        # Validate natal inputs
+        validate_inputs(natal_date_time, natal_latitude, natal_longitude)
+
+        # Parse natal coordinates
+        natal_lat = parse_coordinate(natal_latitude, is_latitude=True)
+        natal_lon = parse_coordinate(natal_longitude, is_latitude=False)
+
+        # Use natal location for transits if not specified
+        transit_lat = parse_coordinate(transit_latitude, is_latitude=True) if transit_latitude else natal_lat
+        transit_lon = parse_coordinate(transit_longitude, is_latitude=False) if transit_longitude else natal_lon
+
+        # Create natal subject
+        natal_subject = charts.Subject(
+            date_time=natal_date_time,
+            latitude=natal_lat,
+            longitude=natal_lon
+        )
+
+        # Create transit subject for the specified date
+        transit_subject = charts.Subject(
+            date_time=transit_date_time,
+            latitude=transit_lat,
+            longitude=transit_lon
+        )
+
+        # Generate natal chart
+        natal_chart = charts.Natal(natal_subject)
+
+        # Generate transit chart with aspects to natal
+        transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart)
+
+        # Serialize using compact serializer
+        natal_data = json.loads(json.dumps(natal_chart, cls=CompactJSONSerializer))
+        transit_data = json.loads(json.dumps(transit_chart, cls=CompactJSONSerializer))
+
+        # Get aspects and optionally add interpretations
+        aspects = transit_data.get('aspects', [])
+        if include_interpretations:
+            aspects = add_aspect_interpretations(aspects)
+
+        # Extract natal summary using direct chart object access (not from JSON)
+        # This avoids the "Unknown" bug by accessing objects before serialization
+        sun_sign = "Unknown"
+        moon_sign = "Unknown"
+        rising_sign = "Unknown"
+
+        try:
+            sun = natal_chart.objects.get(chart_const.SUN)
+            if sun and hasattr(sun, 'sign') and hasattr(sun.sign, 'name'):
+                sun_sign = sun.sign.name
+        except Exception as e:
+            logger.debug(f"Could not extract sun sign: {e}")
+
+        try:
+            moon = natal_chart.objects.get(chart_const.MOON)
+            if moon and hasattr(moon, 'sign') and hasattr(moon.sign, 'name'):
+                moon_sign = moon.sign.name
+        except Exception as e:
+            logger.debug(f"Could not extract moon sign: {e}")
+
+        try:
+            asc = natal_chart.objects.get(chart_const.ASC)
+            if asc and hasattr(asc, 'sign') and hasattr(asc.sign, 'name'):
+                rising_sign = asc.sign.name
+        except Exception as e:
+            logger.debug(f"Could not extract rising sign: {e}")
+
+        # Build compact result
+        result = {
+            "natal_summary": {
+                "date_time": natal_date_time,
+                "sun_sign": sun_sign,
+                "moon_sign": moon_sign,
+                "rising_sign": rising_sign
+            },
+            "transit_date": transit_date_time,
+            "transit_positions": transit_data.get('objects', {}),
+            "transit_to_natal_aspects": aspects,
+            "timezone": timezone
+        }
+
+        logger.info("Compact transit-to-natal generated successfully")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error generating compact transit-to-natal: {str(e)}")
         return handle_chart_error(e)
 
 
@@ -1146,10 +1629,12 @@ def list_available_settings() -> Dict[str, Any]:
 
 
 def main():
-    """Run the MCP server."""
+    """Run the MCP server with stdio transport for Claude Desktop compatibility."""
     try:
         logger.info("Starting Enhanced Immanuel Astrology MCP Server")
-        mcp.run()
+        # Explicitly use stdio transport for Claude Desktop compatibility
+        # stdio is the default and works with Claude Desktop's process spawning
+        mcp.run(transport="stdio")
     except KeyboardInterrupt:
         logger.info("Server shutting down...")
         sys.exit(0)
