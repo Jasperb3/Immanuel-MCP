@@ -1114,9 +1114,10 @@ ASPECT_INTERPRETATIONS = {
 }
 
 
-def normalize_aspects_to_list(aspects: Union[List[Dict[str, Any]], Dict[str, Any]]) -> List[Dict[str, Any]]:
+def normalize_aspects_to_list(aspects: Union[List[Dict[str, Any]], Dict[str, Any]],
+                              filter_self_aspects: bool = True) -> List[Dict[str, Any]]:
     """
-    Normalize aspects data to a flat list format.
+    Normalize aspects data to a flat list format and optionally filter self-aspects.
 
     The compact serializer returns aspects as a list for regular charts,
     but synastry/transit charts with aspects_to may return nested dicts.
@@ -1124,29 +1125,41 @@ def normalize_aspects_to_list(aspects: Union[List[Dict[str, Any]], Dict[str, Any
     Args:
         aspects: Either a list of aspect dicts, or a nested dict structure
                  from synastry/transit charts
+        filter_self_aspects: If True, remove aspects where active == passive
+                           (default: True, as self-aspects are astrologically meaningless)
 
     Returns:
-        Flat list of aspect dictionaries
+        Flat list of aspect dictionaries with self-aspects removed
     """
-    if isinstance(aspects, list):
-        return aspects
+    aspect_list = []
 
-    if isinstance(aspects, dict):
+    if isinstance(aspects, list):
+        aspect_list = aspects
+    elif isinstance(aspects, dict):
         # Handle nested dict format: {from_id: {to_id: aspect_data}}
-        flat_list = []
         for from_key, to_aspects in aspects.items():
             if isinstance(to_aspects, dict):
                 for to_key, aspect_data in to_aspects.items():
                     if isinstance(aspect_data, dict):
-                        flat_list.append(aspect_data)
-        return flat_list
+                        aspect_list.append(aspect_data)
 
-    return []
+    # Filter out self-aspects if requested
+    if filter_self_aspects:
+        original_count = len(aspect_list)
+        aspect_list = [
+            asp for asp in aspect_list
+            if isinstance(asp, dict) and asp.get('active') != asp.get('passive')
+        ]
+        filtered_count = original_count - len(aspect_list)
+        if filtered_count > 0:
+            logger.debug(f"Filtered {filtered_count} self-aspects, {len(aspect_list)} aspects remaining")
+
+    return aspect_list
 
 
 def add_aspect_interpretations(aspects: Union[List[Dict[str, Any]], Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Enhance aspect data with interpretation hints.
+    Enhance aspect data with interpretation hints (self-aspects already filtered).
 
     Args:
         aspects: List of aspect dictionaries or nested dict structure
@@ -1154,8 +1167,8 @@ def add_aspect_interpretations(aspects: Union[List[Dict[str, Any]], Dict[str, An
     Returns:
         Enhanced aspect list with interpretation keywords
     """
-    # Normalize to list first
-    aspect_list = normalize_aspects_to_list(aspects)
+    # Normalize to list and filter self-aspects
+    aspect_list = normalize_aspects_to_list(aspects, filter_self_aspects=True)
 
     enhanced = []
     for aspect in aspect_list:
@@ -1176,9 +1189,9 @@ def generate_transit_to_natal(
     natal_latitude: str,
     natal_longitude: str,
     transit_date_time: str,
-    transit_latitude: str = None,
-    transit_longitude: str = None,
-    timezone: str = None
+    transit_latitude: str | None = None,
+    transit_longitude: str | None = None,
+    timezone: str | None = None
 ) -> Dict[str, Any]:
     """
     Calculates transiting planet aspects to a natal chart for a specific date.
@@ -1277,26 +1290,14 @@ def generate_transit_to_natal(
         # Build result with natal summary and transit aspects
         logger.debug(f"[TRANSIT-FULL] Building result dictionary")
 
-        # Convert aspects from nested dict structure to flat list for MCP compatibility
-        # ToJSON returns aspects as dict[str, dict[str, aspect_data]], which causes MCP issues
-        # We need to flatten to list[aspect_data] like CompactJSONSerializer does
-        aspects_dict = transit_data.get('aspects', {})
-        aspects_list = []
+        # Filter self-aspects from the aspects dictionary
+        # normalize_aspects_to_list will flatten the nested dict and remove self-aspects
+        filtered_aspects = normalize_aspects_to_list(
+            transit_data.get('aspects', {}),
+            filter_self_aspects=True
+        )
 
-        if isinstance(aspects_dict, dict):
-            # Flatten the nested dict structure: dict of dicts -> flat list
-            for active_obj_aspects in aspects_dict.values():
-                if isinstance(active_obj_aspects, dict):
-                    # Each value is another dict of aspects for this object
-                    aspects_list.extend(active_obj_aspects.values())
-                else:
-                    # Shouldn't happen, but handle gracefully
-                    aspects_list.append(active_obj_aspects)
-        else:
-            # Already a list (shouldn't happen with ToJSON but handle it)
-            aspects_list = aspects_dict
-
-        logger.info(f"[TRANSIT-FULL] Flattened aspects to list with {len(aspects_list)} items")
+        logger.info(f"[TRANSIT-FULL] Returning {len(filtered_aspects)} filtered aspects")
 
         result = {
             "natal_summary": {
@@ -1307,12 +1308,12 @@ def generate_transit_to_natal(
             },
             "transit_date": transit_date_time,
             "transit_positions": transit_data.get('objects', {}),
-            "transit_to_natal_aspects": aspects_list,
+            "transit_to_natal_aspects": filtered_aspects,
             "timezone": timezone
         }
 
         # Verify result is JSON serializable before returning
-        logger.debug(f"[TRANSIT-FULL] Verifying JSON serializability")
+        logger.debug("[TRANSIT-FULL] Verifying JSON serializability")
         try:
             json_test = json.dumps(result)
             result_size = len(json_test) / 1024
@@ -1321,7 +1322,7 @@ def generate_transit_to_natal(
             logger.error(f"[TRANSIT-FULL] CRITICAL: Result not JSON serializable: {e}")
             raise
 
-        logger.info(f"[TRANSIT-FULL] Transit-to-natal generated successfully, returning result")
+        logger.info("[TRANSIT-FULL] Transit-to-natal generated successfully, returning result")
         return result
 
     except Exception as e:
@@ -1335,9 +1336,9 @@ def generate_compact_transit_to_natal(
     natal_latitude: str,
     natal_longitude: str,
     transit_date_time: str,
-    transit_latitude: str = None,
-    transit_longitude: str = None,
-    timezone: str = None,
+    transit_latitude: str | None = None,
+    transit_longitude: str | None = None,
+    timezone: str | None = None,
     include_interpretations: bool = True
 ) -> Dict[str, Any]:
     """
@@ -1394,8 +1395,7 @@ def generate_compact_transit_to_natal(
         # Generate transit chart with aspects to natal
         transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart)
 
-        # Serialize using compact serializer
-        natal_data = json.loads(json.dumps(natal_chart, cls=CompactJSONSerializer))
+        # Serialize transit chart using compact serializer
         transit_data = json.loads(json.dumps(transit_chart, cls=CompactJSONSerializer))
 
         # Get aspects and optionally add interpretations
