@@ -1,6 +1,6 @@
 
 import json
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from immanuel.classes.serialize import ToJSON
 from immanuel.const import chart as chart_const, data as data_const
 
@@ -29,8 +29,12 @@ class CompactJSONSerializer(ToJSON):
         - Minor aspects (e.g., semi-sextile, quincunx, sesquiquadrate)
         - Aspect patterns
 
+    Data Included:
+        - Simplified dignity information: primary dignity, secondary dignity (if applicable), and strength score
+        - Essential object positions and placements
+
     Data Excluded:
-        - Detailed weightings and dignities
+        - Detailed dignity weightings and mutual receptions
         - Chart shape analysis
         - Moon phase details (beyond basic phase type)
         - Detailed velocity and movement data
@@ -43,7 +47,7 @@ class CompactJSONSerializer(ToJSON):
 
     Returns:
         A dictionary containing:
-        - objects: Simplified planetary data with name, sign, degree, house, and retrograde status
+        - objects: Simplified planetary data with name, sign, degree, house, retrograde status, and dignity
         - houses: House cusps and associated signs
         - aspects: Filtered list of major aspects between major objects only
     """
@@ -68,6 +72,61 @@ class CompactJSONSerializer(ToJSON):
         # Use base ToJSON serializer to get proper dict representation
         return json.loads(json.dumps(obj, cls=ToJSON))
 
+    def _extract_dignity_info(self, obj_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Extract simplified dignity information from full object data.
+
+        Args:
+            obj_data: Full object dictionary from chart
+
+        Returns:
+            Simplified dignity dict with primary, secondary (optional), and strength_score
+        """
+        # Check if object has dignity/dignities data
+        dignities = obj_data.get('dignities')
+        score = obj_data.get('score')
+
+        # If no dignities data, return None
+        if not dignities:
+            return None
+
+        # Determine primary dignity (highest precedence)
+        primary = None
+        strength_score = score if score is not None else 0
+        secondary = None
+
+        # Check for primary dignities
+        if dignities.get('ruler'):
+            primary = 'Ruler'
+        elif dignities.get('exalted'):
+            primary = 'Exalted'
+        elif dignities.get('detriment'):
+            primary = 'Detriment'
+        elif dignities.get('fall'):
+            primary = 'Fall'
+        elif dignities.get('peregrine'):
+            primary = 'Peregrine'
+
+        # Check for secondary dignities (if no primary found, or can be added)
+        if dignities.get('triplicity_ruler') and not secondary:
+            secondary = 'Triplicity Ruler'
+        elif dignities.get('term_ruler') and not secondary:
+            secondary = 'Term Ruler'
+        elif dignities.get('face_ruler') and not secondary:
+            secondary = 'Face Ruler'
+
+        # If we found any dignity info or have a non-zero score, return it
+        if primary or secondary or strength_score != 0:
+            result = {
+                'primary': primary,
+                'strength_score': strength_score
+            }
+            if secondary:
+                result['secondary'] = secondary
+            return result
+
+        return None
+
     def default(self, obj: Any) -> Dict[str, Any]:
         # Check if this is a chart object (Natal, SolarReturn, etc.)
         if self._is_chart_object(obj):
@@ -82,13 +141,21 @@ class CompactJSONSerializer(ToJSON):
                 simplified_objects = {}
                 for k, v in chart_dict[data_const.OBJECTS].items():
                     if v.get('index') in self.INCLUDED_OBJECTS:
-                        simplified_objects[k] = {
+                        # Extract basic position data
+                        obj_data = {
                             'name': v.get('name'),
                             'sign': v.get('sign', {}).get('name'),
                             'sign_longitude': v.get('sign_longitude', {}).get('formatted'),
                             'house': v.get('house', {}).get('number'),
                             'retrograde': v.get('movement', {}).get('retrograde', False)
                         }
+
+                        # Add simplified dignity information
+                        dignity_data = self._extract_dignity_info(v)
+                        if dignity_data:
+                            obj_data['dignity'] = dignity_data
+
+                        simplified_objects[k] = obj_data
                 compact_chart['objects'] = simplified_objects
 
             # Include houses
