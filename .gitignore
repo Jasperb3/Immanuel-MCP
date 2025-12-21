@@ -32,6 +32,7 @@ Thumbs.db
 
 # Development directories
 new_codex/
+.worktrees/
 
 # IDE
 .vscode/
