@@ -2,6 +2,16 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
+## ✨ Recent Optimization
+
+**87% size reduction achieved!** The full `generate_transit_to_natal` endpoint has been optimized from ~74 KB to ~10 KB through intelligent response structuring:
+- Named object keys instead of numeric IDs (`"Sun"` instead of `4000001`)
+- Consolidated dignities section
+- Streamlined position and aspect data
+- Intelligent pagination by orb tightness
+
+See [`docs/FULL_ENDPOINT_DIAGNOSIS.md`](docs/FULL_ENDPOINT_DIAGNOSIS.md) for technical details.
+
 ## Features
 
 ### Chart Generation Tools
@@ -354,7 +364,9 @@ Shows current planetary positions with filtering for major objects only.
 **Output:** Only major planetary positions (Sun through Pluto, Ascendant, Midheaven)
 
 ### `generate_transit_to_natal`
-Calculates transiting planet aspects to a natal chart with intelligent pagination.
+Calculates transiting planet aspects to a natal chart with intelligent pagination and optimized response structure.
+
+**✨ Optimized**: 87% size reduction (74 KB → 10 KB) through streamlined data structure.
 
 **Parameters:**
 - `natal_date_time`: Birth date and time (ISO format: "YYYY-MM-DD HH:MM:SS")
@@ -364,19 +376,20 @@ Calculates transiting planet aspects to a natal chart with intelligent paginatio
 - `transit_latitude`: Optional transit location latitude (defaults to natal location)
 - `transit_longitude`: Optional transit location longitude (defaults to natal location)
 - `timezone`: Optional IANA timezone name (e.g., "Europe/London", "America/New_York")
-- `aspect_priority`: Priority tier to return - "tight" (default), "moderate", "loose", or "all"
-- `include_all_aspects`: Override filtering and return all aspects (may exceed size limits)
+- `aspect_priority`: Priority tier to return - "all" (default), "tight", "moderate", or "loose"
+- `include_all_aspects`: Deprecated - "all" is now the default (kept for compatibility)
 
 **Pagination System:**
-- **Tight** (0-2° orb): Most critical transits, peak influence (default)
+- **All** (default): Return all aspects (~10 KB, well under MCP limits)
+- **Tight** (0-2° orb): Most critical transits only (~4 KB)
 - **Moderate** (2-5° orb): Secondary priority, building/waning influence
 - **Loose** (5-8° orb): Background influences, subtle themes
-- **All**: Return all aspects (warning: may exceed MCP limits)
 
-**Response Includes:**
-- `natal_summary`: Sun/Moon/Rising signs
-- `transit_positions`: Current planetary positions
-- `transit_to_natal_aspects`: Filtered aspects by priority
+**Optimized Response Structure:**
+- `natal_summary`: Simplified Sun/Moon/Rising (no redundant date_time)
+- `transit_positions`: Named keys (`"Sun"` not `4000001`), consolidated position strings
+- `dignities`: Consolidated section (not scattered in each position)
+- `transit_to_natal_aspects`: Streamlined aspects with `planets` field (`"Venus → Chiron"`)
 - `aspect_summary`: Counts for tight/moderate/loose/total aspects
 - `pagination`: Current page, total pages, next page instructions
 

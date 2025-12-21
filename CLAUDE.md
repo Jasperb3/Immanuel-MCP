@@ -12,15 +12,41 @@ This is an MCP (Model Context Protocol) server that exposes the Immanuel Python 
 
 ## Core Architecture
 
-### Single-File Server Design
-- **Main Server**: `immanuel_server.py` - Contains all MCP tools and server logic
-- **Architecture**: FastMCP-based server with 16 main astrology tools (8 full + 8 compact)
+### Modular Package Structure (v0.3.0+)
+- **Package**: `immanuel_mcp/` - Modular astrology server package
+- **Entry Points**:
+  - `immanuel_server.py` - Original single-file server (maintained for compatibility)
+  - `python -m immanuel_mcp` - New modular package entry point
+- **Architecture**: FastMCP-based server with 18 main astrology tools (9 full + 9 compact)
+- **Package Structure**:
+  ```
+  immanuel_mcp/
+  ├── __init__.py                    # Package initialization
+  ├── server.py                      # MCP server setup and registration
+  ├── constants.py                   # CELESTIAL_BODIES mapping
+  ├── utils/                         # Utility functions
+  │   ├── coordinates.py             # parse_coordinate, validate_inputs
+  │   ├── subjects.py                # create_subject helper
+  │   └── errors.py                  # handle_chart_error
+  ├── optimizers/                    # Response optimization
+  │   ├── positions.py               # format_position, optimized transit positions
+  │   ├── aspects.py                 # build_optimized_aspects
+  │   └── dignities.py               # extract_primary_dignity, build_dignities_section
+  ├── pagination/                    # Aspect pagination
+  │   └── helpers.py                 # classify_aspect_priority, build_pagination_object
+  ├── charts/                        # Chart generation
+  │   ├── _legacy_import.py          # Temporary bridge to original implementation
+  │   └── lunar_return.py            # 🆕 Lunar return charts (native modular implementation)
+  └── interpretations/               # Aspect interpretations
+      └── aspects.py                 # ASPECT_INTERPRETATIONS, context-aware interpretations
+  ```
 - **Key Components**:
   - MCP tool decorators expose functions as callable tools
   - Coordinate parsing system supporting multiple formats
   - Chart generation wrapper functions around Immanuel library
-  - Custom compact serializer for optimized chart output
+  - Custom compact serializer for optimized chart output (84.9% size reduction)
   - Error handling with standardized error responses
+  - Intelligent aspect pagination for transit-to-natal
 
 ### Dependencies
 - **Core**: `mcp[cli]` (MCP server framework), `immanuel` (astrology calculations)
@@ -55,20 +81,22 @@ mcp run immanuel_server.py
 
 ### Chart Generation Tools
 - `generate_natal_chart` - Full birth charts with complete astrological data
-- `generate_compact_natal_chart` - **NEW**: Streamlined natal charts for faster processing and reduced token usage
+- `generate_compact_natal_chart` - Streamlined natal charts for faster processing and reduced token usage
 - `get_chart_summary` - Essential chart information (Sun/Moon/Rising signs, chart shape, moon phase)
 - `get_planetary_positions` - Simplified planetary positions in signs and houses
 - `generate_solar_return_chart` - Annual solar return charts
-- `generate_compact_solar_return_chart` - **NEW**: Streamlined solar return charts
+- `generate_compact_solar_return_chart` - Streamlined solar return charts
+- `generate_lunar_return_chart` - **🆕 NEW**: Monthly lunar return charts (Moon returns to natal position)
+- `generate_compact_lunar_return_chart` - **🆕 NEW**: Streamlined lunar return charts
 - `generate_progressed_chart` - Secondary progression charts
-- `generate_compact_progressed_chart` - **NEW**: Streamlined progressed charts
+- `generate_compact_progressed_chart` - Streamlined progressed charts
 - `generate_composite_chart` - Relationship midpoint charts
-- `generate_compact_composite_chart` - **NEW**: Streamlined composite charts
+- `generate_compact_composite_chart` - Streamlined composite charts
 - `generate_synastry_aspects` - Inter-chart aspects between two people
-- `generate_compact_synastry_aspects` - **NEW**: Filtered synastry aspects (major objects and aspects only)
+- `generate_compact_synastry_aspects` - Filtered synastry aspects (major objects and aspects only)
 - `generate_transit_chart` - Current planetary positions for a location
-- `generate_compact_transit_chart` - **NEW**: Streamlined transit charts
-- `generate_transit_to_natal` - **UPDATED**: Full transit-to-natal aspects with intelligent pagination
+- `generate_compact_transit_chart` - Streamlined transit charts
+- `generate_transit_to_natal` - Full transit-to-natal aspects with intelligent pagination
 - `generate_compact_transit_to_natal` - Streamlined transit-to-natal with interpretations
 
 ### Transit-to-Natal Pagination System
@@ -110,6 +138,63 @@ result = generate_transit_to_natal(..., aspect_priority="moderate")
 result = generate_transit_to_natal(..., aspect_priority="loose")
 # Returns loose aspects with pagination.has_more_aspects = False
 ```
+
+### Lunar Return Charts (🆕 v0.3.0)
+
+Lunar return charts are a monthly predictive technique that calculates the chart for the moment when the transiting Moon returns to its exact natal position. This happens approximately every 27-28 days (one sidereal lunar month).
+
+**Astrological Significance:**
+- **Monthly Themes**: Shows energies and themes for the coming lunar month
+- **Timing**: Each lunar return marks the beginning of a new monthly cycle
+- **Precision**: Calculated to within 1 minute of the exact Moon return moment
+- **Application**: Used for monthly forecasting, similar to how solar returns are used for annual forecasting
+
+**Implementation Details:**
+- Custom algorithm finds the exact moment of Moon return within the specified month
+- Uses binary search refinement to pinpoint the return time within 1-minute accuracy
+- Generates a standard natal chart for the return moment
+- Includes metadata: return_date, natal_moon_longitude, return_year, return_month
+
+**Function Signatures:**
+
+```python
+@mcp.tool()
+def generate_lunar_return_chart(
+    date_time: str,          # Birth date and time (ISO format)
+    latitude: str,           # Birth location latitude
+    longitude: str,          # Birth location longitude
+    return_year: int,        # Year for lunar return (e.g., 2025)
+    return_month: int,       # Month for lunar return (1-12)
+    timezone: str = None     # Optional IANA timezone
+) -> Dict[str, Any]:
+    """Full lunar return chart with all positions and aspects"""
+
+@mcp.tool()
+def generate_compact_lunar_return_chart(
+    # Same parameters as above
+) -> Dict[str, Any]:
+    """Compact lunar return with 84.9% size reduction (18 KB typical)"""
+```
+
+**Usage Example:**
+```python
+# Calculate January 2025 lunar return
+result = generate_lunar_return_chart(
+    date_time="1990-01-15 14:30:00",
+    latitude="32.71",
+    longitude="-117.15",
+    return_year=2025,
+    return_month=1,
+    timezone="America/Los_Angeles"
+)
+# Returns: return_date: "2025-01-18T04:57:04"
+#          natal_moon_longitude: 172.94
+#          Full chart data...
+```
+
+**Response Size:**
+- Full version: ~40 KB (complete chart data)
+- Compact version: ~18 KB (major objects and aspects only)
 
 ### Configuration Tools
 - `configure_immanuel_settings` - Modify global Immanuel library settings (house systems, orbs, celestial objects)
