@@ -41,6 +41,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Import lifecycle events detection system (after logger is configured)
+try:
+    from immanuel_mcp.lifecycle import detect_lifecycle_events
+    LIFECYCLE_AVAILABLE = True
+    logger.info("Lifecycle events module loaded successfully")
+except ImportError as e:
+    logger.warning(f"Lifecycle events module not available: {e}")
+    LIFECYCLE_AVAILABLE = False
+
 # Suppress any third-party library logging that might go to stdout/stderr
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
@@ -2003,7 +2012,8 @@ def generate_transit_to_natal(
     transit_longitude: str | None = None,
     timezone: str | None = None,
     aspect_priority: str = "all",
-    include_all_aspects: bool = False
+    include_all_aspects: bool = False,
+    include_lifecycle_events: bool = True
 ) -> Dict[str, Any]:
     """
     Calculates transiting planet aspects to a natal chart for a specific date.
@@ -2026,10 +2036,12 @@ def generate_transit_to_natal(
         aspect_priority: Priority tier to return - "all" (default), "tight" (0-2°),
                         "moderate" (2-5°), or "loose" (5-8°). Use to filter by orb precision.
         include_all_aspects: Deprecated - "all" is now the default. Kept for backward compatibility.
+        include_lifecycle_events: Include lifecycle events analysis (planetary returns,
+                                 major life transits, future timeline). Default: True.
 
     Returns:
         Dictionary containing natal chart summary, transit positions, paginated aspects,
-        aspect summary, and pagination metadata.
+        aspect summary, pagination metadata, and lifecycle events (if enabled).
     """
     try:
         logger.info(f"[TRANSIT-FULL] Starting transit-to-natal for natal {natal_date_time} with transits at {transit_date_time}")
@@ -2199,6 +2211,48 @@ def generate_transit_to_natal(
             "pagination": pagination,
             "timezone": timezone
         }
+
+        # === LIFECYCLE EVENTS DETECTION ===
+        if include_lifecycle_events and LIFECYCLE_AVAILABLE:
+            try:
+                logger.info("[TRANSIT-FULL] Detecting lifecycle events")
+
+                # Parse datetime strings to datetime objects
+                def parse_datetime_string(date_str: str) -> datetime:
+                    """Parse ISO format datetime string."""
+                    # Handle both 'YYYY-MM-DD HH:MM:SS' and 'YYYY-MM-DDTHH:MM:SS' formats
+                    date_str = date_str.replace(' ', 'T') if 'T' not in date_str else date_str
+                    # Remove timezone if present for parsing
+                    date_str = date_str.split('+')[0].split('-')[0] if 'T' in date_str else date_str
+                    return datetime.fromisoformat(date_str)
+
+                natal_dt = parse_datetime_string(natal_date_time)
+                transit_dt = parse_datetime_string(transit_date_time)
+
+                # Call lifecycle detection
+                lifecycle_events = detect_lifecycle_events(
+                    natal_chart=natal_chart,
+                    transit_chart=transit_chart,
+                    birth_datetime=natal_dt,
+                    transit_datetime=transit_dt,
+                    include_future=True,
+                    future_years=20,
+                    max_future_events=10
+                )
+
+                result["lifecycle_events"] = lifecycle_events
+                logger.info(
+                    f"[TRANSIT-FULL] Lifecycle events added: "
+                    f"{lifecycle_events['lifecycle_summary']['active_event_count']} current events"
+                )
+
+            except Exception as e:
+                logger.warning(f"[TRANSIT-FULL] Lifecycle events detection failed: {e}", exc_info=True)
+                # Gracefully degrade - don't break the response
+                result["lifecycle_events"] = None
+        elif include_lifecycle_events and not LIFECYCLE_AVAILABLE:
+            logger.warning("[TRANSIT-FULL] Lifecycle events requested but module not available")
+            result["lifecycle_events"] = None
 
         # Verify result is JSON serializable before returning
         logger.debug("[TRANSIT-FULL] Verifying JSON serializability")

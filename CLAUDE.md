@@ -37,6 +37,13 @@ This is an MCP (Model Context Protocol) server that exposes the Immanuel Python 
   ├── charts/                        # Chart generation
   │   ├── _legacy_import.py          # Temporary bridge to original implementation
   │   └── lunar_return.py            # 🆕 Lunar return charts (native modular implementation)
+  ├── lifecycle/                     # 🆕 Lifecycle events detection (v0.4.0)
+  │   ├── __init__.py                # Package exports
+  │   ├── constants.py               # Orbital periods, significance levels, keywords
+  │   ├── returns.py                 # Planetary return calculations
+  │   ├── transits.py                # Major life transit detection
+  │   ├── timeline.py                # Future predictions and lifecycle stages
+  │   └── lifecycle.py               # Master orchestration function
   └── interpretations/               # Aspect interpretations
       └── aspects.py                 # ASPECT_INTERPRETATIONS, context-aware interpretations
   ```
@@ -47,6 +54,7 @@ This is an MCP (Model Context Protocol) server that exposes the Immanuel Python 
   - Custom compact serializer for optimized chart output (84.9% size reduction)
   - Error handling with standardized error responses
   - Intelligent aspect pagination for transit-to-natal
+  - **🆕 Lifecycle events detection system**: Automatic detection of planetary returns and major life transits
 
 ### Dependencies
 - **Core**: `mcp[cli]` (MCP server framework), `immanuel` (astrology calculations)
@@ -117,6 +125,72 @@ The `generate_transit_to_natal` endpoint includes intelligent pagination to comp
 
 **Default Behavior:**
 Without specifying `aspect_priority`, the endpoint returns only tight aspects (0-2° orb), ensuring the response stays well under MCP limits while providing the most astrologically significant transits.
+
+### Lifecycle Events Detection System (🆕 v0.4.0)
+
+The `generate_transit_to_natal` endpoint now includes comprehensive lifecycle events detection, automatically identifying planetary returns and major life transits to provide context about where someone is in their astrological life journey.
+
+**What is Detected:**
+- **Planetary Returns**: Saturn Return, Jupiter Return, Uranus Opposition, Chiron Return, etc.
+- **Major Life Transits**: Uranus Opposition (midlife ~41), Neptune Square (~39), Pluto Square (~36)
+- **Future Timeline**: Upcoming returns and transits (10-20 years ahead)
+- **Lifecycle Stage**: Current life phase based on age and active transits
+
+**Parameter:**
+- `include_lifecycle_events: bool = True` - Enable/disable lifecycle detection (default: enabled)
+
+**Response Structure:**
+```json
+{
+  "lifecycle_events": {
+    "current_events": [
+      {
+        "event_type": "return",
+        "planet": "Saturn",
+        "type": "saturn_return",
+        "cycle_number": 1,
+        "orb": 1.2,
+        "orb_status": "tight",
+        "significance": "CRITICAL",
+        "keywords": ["maturity", "responsibility", "karma", ...],
+        "age": 29.5,
+        "status": "active"
+      }
+    ],
+    "past_events": [...],
+    "future_timeline": [...],
+    "lifecycle_summary": {
+      "current_age": 29.5,
+      "current_stage": {
+        "stage_name": "Saturn Return",
+        "description": "Karmic maturation and life restructuring",
+        "age_range": [29, 31],
+        "themes": ["responsibility", "maturity", "commitment"]
+      },
+      "active_event_count": 1,
+      "highest_significance": "CRITICAL"
+    }
+  }
+}
+```
+
+**Significance Levels:**
+- **CRITICAL**: Saturn Returns, Uranus Opposition, Neptune Square, Pluto Square
+- **HIGH**: Jupiter Returns (esp. 1st-3rd), Chiron Return/Opposition
+- **MODERATE**: Other tracked returns and transits
+- **LOW**: Infrequent or less impactful returns
+
+**Tracked Planets:**
+- Primary: Jupiter, Saturn, Uranus, Neptune, Pluto, Chiron
+- Optional: Sun (solar return), Mars (~2yr), North Node (~18.6yr)
+
+**Size Impact:**
+- Adds ~3-5 KB to response (well within MCP 50 KB limit)
+- Graceful degradation: If detection fails, lifecycle_events = null
+- Can be disabled with `include_lifecycle_events=False`
+
+**Claude Desktop Integration:**
+The lifecycle events are automatically included in transit responses, providing Claude with rich context about the person's life stage. For example, when someone asks "What are my transits today?", Claude can naturally incorporate lifecycle context like "You're currently in your Saturn Return—one of the most significant astrological transits of your life!"
 
 **Response Sizes (typical):**
 - Tight: ~25 KB (2-10 aspects)
