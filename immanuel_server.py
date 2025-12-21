@@ -1689,7 +1689,29 @@ def generate_transit_to_natal(
             filter_self_aspects=True
         )
 
-        logger.info(f"[TRANSIT-FULL] Returning {len(filtered_aspects)} filtered aspects")
+        # Add object names to aspects for readability (like compact serializer does)
+        # Create lookup dict: {object_index: object_name}
+        object_names = {}
+        for obj_key, obj_data in transit_data.get('objects', {}).items():
+            if isinstance(obj_data, dict) and 'index' in obj_data and 'name' in obj_data:
+                object_names[obj_data['index']] = obj_data['name']
+
+        # Also add natal object names
+        for obj_key, obj_data in natal_data.get('objects', {}).items():
+            if isinstance(obj_data, dict) and 'index' in obj_data and 'name' in obj_data:
+                object_names[obj_data['index']] = obj_data['name']
+
+        # Add object1 and object2 fields to each aspect
+        for aspect in filtered_aspects:
+            if isinstance(aspect, dict):
+                active_id = aspect.get('active')
+                passive_id = aspect.get('passive')
+                if active_id in object_names:
+                    aspect['object1'] = object_names[active_id]
+                if passive_id in object_names:
+                    aspect['object2'] = object_names[passive_id]
+
+        logger.info(f"[TRANSIT-FULL] Returning {len(filtered_aspects)} filtered aspects with object names")
 
         result = {
             "natal_summary": {
