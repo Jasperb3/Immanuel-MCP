@@ -353,6 +353,54 @@ Shows current planetary positions with filtering for major objects only.
 
 **Output:** Only major planetary positions (Sun through Pluto, Ascendant, Midheaven)
 
+### `generate_transit_to_natal`
+Calculates transiting planet aspects to a natal chart with intelligent pagination.
+
+**Parameters:**
+- `natal_date_time`: Birth date and time (ISO format: "YYYY-MM-DD HH:MM:SS")
+- `natal_latitude`: Birth location latitude (e.g., "51n23" or "51.38")
+- `natal_longitude`: Birth location longitude (e.g., "0w05" or "-0.08")
+- `transit_date_time`: Date/time for transits (ISO format)
+- `transit_latitude`: Optional transit location latitude (defaults to natal location)
+- `transit_longitude`: Optional transit location longitude (defaults to natal location)
+- `timezone`: Optional IANA timezone name (e.g., "Europe/London", "America/New_York")
+- `aspect_priority`: Priority tier to return - "tight" (default), "moderate", "loose", or "all"
+- `include_all_aspects`: Override filtering and return all aspects (may exceed size limits)
+
+**Pagination System:**
+- **Tight** (0-2° orb): Most critical transits, peak influence (default)
+- **Moderate** (2-5° orb): Secondary priority, building/waning influence
+- **Loose** (5-8° orb): Background influences, subtle themes
+- **All**: Return all aspects (warning: may exceed MCP limits)
+
+**Response Includes:**
+- `natal_summary`: Sun/Moon/Rising signs
+- `transit_positions`: Current planetary positions
+- `transit_to_natal_aspects`: Filtered aspects by priority
+- `aspect_summary`: Counts for tight/moderate/loose/total aspects
+- `pagination`: Current page, total pages, next page instructions
+
+**Example:**
+```
+"Calculate transit-to-natal aspects for natal chart 1984-01-11 18:45:00 at 51n23, 0w05,
+with transits for 2025-12-20 12:00:00 at 51n34, 0w09 in Europe/London timezone"
+```
+
+### `generate_compact_transit_to_natal`
+Calculates compact transit-to-natal aspects with optional interpretations.
+
+**Parameters:**
+- `natal_date_time`: Birth date and time (ISO format: "YYYY-MM-DD HH:MM:SS")
+- `natal_latitude`: Birth location latitude (e.g., "51n23" or "51.38")
+- `natal_longitude`: Birth location longitude (e.g., "0w05" or "-0.08")
+- `transit_date_time`: Date/time for transits (ISO format)
+- `transit_latitude`: Optional transit location latitude (defaults to natal location)
+- `transit_longitude`: Optional transit location longitude (defaults to natal location)
+- `timezone`: Optional IANA timezone name
+- `include_interpretations`: Include aspect interpretation keywords (default: True)
+
+**Output:** Streamlined aspects between major objects only with context-aware interpretations
+
 ### `configure_immanuel_settings`
 Modifies global Immanuel library settings.
 

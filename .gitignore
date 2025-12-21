@@ -1,14 +1,40 @@
+# Python virtual environment
 .venv/
+venv/
+
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+
+# Package builds
 *.egg-info/
 dist/
 build/
+
+# Testing
 .pytest_cache/
-.mypy_cache/
-*.log
-.DS_Store
-test_results/
 .coverage
 htmlcov/
+test_results/
+
+# Type checking
+.mypy_cache/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Development directories
+new_codex/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
