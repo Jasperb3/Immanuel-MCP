@@ -32,22 +32,28 @@ class CompactJSONSerializer(ToJSON):
     Data Included:
         - Simplified dignity information: primary dignity, secondary dignity (if applicable), and strength score
         - Essential object positions and placements
+        - Retrograde status for all celestial bodies
+        - House placement (1-12)
+        - Declination (distance north/south of celestial equator)
+        - Speed/daily motion (negative values indicate retrograde motion)
+        - Out-of-bounds status (when declination exceeds ±23°27')
 
     Data Excluded:
         - Detailed dignity weightings and mutual receptions
         - Chart shape analysis
         - Moon phase details (beyond basic phase type)
-        - Detailed velocity and movement data
         - Parallels and contra-parallels
         - Minor house cusps details
 
     Purpose:
         This compact format optimizes for LLM token usage while maintaining all critical astrological
-        information needed for chart interpretation. Typical token reduction: 60-70% compared to full charts.
+        information needed for chart interpretation, including essential position details for transit analysis.
+        Typical token reduction: 60-70% compared to full charts.
 
     Returns:
         A dictionary containing:
-        - objects: Simplified planetary data with name, sign, degree, house, retrograde status, and dignity
+        - objects: Simplified planetary data with name, sign, degree, house, retrograde status, dignity,
+                  declination, speed, and out-of-bounds status
         - houses: House cusps and associated signs
         - aspects: Filtered list of major aspects between major objects only
     """
@@ -127,6 +133,57 @@ class CompactJSONSerializer(ToJSON):
 
         return None
 
+    def _extract_position_details(self, v: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract comprehensive position details for compact mode.
+
+        Includes core data (name, sign, longitude, house, retrograde, dignity) plus
+        extended positional details (declination, speed, out-of-bounds status) when available.
+
+        Args:
+            v: Full object dictionary from chart
+
+        Returns:
+            Comprehensive position dict optimized for compact mode
+        """
+        # Extract basic position data
+        obj_data = {
+            'name': v.get('name'),
+            'sign': v.get('sign', {}).get('name'),
+            'sign_longitude': v.get('sign_longitude', {}).get('formatted'),
+            'house': v.get('house', {}).get('number'),
+            'retrograde': v.get('movement', {}).get('retrograde', False)
+        }
+
+        # Add simplified dignity information
+        dignity_data = self._extract_dignity_info(v)
+        if dignity_data:
+            obj_data['dignity'] = dignity_data
+
+        # Add declination if available (distance north/south of celestial equator)
+        if 'declination' in v:
+            decl = v['declination']
+            if isinstance(decl, dict) and 'formatted' in decl:
+                obj_data['declination'] = decl['formatted']
+            elif isinstance(decl, dict) and 'raw' in decl:
+                obj_data['declination'] = decl['raw']
+            else:
+                obj_data['declination'] = str(decl)
+
+        # Add speed/daily motion if available (negative = retrograde)
+        if 'speed' in v:
+            obj_data['speed'] = v['speed']
+        elif 'daily_motion' in v:
+            motion = v['daily_motion']
+            if isinstance(motion, dict) and 'raw' in motion:
+                obj_data['speed'] = motion['raw']
+
+        # Add out-of-bounds status if available (declination exceeds ±23°27')
+        if 'out_of_bounds' in v:
+            obj_data['out_of_bounds'] = v['out_of_bounds']
+
+        return obj_data
+
     def default(self, obj: Any) -> Dict[str, Any]:
         # Check if this is a chart object (Natal, SolarReturn, etc.)
         if self._is_chart_object(obj):
@@ -141,20 +198,8 @@ class CompactJSONSerializer(ToJSON):
                 simplified_objects = {}
                 for k, v in chart_dict[data_const.OBJECTS].items():
                     if v.get('index') in self.INCLUDED_OBJECTS:
-                        # Extract basic position data
-                        obj_data = {
-                            'name': v.get('name'),
-                            'sign': v.get('sign', {}).get('name'),
-                            'sign_longitude': v.get('sign_longitude', {}).get('formatted'),
-                            'house': v.get('house', {}).get('number'),
-                            'retrograde': v.get('movement', {}).get('retrograde', False)
-                        }
-
-                        # Add simplified dignity information
-                        dignity_data = self._extract_dignity_info(v)
-                        if dignity_data:
-                            obj_data['dignity'] = dignity_data
-
+                        # Use consolidated position extraction method
+                        obj_data = self._extract_position_details(v)
                         simplified_objects[k] = obj_data
                 compact_chart['objects'] = simplified_objects
 
