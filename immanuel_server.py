@@ -2533,38 +2533,78 @@ def configure_immanuel_settings(
 def list_available_settings() -> Dict[str, Any]:
     """
     List all available Immanuel settings and their current values.
-    
+
     Returns:
-        Dictionary of available settings and their current values.
+        Dictionary of available settings with both numeric codes and readable names.
     """
     try:
         from immanuel import setup
         settings = setup.settings
-        
+
+        # House system mapping (chart_const.X values to names)
+        HOUSE_SYSTEMS = {
+            101: "ALCABITUS",
+            102: "AZIMUTHAL",
+            103: "CAMPANUS",
+            104: "EQUAL",
+            105: "KOCH",
+            106: "MERIDIAN",
+            107: "MORINUS",
+            108: "PLACIDUS",
+            109: "POLICH_PAGE",
+            110: "PORPHYRIUS",
+            111: "REGIOMONTANUS",
+            112: "VEHLOW_EQUAL",
+            113: "WHOLE_SIGN"
+        }
+
+        # Aspect angle mapping (degrees to aspect names)
+        ASPECT_ANGLES = {
+            0.0: "Conjunction (0°)",
+            180.0: "Opposition (180°)",
+            90.0: "Square (90°)",
+            120.0: "Trine (120°)",
+            60.0: "Sextile (60°)",
+            150.0: "Quincunx (150°)",
+            30.0: "Semi-sextile (30°)",
+            45.0: "Semi-square (45°)",
+            135.0: "Sesquiquadrate (135°)"
+        }
+
+        # Get current values
+        house_system_code = getattr(settings, 'house_system', None)
+        house_system_name = HOUSE_SYSTEMS.get(house_system_code, f"Unknown ({house_system_code})")
+
+        current_aspects = getattr(settings, 'aspects', [])
+        aspect_names = [ASPECT_ANGLES.get(angle, f"{angle}°") for angle in current_aspects]
+
         setting_info = {
             'house_system': {
-                'current': getattr(settings, 'house_system', 'Unknown'),
-                'description': 'House system to use (e.g., PLACIDUS, CAMPANUS, etc.)'
+                'current': house_system_code,
+                'name': house_system_name,
+                'description': 'House system used for chart calculations',
+                'available_systems': list(HOUSE_SYSTEMS.values())
             },
             'locale': {
-                'current': getattr(settings, 'locale', 'Unknown'),
-                'description': 'Locale for formatting output'
+                'current': getattr(settings, 'locale', None),
+                'description': 'Locale for formatting output (None = default)'
             },
             'objects': {
                 'current': len(getattr(settings, 'objects', [])),
-                'description': 'Number of objects included in charts'
+                'description': 'Number of celestial objects included in charts'
             },
             'aspects': {
-                'current': len(getattr(settings, 'aspects', [])),
-                'description': 'Number of aspects calculated'
+                'current': len(current_aspects),
+                'aspect_angles': aspect_names,
+                'description': 'Aspects calculated between objects'
             }
         }
-        
+
         return {
             "status": "success",
             "settings": setting_info
         }
-        
+
     except Exception as e:
         logger.error(f"Error listing settings: {str(e)}")
         return handle_chart_error(e)
