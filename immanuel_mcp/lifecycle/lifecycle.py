@@ -28,10 +28,12 @@ def _enrich_future_events_with_orbs(
     transit_chart
 ) -> None:
     """
-    Calculate current orbs for future timeline events.
+    Calculate current angular separation for future timeline events.
 
-    This enriches predicted events with current orb information to show
-    how close/far the person is from the predicted event.
+    This enriches predicted events with current separation information to show
+    how close/far the person is from the predicted event. The "current_separation"
+    represents degrees of angular distance (0-180°) between current position and
+    the position at which the event will be exact.
 
     Args:
         future_events: List of future event predictions (modified in place)

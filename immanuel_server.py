@@ -961,17 +961,38 @@ def generate_solar_return_chart(
         # Serialize to JSON
         result = json.loads(json.dumps(solar_return, cls=ToJSON))
 
-        solar_return_dt = getattr(solar_return, 'solar_return_date_time', None) or result.get('solar_return_date_time')
-        if not solar_return_dt:
-            solar_return_dt = f"{return_year}-01-01 00:00:00"
+        # Extract solar return datetime (handle wrapped DateTime object)
+        solar_return_dt_obj = getattr(solar_return, 'solar_return_date_time', None)
+        if solar_return_dt_obj and hasattr(solar_return_dt_obj, 'datetime'):
+            # It's a wrapped DateTime object, extract the datetime
+            solar_return_dt = solar_return_dt_obj.datetime.strftime("%Y-%m-%d %H:%M:%S")
+        elif solar_return_dt_obj:
+            # Try to convert to string
+            solar_return_dt = str(solar_return_dt_obj)
+        else:
+            # Fallback to result dict or default
+            solar_return_dt = result.get('solar_return_date_time', f"{return_year}-01-01 00:00:00")
 
-        attach_lifecycle_section(
-            result,
-            natal_chart=natal_chart,
-            comparison_chart=solar_return,
-            birth_datetime=date_time,
-            comparison_datetime=solar_return_dt
-        )
+        # Create a transit chart for lifecycle event detection (SolarReturn object doesn't work)
+        try:
+            transit_subject = charts.Subject(
+                date_time=solar_return_dt,
+                latitude=lat,
+                longitude=lon
+            )
+            transit_chart_for_lifecycle = charts.Natal(transit_subject)
+
+            attach_lifecycle_section(
+                result,
+                natal_chart=natal_chart,
+                comparison_chart=transit_chart_for_lifecycle,
+                birth_datetime=date_time,
+                comparison_datetime=solar_return_dt
+            )
+        except Exception as e:
+            logger.warning(f"Could not attach lifecycle events to solar return: {e}")
+            result["lifecycle_events"] = None
+            result["lifecycle_summary"] = None
 
         logger.info("Solar return chart generated successfully")
         return result
@@ -1030,17 +1051,38 @@ def generate_compact_solar_return_chart(
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(solar_return, cls=CompactJSONSerializer))
 
-        solar_return_dt = getattr(solar_return, 'solar_return_date_time', None) or result.get('solar_return_date_time')
-        if not solar_return_dt:
-            solar_return_dt = f"{return_year}-01-01 00:00:00"
+        # Extract solar return datetime (handle wrapped DateTime object)
+        solar_return_dt_obj = getattr(solar_return, 'solar_return_date_time', None)
+        if solar_return_dt_obj and hasattr(solar_return_dt_obj, 'datetime'):
+            # It's a wrapped DateTime object, extract the datetime
+            solar_return_dt = solar_return_dt_obj.datetime.strftime("%Y-%m-%d %H:%M:%S")
+        elif solar_return_dt_obj:
+            # Try to convert to string
+            solar_return_dt = str(solar_return_dt_obj)
+        else:
+            # Fallback to result dict or default
+            solar_return_dt = result.get('solar_return_date_time', f"{return_year}-01-01 00:00:00")
 
-        attach_lifecycle_section(
-            result,
-            natal_chart=natal_chart,
-            comparison_chart=solar_return,
-            birth_datetime=date_time,
-            comparison_datetime=solar_return_dt
-        )
+        # Create a transit chart for lifecycle event detection (SolarReturn object doesn't work)
+        try:
+            transit_subject = charts.Subject(
+                date_time=solar_return_dt,
+                latitude=lat,
+                longitude=lon
+            )
+            transit_chart_for_lifecycle = charts.Natal(transit_subject)
+
+            attach_lifecycle_section(
+                result,
+                natal_chart=natal_chart,
+                comparison_chart=transit_chart_for_lifecycle,
+                birth_datetime=date_time,
+                comparison_datetime=solar_return_dt
+            )
+        except Exception as e:
+            logger.warning(f"Could not attach lifecycle events to compact solar return: {e}")
+            result["lifecycle_events"] = None
+            result["lifecycle_summary"] = None
 
         logger.info("Compact solar return chart generated successfully")
         return result
@@ -2281,6 +2323,11 @@ def generate_transit_to_natal(
     """
     try:
         logger.info(f"[TRANSIT-FULL] Starting transit-to-natal for natal {natal_date_time} with transits at {transit_date_time}")
+
+        # CRITICAL FIX: Handle None for aspect_priority (MCP may pass None instead of using default)
+        if aspect_priority is None:
+            aspect_priority = "tight"
+            logger.info(f"[TRANSIT-FULL] aspect_priority was None, defaulting to 'tight'")
 
         # Validate natal inputs
         logger.debug(f"[TRANSIT-FULL] Validating inputs")

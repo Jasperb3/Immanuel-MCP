@@ -44,32 +44,23 @@ try:
         print(f"Aspects Count: {len(result.get('transit_to_natal_aspects', []))}")
         
         # Check lifecycle events
-        lifecycle = result.get('lifecycle_events')
-        if lifecycle:
+        lifecycle_events = result.get('lifecycle_events')
+        lifecycle_summary = result.get('lifecycle_summary')
+        if lifecycle_events and lifecycle_summary:
             print("\n LIFECYCLE EVENTS DETECTED")
-            summary = lifecycle.get('lifecycle_summary', {})
-            print(f"  Age: {summary.get('current_age')}")
-            print(f"  Current Stage: {summary.get('current_stage', {}).get('stage_name')}")
-            print(f"  Active Events: {summary.get('active_event_count')}")
-            print(f"  Highest Significance: {summary.get('highest_significance')}")
-            
-            current_events = lifecycle.get('current_events', [])
-            if current_events:
-                print(f"\n  Active Events ({len(current_events)}):")
-                for event in current_events[:3]:  # Show first 3
-                    if event.get('event_type') == 'return':
-                        print(f"    - {event['planet']} Return (Cycle #{event['cycle_number']})")
-                        print(f"      Orb: {event['orb']}°, Significance: {event['significance']}")
-                    else:
-                        print(f"    - {event.get('name', 'Transit')}")
-                        print(f"      Orb: {event.get('orb')}°, Significance: {event.get('significance')}")
-            
-            future_events = lifecycle.get('future_timeline', [])
-            if future_events:
-                print(f"\n  Future Events ({len(future_events)} total, showing first 3):")
-                for event in future_events[:3]:
-                    name = event.get('name', event.get('planet', 'Unknown'))
-                    print(f"    - {name} in {event.get('years_until', '?')} years")
+            print(f"  Age: {lifecycle_summary.get('current_age')}")
+            stage = lifecycle_summary.get('current_stage', {}).get('stage_name')
+            print(f"  Current Stage: {stage}")
+            print(f"  Active Events: {lifecycle_summary.get('active_event_count')}")
+            print(f"  Highest Significance: {lifecycle_summary.get('highest_significance')}")
+
+            print(f"  Next Event: {lifecycle_summary.get('next_major_event')}")
+            print(f"  Years Until Next: {lifecycle_summary.get('years_until_event')}")
+
+            print(f"\n  Events Returned ({len(lifecycle_events)} total, showing first 3):")
+            for event in lifecycle_events[:3]:
+                print(f"    - {event.get('event_type')} ({event.get('status')})")
+                print(f"      Significance: {event.get('significance')}, Orb: {event.get('orb')}")
         else:
             print("\n  WARNING: No lifecycle events detected")
         
@@ -106,12 +97,12 @@ try:
         print("\nSUCCESS: Function executed")
         
         # Check lifecycle events
-        lifecycle = result.get('lifecycle_events')
-        if lifecycle:
+        lifecycle_events = result.get('lifecycle_events')
+        lifecycle_summary = result.get('lifecycle_summary')
+        if lifecycle_events and lifecycle_summary:
             print("\n LIFECYCLE EVENTS DETECTED")
-            summary = lifecycle.get('lifecycle_summary', {})
-            print(f"  Active Events: {summary.get('active_event_count')}")
-            print(f"  Highest Significance: {summary.get('highest_significance')}")
+            print(f"  Active Events: {lifecycle_summary.get('active_event_count')}")
+            print(f"  Highest Significance: {lifecycle_summary.get('highest_significance')}")
         else:
             print("\n  WARNING: No lifecycle events in full version")
         
@@ -139,9 +130,9 @@ try:
         print(f"\nERROR: {result['message']}")
     else:
         print("\nSUCCESS: Function executed")
-        has_lifecycle = 'lifecycle_events' in result
-        print(f"Has lifecycle_events key: {has_lifecycle}")
-        if not has_lifecycle:
+        lifecycle_state = result.get('lifecycle_events')
+        print(f"Lifecycle events value: {lifecycle_state}")
+        if lifecycle_state is None:
             print("   PASS: Lifecycle events correctly excluded")
         else:
             print("   WARNING: Lifecycle events present when disabled")

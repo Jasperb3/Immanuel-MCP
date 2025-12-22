@@ -300,7 +300,8 @@ class TestCompactChart:
             with patch('immanuel_server.charts.Subject'), \
                  patch('immanuel_server.charts.Natal') as mock_natal, \
                  patch('json.dumps') as mock_dumps, \
-                 patch('json.loads') as mock_loads:
+                 patch('json.loads') as mock_loads, \
+                 patch('immanuel_server.attach_lifecycle_section') as mock_lifecycle:
 
                 # Mock the chart generation
                 mock_chart = MagicMock()
@@ -309,6 +310,7 @@ class TestCompactChart:
                 # Mock the serialization
                 mock_dumps.return_value = '{"compact_test": "data"}'
                 mock_loads.return_value = {"compact_test": "data"}
+                mock_lifecycle.return_value = None
 
                 result = immanuel_server.generate_compact_natal_chart(
                     "1990-01-01 12:00:00", "32.71", "-117.15"
@@ -420,9 +422,11 @@ class TestCompactChart:
                 mock_solar_return.return_value = mock_chart
                 
                 with patch('json.dumps') as mock_dumps, \
-                     patch('json.loads') as mock_loads:
+                     patch('json.loads') as mock_loads, \
+                     patch('immanuel_server.attach_lifecycle_section') as mock_lifecycle:
                     mock_dumps.return_value = '{"compact_solar_return": "data"}'
                     mock_loads.return_value = {"compact_solar_return": "data"}
+                    mock_lifecycle.return_value = None
                     
                     result = immanuel_server.generate_compact_solar_return_chart(
                         "1990-01-01 12:00:00", "32.71", "-117.15", 2024
@@ -446,9 +450,11 @@ class TestCompactChart:
                 mock_progressed.return_value = mock_chart
                 
                 with patch('json.dumps') as mock_dumps, \
-                     patch('json.loads') as mock_loads:
+                     patch('json.loads') as mock_loads, \
+                     patch('immanuel_server.attach_lifecycle_section') as mock_lifecycle:
                     mock_dumps.return_value = '{"compact_progressed": "data"}'
                     mock_loads.return_value = {"compact_progressed": "data"}
+                    mock_lifecycle.return_value = None
                     
                     result = immanuel_server.generate_compact_progressed_chart(
                         "1990-01-01 12:00:00", "32.71", "-117.15", "2024-01-01 12:00:00"
@@ -557,9 +563,11 @@ class TestMCPTools:
                 mock_natal.return_value = mock_chart
                 
                 with patch('json.dumps') as mock_dumps, \
-                     patch('json.loads') as mock_loads:
+                     patch('json.loads') as mock_loads, \
+                     patch('immanuel_server.attach_lifecycle_section') as mock_lifecycle:
                     mock_dumps.return_value = '{"test": "data"}'
                     mock_loads.return_value = {"test": "data"}
+                    mock_lifecycle.return_value = None
                     
                     result = immanuel_server.generate_natal_chart(
                         "1990-01-01 12:00:00", "32.71", "-117.15"
@@ -668,9 +676,11 @@ class TestMCPTools:
                 mock_solar_return.return_value = mock_chart
                 
                 with patch('json.dumps') as mock_dumps, \
-                     patch('json.loads') as mock_loads:
+                     patch('json.loads') as mock_loads, \
+                     patch('immanuel_server.attach_lifecycle_section') as mock_lifecycle:
                     mock_dumps.return_value = '{"solar_return": "data"}'
                     mock_loads.return_value = {"solar_return": "data"}
+                    mock_lifecycle.return_value = None
                     
                     result = immanuel_server.generate_solar_return_chart(
                         "1990-01-01 12:00:00", "32.71", "-117.15", 2024
@@ -709,9 +719,11 @@ class TestMCPTools:
                 mock_progressed.return_value = mock_chart
                 
                 with patch('json.dumps') as mock_dumps, \
-                     patch('json.loads') as mock_loads:
+                     patch('json.loads') as mock_loads, \
+                     patch('immanuel_server.attach_lifecycle_section') as mock_lifecycle:
                     mock_dumps.return_value = '{"progressed": "data"}'
                     mock_loads.return_value = {"progressed": "data"}
+                    mock_lifecycle.return_value = None
                     
                     result = immanuel_server.generate_progressed_chart(
                         "1990-01-01 12:00:00", "32.71", "-117.15", "2024-01-01 12:00:00"
