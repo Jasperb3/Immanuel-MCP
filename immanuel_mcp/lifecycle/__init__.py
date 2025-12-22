@@ -12,21 +12,30 @@ Main components:
 - constants.py: Orbital periods, significance levels, and configurations
 """
 
-from .lifecycle import detect_lifecycle_events
+from .lifecycle import detect_lifecycle_events, format_lifecycle_event_feed
+from .progressed import detect_progressed_moon_return
 from .constants import (
     ORBITAL_PERIODS,
     RETURN_SIGNIFICANCE,
     RETURN_KEYWORDS,
     RETURN_ORB_TOLERANCE,
+    RETURN_INTERPRETATIONS,
+    PROGRESSED_MOON_INTERPRETATION,
+    PROGRESSED_MOON_KEYWORDS,
     MAJOR_LIFE_TRANSITS
 )
 
 __all__ = [
     'detect_lifecycle_events',
+    'detect_progressed_moon_return',
+    'format_lifecycle_event_feed',
     'ORBITAL_PERIODS',
     'RETURN_SIGNIFICANCE',
     'RETURN_KEYWORDS',
     'RETURN_ORB_TOLERANCE',
+    'RETURN_INTERPRETATIONS',
+    'PROGRESSED_MOON_INTERPRETATION',
+    'PROGRESSED_MOON_KEYWORDS',
     'MAJOR_LIFE_TRANSITS'
 ]
 

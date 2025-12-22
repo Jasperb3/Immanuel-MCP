@@ -63,8 +63,10 @@ def predict_next_return(
     years_until = predicted_age - current_age
 
     # Calculate predicted date
-    days_until = years_until * 365.25
-    predicted_datetime = birth_datetime + timedelta(days=days_until)
+    # BUG FIX: Must add predicted_age (total years from birth) to birth_datetime,
+    # NOT years_until (which would give a date too close to birth)
+    days_from_birth = predicted_age * 365.25
+    predicted_datetime = birth_datetime + timedelta(days=days_from_birth)
 
     # Get significance
     significance = get_return_significance(planet_name, next_cycle)
@@ -125,14 +127,21 @@ def predict_major_transit(
     if years_until < 0:
         # Currently in the transit window
         years_until = 0
-        predicted_datetime = birth_datetime + timedelta(days=current_age * 365.25)
+        # Use current age to project from birth
+        days_from_birth = current_age * 365.25
+        predicted_datetime = birth_datetime + timedelta(days=days_from_birth)
     else:
-        days_until = years_until * 365.25
-        predicted_datetime = birth_datetime + timedelta(days=days_until)
+        # BUG FIX: Must add typical_age (total years from birth) to birth_datetime,
+        # NOT years_until
+        days_from_birth = typical_age * 365.25
+        predicted_datetime = birth_datetime + timedelta(days=days_from_birth)
 
     return {
         "name": transit_config["name"],
         "type": transit_config["name"].lower().replace(" ", "_"),
+        "natal_object": transit_config["natal_object"],
+        "transit_object": transit_config["transit_object"],
+        "aspect_type": transit_config["aspect_type"],
         "typical_age": typical_age,
         "age_range": list(age_range),
         "predicted_date": predicted_datetime.strftime("%Y-%m-%d"),
@@ -190,7 +199,8 @@ def build_future_timeline(
     for planet_name in TRACKED_RETURN_PLANETS:
         try:
             prediction = predict_next_return(planet_name, current_age, birth_datetime)
-            if prediction and prediction["predicted_age"] <= cutoff_age:
+            # Only include if predicted age is in the future AND within cutoff
+            if prediction and prediction["years_until"] > 0 and prediction["predicted_age"] <= cutoff_age:
                 prediction["event_type"] = "return"
                 future_events.append(prediction)
         except Exception as e:

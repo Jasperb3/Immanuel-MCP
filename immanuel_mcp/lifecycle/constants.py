@@ -118,15 +118,15 @@ RETURN_ORB_TOLERANCE: Dict[str, float] = {
     "Moon": 2.0,          # Lunar return: moderate
     "Mercury": 1.0,
     "Venus": 1.0,
-    "Mars": 1.5,
+    "Mars": 1.0,          # Phase 2 requirement: ±1° orb
     "Jupiter": 2.0,       # Wider orb (slower planet, longer influence)
-    "Saturn": 2.0,        # Wider orb (typically 3 passages)
+    "Saturn": 1.5,        # tightened to match lifecycle spec
     "Uranus": 1.5,
     "Neptune": 1.5,
     "Pluto": 1.5,
-    "Chiron": 2.0,
-    "North Node": 2.0,
-    "South Node": 2.0,
+    "Chiron": 1.0,        # tighter precision for healing cycle
+    "North Node": 1.0,    # nodal return ±1°
+    "South Node": 1.0,
 }
 
 # ============================================================================
@@ -217,17 +217,76 @@ LIFECYCLE_STAGES: Dict[int, tuple] = {
 # Planets we calculate returns for (excludes too-frequent returns)
 
 TRACKED_RETURN_PLANETS: List[str] = [
+    "Mars",      # 2-year action cycle
     "Jupiter",
     "Saturn",
+    "Chiron",
+    "North Node",
     "Uranus",
     "Neptune",
     "Pluto",
-    "Chiron",
 ]
 
-# Optional: Can also track but lower priority
+# Optional: lower priority but available for future expansion
 OPTIONAL_RETURN_PLANETS: List[str] = [
     "Sun",        # Solar return (every year)
-    "Mars",       # Mars return (~2 years)
-    "North Node", # Nodal return (~18.6 years)
+    "Mercury",
+    "Venus",
+    "South Node"
+]
+
+# ============================================================================
+# Return Interpretations (used for lifecycle event descriptions)
+# ============================================================================
+
+RETURN_INTERPRETATIONS: Dict[str, Dict[Any, str]] = {
+    "Saturn": {
+        1: "First major Saturn Return – maturation, accountability, and restructuring.",
+        2: "Second Saturn Return – elder mastery, legacy review, and completion of long cycles.",
+        3: "Third Saturn Return – wisdom keeper threshold and preparation for spiritual legacy.",
+        "default": "Saturnian restructuring phase demanding responsibility and integrity."
+    },
+    "Chiron": {
+        1: "Chiron Return – integration of the wounded healer archetype at midlife.",
+        0.5: "Chiron Opposition – awakening to core wounds and the medicine you carry.",
+        "default": "Chiron cycle emphasizing healing, wholeness, and mentorship."
+    },
+    "Jupiter": {
+        1: "First Jupiter Return – rite of passage expanding belief systems and opportunities.",
+        2: "Second Jupiter Return – new growth cycle in adulthood and renewed optimism.",
+        "default": "Jupiter expansion phase bringing fresh wisdom, abundance, and faith."
+    },
+    "Mars": {
+        "default": "Mars Return – reboot of motivation, courage, and how you assert your will."
+    },
+    "North Node": {
+        1: "First Nodal Return – alignment with soul mission and destiny pivot.",
+        2: "Second Nodal Return – recalibration of karmic path and life direction.",
+        "default": "Nodal Return – reminders to lean into your evolutionary edge."
+    },
+    "Uranus": {
+        0.5: "Uranus Opposition – midlife awakening demanding authentic freedom.",
+        1: "Uranus Return – revolutionary reinvention of identity and destiny.",
+        "default": "Uranian cycle prompting liberation and innovation."
+    },
+    "Neptune": {
+        0.5: "Neptune Square – fog vs. faith initiation reshaping spiritual compass.",
+        "default": "Neptunian cycle encouraging surrender, compassion, and imagination."
+    },
+    "Pluto": {
+        0.5: "Pluto Square – deep alchemical transformation of power dynamics.",
+        "default": "Plutonian metamorphosis requiring total honesty and regeneration."
+    }
+}
+
+# Specialized interpretations for progressed Moon tracking
+PROGRESSED_MOON_INTERPRETATION = (
+    "Progressed Moon Return – emotional reset that reboots intuition, needs, and inner rhythm."
+)
+PROGRESSED_MOON_KEYWORDS = [
+    "emotional reset",
+    "intuition",
+    "inner rhythm",
+    "soul nourishment",
+    "sensitivity"
 ]

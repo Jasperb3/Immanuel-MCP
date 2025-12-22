@@ -7,14 +7,101 @@ the complete lifecycle events response.
 """
 
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
-from .returns import detect_all_returns
-from .transits import detect_all_major_transits
+from .returns import detect_all_returns, PLANET_CONSTANTS, calculate_signed_orb, determine_orb_status
+from .transits import detect_all_major_transits, calculate_aspect_orb, TRANSIT_ORB_TOLERANCE
 from .timeline import build_future_timeline, get_lifecycle_stage
+from .constants import (
+    ORBITAL_PERIODS,
+    RETURN_ORB_TOLERANCE,
+    RETURN_INTERPRETATIONS
+)
 
 logger = logging.getLogger(__name__)
+
+
+def _enrich_future_events_with_orbs(
+    future_events: list,
+    natal_chart,
+    transit_chart
+) -> None:
+    """
+    Calculate current orbs for future timeline events.
+
+    This enriches predicted events with current orb information to show
+    how close/far the person is from the predicted event.
+
+    Args:
+        future_events: List of future event predictions (modified in place)
+        natal_chart: Immanuel natal chart object
+        transit_chart: Immanuel transit chart object
+    """
+    for event in future_events:
+        event_type = event.get("event_type")
+
+        try:
+            if event_type == "return":
+                # Calculate orb for planetary return
+                planet_name = event.get("planet")
+                if planet_name not in PLANET_CONSTANTS:
+                    continue
+
+                planet_const = PLANET_CONSTANTS[planet_name]
+                natal_planet = natal_chart.objects.get(planet_const)
+                transit_planet = transit_chart.objects.get(planet_const)
+
+                # Skip if planet not accessible (e.g., nodes may not be in objects collection)
+                if natal_planet is None or transit_planet is None:
+                    logger.debug(f"Skipping orb calculation for {planet_name} (not accessible in chart objects)")
+                    continue
+
+                natal_pos = natal_planet.longitude.raw
+                transit_pos = transit_planet.longitude.raw
+
+                orb = calculate_signed_orb(natal_pos, transit_pos)
+                tolerance = RETURN_ORB_TOLERANCE.get(planet_name, 2.0)
+                orb_status = determine_orb_status(orb, tolerance)
+
+                event["current_orb"] = round(abs(orb), 2)
+                event["orb_status"] = "applicative" if abs(orb) > 0.5 else "exact"
+
+            elif event_type == "major_transit":
+                # Calculate orb for major life transit
+                natal_object_name = event.get("natal_object")
+                transit_object_name = event.get("transit_object")
+                aspect_type = event.get("aspect_type")
+
+                if not all([natal_object_name, transit_object_name, aspect_type]):
+                    continue
+
+                if natal_object_name not in PLANET_CONSTANTS:
+                    continue
+                if transit_object_name not in PLANET_CONSTANTS:
+                    continue
+
+                natal_planet_const = PLANET_CONSTANTS[natal_object_name]
+                transit_planet_const = PLANET_CONSTANTS[transit_object_name]
+
+                natal_planet = natal_chart.objects.get(natal_planet_const)
+                transit_planet = transit_chart.objects.get(transit_planet_const)
+
+                natal_pos = natal_planet.longitude.raw
+                transit_pos = transit_planet.longitude.raw
+
+                orb = calculate_aspect_orb(natal_pos, transit_pos, aspect_type)
+
+                if orb is not None:
+                    event["current_orb"] = round(abs(orb), 2)
+                    event["orb_status"] = "applicative" if abs(orb) > 0.5 else "exact"
+
+        except Exception as e:
+            logger.warning(
+                f"Could not calculate orb for future event {event.get('name', event.get('planet', 'unknown'))}: {e}",
+                exc_info=True
+            )
+            continue
 
 
 def detect_lifecycle_events(
@@ -156,6 +243,13 @@ def detect_lifecycle_events(
             max_events=max_future_events
         )
 
+        # Calculate current orbs for future events to show how close they are
+        _enrich_future_events_with_orbs(
+            future_timeline,
+            natal_chart,
+            transit_chart
+        )
+
     # Get current lifecycle stage
     lifecycle_stage = get_lifecycle_stage(age)
 
@@ -171,6 +265,10 @@ def detect_lifecycle_events(
         "active_event_count": len(current_events),
         "highest_significance": highest_significance
     }
+
+    lifecycle_summary.update(
+        _build_summary_enhancements(current_events, future_timeline, transit_datetime)
+    )
 
     # Assemble complete response
     response = {
@@ -239,3 +337,323 @@ def build_past_events_summary(current_age: float) -> list[Dict[str, Any]]:
             })
 
     return past_events
+
+
+def _return_event_name(planet: str, cycle: Optional[int]) -> str:
+    if cycle:
+        return f"{planet} Return Cycle {cycle}"
+    return f"{planet} Return"
+
+
+def _return_event_index(planet: str, cycle: Optional[int]) -> str:
+    suffix = f"_C{cycle}" if cycle else ""
+    return f"{planet.replace(' ', '_')}_Return{suffix}"
+
+
+def _get_return_interpretation(planet: str, cycle: Optional[int]) -> str:
+    planet_data = RETURN_INTERPRETATIONS.get(planet, {})
+    if cycle is not None:
+        if cycle in planet_data:
+            return planet_data[cycle]
+        # Allow fractional keys for oppositions/squares (e.g., 0.5)
+        try:
+            cycle_key = float(cycle)
+        except (TypeError, ValueError):
+            cycle_key = None
+        if cycle_key and cycle_key in planet_data:
+            return planet_data[cycle_key]
+    return planet_data.get("default", f"{planet} return cycle of growth and integration.")
+
+
+def _estimate_date_range(planet: str, tolerance: float, center: Optional[datetime]) -> Optional[str]:
+    if center is None:
+        return None
+    orbital_period = ORBITAL_PERIODS.get(planet)
+    if not orbital_period:
+        return None
+    try:
+        deg_per_day = 360 / (orbital_period * 365.25)
+    except ZeroDivisionError:  # pragma: no cover - defensive
+        return None
+    if deg_per_day <= 0:
+        return None
+    window_days = tolerance / deg_per_day
+    start = (center - timedelta(days=window_days)).date()
+    end = (center + timedelta(days=window_days)).date()
+    return f"{start.isoformat()} to {end.isoformat()}"
+
+
+def _estimate_transit_date_range(
+    transit_object: str,
+    aspect_type: str,
+    center: Optional[datetime]
+) -> Optional[str]:
+    """
+    Estimate date range for a major life transit (square, opposition).
+
+    Args:
+        transit_object: Transiting planet name (e.g., "Uranus", "Neptune")
+        aspect_type: Type of aspect ("Square", "Opposition")
+        center: Center datetime for the event
+
+    Returns:
+        Date range string "YYYY-MM-DD to YYYY-MM-DD" or None
+    """
+    if center is None:
+        return None
+
+    # Get orb tolerance for this aspect type
+    tolerance = TRANSIT_ORB_TOLERANCE.get(aspect_type, 3.0)
+
+    # Get orbital period
+    orbital_period = ORBITAL_PERIODS.get(transit_object)
+    if not orbital_period:
+        return None
+
+    try:
+        deg_per_day = 360 / (orbital_period * 365.25)
+    except ZeroDivisionError:
+        return None
+
+    if deg_per_day <= 0:
+        return None
+
+    # Calculate window duration in days
+    window_days = tolerance / deg_per_day
+    start = (center - timedelta(days=window_days)).date()
+    end = (center + timedelta(days=window_days)).date()
+
+    return f"{start.isoformat()} to {end.isoformat()}"
+
+
+def _build_return_event_entry(
+    planet: str,
+    cycle: Optional[int],
+    keywords: list,
+    significance: str,
+    reference_datetime: Optional[datetime],
+    age: Optional[float],
+    status: str,
+    years_until: float = 0.0,
+    orb: Optional[float] = None,
+    orb_status: Optional[str] = None,
+    natal_position: Optional[float] = None,
+    transit_position: Optional[float] = None
+) -> Dict[str, Any]:
+    tolerance = RETURN_ORB_TOLERANCE.get(planet, 2.0)
+    date_range = _estimate_date_range(planet, tolerance, reference_datetime)
+    exact_date = reference_datetime.strftime("%Y-%m-%d") if reference_datetime else None
+    interpretation = _get_return_interpretation(planet, cycle)
+
+    entry = {
+        "event_type": _return_event_name(planet, cycle),
+        "event_index": _return_event_index(planet, cycle),
+        "description": interpretation,
+        "natal_object": planet,
+        "transiting_object": planet,
+        "aspect_type": "Conjunction",
+        "orb": round(abs(orb), 2) if orb is not None else None,
+        "orb_status": orb_status,
+        "exact_date": exact_date,
+        "date_range": date_range,
+        "age_at_event": round(age, 1) if age is not None else None,
+        "years_until_event": round(max(years_until, 0.0), 1),
+        "interpretation": interpretation,
+        "significance_level": significance.lower() if significance else None,
+        "significance": significance,
+        "keywords": keywords or [],
+        "status": status,
+        "category": "return"
+    }
+
+    if natal_position is not None:
+        entry["natal_position"] = natal_position
+    if transit_position is not None:
+        entry["transit_position"] = transit_position
+
+    return entry
+
+
+def _format_major_transit_event(
+    event: Dict[str, Any],
+    reference_datetime: Optional[datetime],
+    status: str = "active"
+) -> Dict[str, Any]:
+    exact_date = reference_datetime.strftime("%Y-%m-%d") if reference_datetime else None
+
+    # Calculate date range for the transit window
+    date_range = _estimate_transit_date_range(
+        transit_object=event.get("transit_object"),
+        aspect_type=event.get("aspect_type"),
+        center=reference_datetime
+    )
+
+    # Use event orb if present (from enrichment), otherwise use None for future events
+    orb_value = event.get("orb")
+    orb_status_value = event.get("orb_status")
+
+    entry = {
+        "event_type": event.get("name"),
+        "event_index": event.get("type", "major_transit").upper(),
+        "description": event.get("description"),
+        "natal_object": event.get("natal_object"),
+        "transiting_object": event.get("transit_object"),
+        "aspect_type": event.get("aspect_type"),
+        "orb": round(abs(orb_value), 2) if orb_value is not None else None,
+        "orb_status": orb_status_value,
+        "exact_date": exact_date,
+        "date_range": date_range,
+        "age_at_event": round(event.get("age"), 1) if event.get("age") else event.get("typical_age"),
+        "years_until_event": 0.0 if status == "active" else event.get("years_until"),
+        "interpretation": event.get("description"),
+        "significance_level": event.get("significance", "").lower(),
+        "significance": event.get("significance"),
+        "keywords": event.get("keywords", []),
+        "status": status,
+        "category": "major_transit"
+    }
+
+    if event.get("natal_position") is not None:
+        entry["natal_position"] = event.get("natal_position")
+    if event.get("transit_position") is not None:
+        entry["transit_position"] = event.get("transit_position")
+
+    return entry
+
+
+def _format_future_event(event: Dict[str, Any]) -> Dict[str, Any]:
+    # Extract current orb if available (added by _enrich_future_events_with_orbs)
+    current_orb = event.get("current_orb")
+    orb_status = event.get("orb_status")
+
+    if event.get("event_type") == "return":
+        predicted_dt = None
+        if event.get("predicted_date"):
+            try:
+                predicted_dt = datetime.fromisoformat(event["predicted_date"])
+            except ValueError:
+                predicted_dt = None
+        return _build_return_event_entry(
+            planet=event.get("planet"),
+            cycle=event.get("cycle_number"),
+            keywords=event.get("keywords", []),
+            significance=event.get("significance"),
+            reference_datetime=predicted_dt,
+            age=event.get("predicted_age"),
+            status="upcoming",
+            years_until=event.get("years_until", 0.0),
+            orb=current_orb,
+            orb_status=orb_status
+        )
+
+    predicted_dt = None
+    if event.get("predicted_date"):
+        try:
+            predicted_dt = datetime.fromisoformat(event["predicted_date"])
+        except ValueError:
+            predicted_dt = None
+
+    future_event = _format_major_transit_event(
+        {
+            **event,
+            "orb": current_orb,
+            "orb_status": orb_status,
+        },
+        predicted_dt,
+        status="upcoming"
+    )
+    # date_range is now calculated in _format_major_transit_event
+    return future_event
+
+
+def _build_summary_enhancements(
+    current_events: list[Dict[str, Any]],
+    future_timeline: list[Dict[str, Any]],
+    reference_datetime: Optional[datetime] = None
+) -> Dict[str, Any]:
+    enhancements: Dict[str, Any] = {}
+
+    enhancements["critical_events_count"] = sum(
+        1 for event in current_events if event.get("significance") == "CRITICAL"
+    )
+
+    next_event_name = None
+    next_event_years = None
+    next_event_date = None
+
+    if current_events:
+        next_event_name = _return_event_name(
+            current_events[0].get("planet"),
+            current_events[0].get("cycle_number")
+        ) if current_events[0].get("event_type") == "return" else current_events[0].get("name")
+        next_event_years = 0.0
+        if reference_datetime:
+            next_event_date = reference_datetime.strftime("%Y-%m-%d")
+    elif future_timeline:
+        top = future_timeline[0]
+        if top.get("event_type") == "return":
+            next_event_name = _return_event_name(top.get("planet"), top.get("cycle_number"))
+        else:
+            next_event_name = top.get("name")
+        next_event_years = top.get("years_until")
+        next_event_date = top.get("predicted_date")
+
+    enhancements["next_major_event"] = next_event_name
+    enhancements["years_until_event"] = next_event_years
+    enhancements["next_major_event_date"] = next_event_date
+
+    enhancements["upcoming_events"] = [
+        _return_event_name(evt.get("planet"), evt.get("cycle_number"))
+        if evt.get("event_type") == "return" else evt.get("name")
+        for evt in future_timeline[:5]
+    ]
+
+    return enhancements
+
+
+def format_lifecycle_event_feed(
+    lifecycle_data: Dict[str, Any],
+    reference_datetime: datetime,
+    additional_events: Optional[list] = None
+) -> Dict[str, Any]:
+    current_events = lifecycle_data.get("current_events", [])
+    future_timeline = lifecycle_data.get("future_timeline", [])
+
+    formatted_events: list[Dict[str, Any]] = []
+
+    for event in current_events:
+        if event.get("event_type") == "return":
+            formatted_events.append(
+                _build_return_event_entry(
+                    planet=event.get("planet"),
+                    cycle=event.get("cycle_number"),
+                    keywords=event.get("keywords", []),
+                    significance=event.get("significance"),
+                    reference_datetime=reference_datetime,
+                    age=event.get("age"),
+                    status="active",
+                    years_until=0.0,
+                    orb=event.get("orb"),
+                    orb_status=event.get("orb_status"),
+                    natal_position=event.get("natal_position"),
+                    transit_position=event.get("transit_position")
+                )
+            )
+        else:
+            formatted_events.append(
+                _format_major_transit_event(event, reference_datetime, status="active")
+            )
+
+    for event in future_timeline:
+        formatted_events.append(_format_future_event(event))
+
+    if additional_events:
+        formatted_events.extend(additional_events)
+
+    summary = lifecycle_data.get("lifecycle_summary", {}).copy()
+    summary.update(_build_summary_enhancements(current_events, future_timeline, reference_datetime))
+
+    return {
+        "events": formatted_events,
+        "summary": summary
+    }

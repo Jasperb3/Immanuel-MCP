@@ -43,7 +43,11 @@ logger = logging.getLogger(__name__)
 
 # Import lifecycle events detection system (after logger is configured)
 try:
-    from immanuel_mcp.lifecycle import detect_lifecycle_events
+    from immanuel_mcp.lifecycle import (
+        detect_lifecycle_events,
+        detect_progressed_moon_return,
+        format_lifecycle_event_feed
+    )
     LIFECYCLE_AVAILABLE = True
     logger.info("Lifecycle events module loaded successfully")
 except ImportError as e:
@@ -532,6 +536,98 @@ def create_subject(date_time: str, latitude: float, longitude: float, timezone: 
     return charts.Subject(**subject_kwargs)
 
 
+def parse_datetime_value(value: Union[str, datetime]) -> datetime:
+    """Parse various datetime formats used throughout the API."""
+    if isinstance(value, datetime):
+        return value
+    if not isinstance(value, str):
+        raise ValueError(f"Unsupported datetime input: {value!r}")
+
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("Empty datetime string")
+
+    # Remove Olson/IANA timezone names (e.g., Europe/London)
+    parts = cleaned.split()
+    if parts and ('/' in parts[-1] or parts[-1].upper() == parts[-1] and len(parts[-1]) <= 4):
+        cleaned = ' '.join(parts[:-1]) if len(parts) > 1 else cleaned
+
+    # Strip trailing timezone offsets or Z markers
+    cleaned = re.sub(r'(Z|[+-]\d{2}:?\d{2})$', '', cleaned)
+
+    iso_candidate = cleaned
+    if 'T' not in iso_candidate and ' ' in iso_candidate:
+        first_space = iso_candidate.find(' ')
+        if first_space != -1:
+            iso_candidate = iso_candidate[:first_space] + 'T' + iso_candidate[first_space + 1:]
+    try:
+        return datetime.fromisoformat(iso_candidate)
+    except ValueError:
+        pass
+
+    fallback_formats = (
+        '%a %b %d %Y %H:%M:%S',
+        '%a %b %d %Y %H:%M',
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%dT%H:%M:%S',
+        '%Y-%m-%d %H:%M',
+        '%Y-%m-%d'
+    )
+    for fmt in fallback_formats:
+        try:
+            return datetime.strptime(cleaned, fmt)
+        except ValueError:
+            continue
+
+    raise ValueError(f"Unable to parse datetime string: {value}")
+
+
+def attach_lifecycle_section(
+    result: Dict[str, Any],
+    natal_chart,
+    comparison_chart,
+    birth_datetime: Union[str, datetime],
+    comparison_datetime: Union[str, datetime],
+    include_future: bool = True,
+    future_years: int = 20,
+    max_future_events: int = 10,
+    additional_events: Optional[List[Dict[str, Any]]] = None
+) -> None:
+    """Populate lifecycle fields on the result dictionary."""
+    if not LIFECYCLE_AVAILABLE:
+        result["lifecycle_events"] = None
+        result["lifecycle_summary"] = None
+        return
+
+    try:
+        birth_dt = parse_datetime_value(birth_datetime)
+        comparison_dt = parse_datetime_value(comparison_datetime)
+
+        lifecycle_data = detect_lifecycle_events(
+            natal_chart=natal_chart,
+            transit_chart=comparison_chart,
+            birth_datetime=birth_dt,
+            transit_datetime=comparison_dt,
+            include_future=include_future,
+            future_years=future_years,
+            max_future_events=max_future_events
+        )
+
+        payload = format_lifecycle_event_feed(
+            lifecycle_data,
+            comparison_dt,
+            additional_events=additional_events
+        )
+
+        result["lifecycle_events"] = payload["events"]
+        result["lifecycle_summary"] = payload["summary"]
+
+    except Exception as exc:
+        logger.warning("Lifecycle events detection failed: %s", exc, exc_info=True)
+        result["lifecycle_events"] = None
+        result["lifecycle_summary"] = None
+
+
 @mcp.tool()
 def generate_compact_natal_chart(
     date_time: str,
@@ -575,6 +671,27 @@ def generate_compact_natal_chart(
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(natal, cls=CompactJSONSerializer))
+
+        now_dt = datetime.utcnow().replace(microsecond=0)
+        try:
+            transit_subject = charts.Subject(
+                date_time=now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                latitude=lat,
+                longitude=lon
+            )
+            transit_chart = charts.Natal(transit_subject)
+            attach_lifecycle_section(
+                result,
+                natal_chart=natal,
+                comparison_chart=transit_chart,
+                birth_datetime=date_time,
+                comparison_datetime=now_dt
+            )
+        except Exception as lifecycle_error:
+            logger.warning("Lifecycle events unavailable for compact natal chart: %s", lifecycle_error, exc_info=True)
+            result["lifecycle_events"] = None
+            result["lifecycle_summary"] = None
+
         logger.info("Compact natal chart generated successfully")
         return result
 
@@ -617,9 +734,31 @@ def generate_natal_chart(
 
         # Generate natal chart
         natal = charts.Natal(subject)
-        
+
         # Serialize to JSON
         result = json.loads(json.dumps(natal, cls=ToJSON))
+
+        # Lifecycle analysis uses current transits as reference
+        now_dt = datetime.utcnow().replace(microsecond=0)
+        try:
+            transit_subject = charts.Subject(
+                date_time=now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                latitude=lat,
+                longitude=lon
+            )
+            transit_chart = charts.Natal(transit_subject)
+            attach_lifecycle_section(
+                result,
+                natal_chart=natal,
+                comparison_chart=transit_chart,
+                birth_datetime=date_time,
+                comparison_datetime=now_dt
+            )
+        except Exception as lifecycle_error:
+            logger.warning("Lifecycle events unavailable for natal chart: %s", lifecycle_error, exc_info=True)
+            result["lifecycle_events"] = None
+            result["lifecycle_summary"] = None
+
         logger.info("Natal chart generated successfully")
         return result
         
@@ -815,11 +954,25 @@ def generate_solar_return_chart(
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
-        # Generate solar return chart
+        # Generate charts
+        natal_chart = charts.Natal(subject)
         solar_return = charts.SolarReturn(subject, return_year)
-        
+
         # Serialize to JSON
         result = json.loads(json.dumps(solar_return, cls=ToJSON))
+
+        solar_return_dt = getattr(solar_return, 'solar_return_date_time', None) or result.get('solar_return_date_time')
+        if not solar_return_dt:
+            solar_return_dt = f"{return_year}-01-01 00:00:00"
+
+        attach_lifecycle_section(
+            result,
+            natal_chart=natal_chart,
+            comparison_chart=solar_return,
+            birth_datetime=date_time,
+            comparison_datetime=solar_return_dt
+        )
+
         logger.info("Solar return chart generated successfully")
         return result
 
@@ -870,11 +1023,25 @@ def generate_compact_solar_return_chart(
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
-        # Generate solar return chart
+        # Generate charts
+        natal_chart = charts.Natal(subject)
         solar_return = charts.SolarReturn(subject, return_year)
-        
+
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(solar_return, cls=CompactJSONSerializer))
+
+        solar_return_dt = getattr(solar_return, 'solar_return_date_time', None) or result.get('solar_return_date_time')
+        if not solar_return_dt:
+            solar_return_dt = f"{return_year}-01-01 00:00:00"
+
+        attach_lifecycle_section(
+            result,
+            natal_chart=natal_chart,
+            comparison_chart=solar_return,
+            birth_datetime=date_time,
+            comparison_datetime=solar_return_dt
+        )
+
         logger.info("Compact solar return chart generated successfully")
         return result
 
@@ -918,11 +1085,45 @@ def generate_progressed_chart(
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
-        # Generate progressed chart
+        # Generate charts
+        natal_chart = charts.Natal(subject)
         progressed = charts.Progressed(subject, progression_date_time)
-        
+
         # Serialize to JSON
         result = json.loads(json.dumps(progressed, cls=ToJSON))
+
+        progression_dt_value = getattr(progressed, 'progression_date_time', None) or progression_date_time
+
+        transit_subject = charts.Subject(
+            date_time=progression_date_time,
+            latitude=lat,
+            longitude=lon
+        )
+        reference_transits = charts.Natal(transit_subject)
+
+        additional_events: List[Dict[str, Any]] = []
+        if LIFECYCLE_AVAILABLE:
+            try:
+                birth_dt = parse_datetime_value(date_time)
+                progression_dt = parse_datetime_value(progression_dt_value)
+                additional_events = detect_progressed_moon_return(
+                    natal_chart,
+                    progressed,
+                    birth_dt,
+                    progression_dt
+                )
+            except Exception as moon_error:
+                logger.debug(f"Progressed Moon detection skipped: {moon_error}")
+
+        attach_lifecycle_section(
+            result,
+            natal_chart=natal_chart,
+            comparison_chart=reference_transits,
+            birth_datetime=date_time,
+            comparison_datetime=progression_dt_value,
+            additional_events=additional_events
+        )
+
         logger.info("Progressed chart generated successfully")
         return result
 
@@ -970,11 +1171,45 @@ def generate_compact_progressed_chart(
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
-        # Generate progressed chart
+        # Generate charts
+        natal_chart = charts.Natal(subject)
         progressed = charts.Progressed(subject, progression_date_time)
-        
+
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(progressed, cls=CompactJSONSerializer))
+
+        progression_dt_value = getattr(progressed, 'progression_date_time', None) or progression_date_time
+
+        transit_subject = charts.Subject(
+            date_time=progression_date_time,
+            latitude=lat,
+            longitude=lon
+        )
+        reference_transits = charts.Natal(transit_subject)
+
+        additional_events: List[Dict[str, Any]] = []
+        if LIFECYCLE_AVAILABLE:
+            try:
+                birth_dt = parse_datetime_value(date_time)
+                progression_dt = parse_datetime_value(progression_dt_value)
+                additional_events = detect_progressed_moon_return(
+                    natal_chart,
+                    progressed,
+                    birth_dt,
+                    progression_dt
+                )
+            except Exception as moon_error:
+                logger.debug(f"Progressed Moon detection skipped: {moon_error}")
+
+        attach_lifecycle_section(
+            result,
+            natal_chart=natal_chart,
+            comparison_chart=reference_transits,
+            birth_datetime=date_time,
+            comparison_datetime=progression_dt_value,
+            additional_events=additional_events
+        )
+
         logger.info("Compact progressed chart generated successfully")
         return result
 
@@ -2011,7 +2246,7 @@ def generate_transit_to_natal(
     transit_latitude: str | None = None,
     transit_longitude: str | None = None,
     timezone: str | None = None,
-    aspect_priority: str = "all",
+    aspect_priority: str = "tight",  # Changed from "all" to "tight" for MCP size safety
     include_all_aspects: bool = False,
     include_lifecycle_events: bool = True
 ) -> Dict[str, Any]:
@@ -2021,9 +2256,9 @@ def generate_transit_to_natal(
     This is the most commonly used predictive technique in astrology. It shows how
     current planetary positions interact with the birth chart.
 
-    OPTIMIZED RESPONSE: Thanks to response optimization (84.9% size reduction), all aspects
-    can be returned by default while staying well under MCP size limits (~10 KB vs 50 KB limit).
-    Pagination remains available for organizing aspects by astrological significance if desired.
+    OPTIMIZED RESPONSE: Thanks to response optimization (84.9% size reduction), aspects
+    are efficiently organized by astrological significance. Default "tight" priority returns
+    the most critical transits (0-2° orb) while staying well under MCP size limits.
 
     Args:
         natal_date_time: Birth date and time in ISO format, e.g., '1990-01-15 12:00:00'.
@@ -2033,9 +2268,10 @@ def generate_transit_to_natal(
         transit_latitude: Optional transit location latitude (defaults to natal location).
         transit_longitude: Optional transit location longitude (defaults to natal location).
         timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
-        aspect_priority: Priority tier to return - "all" (default), "tight" (0-2°),
-                        "moderate" (2-5°), or "loose" (5-8°). Use to filter by orb precision.
-        include_all_aspects: Deprecated - "all" is now the default. Kept for backward compatibility.
+        aspect_priority: Priority tier to return - "tight" (default, 0-2°), "moderate" (2-5°),
+                        "loose" (5-8°), or "all" (all aspects, auto-adjusts to "tight" if
+                        lifecycle events enabled). Use to filter by orb precision.
+        include_all_aspects: Deprecated. Kept for backward compatibility.
         include_lifecycle_events: Include lifecycle events analysis (planetary returns,
                                  major life transits, future timeline). Default: True.
 
@@ -2170,6 +2406,15 @@ def generate_transit_to_natal(
                 logger.warning(f"[TRANSIT-FULL] Invalid aspect_priority '{aspect_priority}', defaulting to 'tight'")
                 aspect_priority = "tight"
 
+            # CRITICAL FIX: Auto-adjust priority when lifecycle events enabled to avoid MCP size limits
+            # Full aspect data (~59 KB for "all" priority) + lifecycle events (~5-7 KB) exceeds ~50 KB MCP limit
+            if include_lifecycle_events and aspect_priority == "all":
+                logger.warning(
+                    f"[TRANSIT-FULL] Auto-adjusting aspect_priority from 'all' to 'tight' "
+                    f"because lifecycle events are enabled (prevents MCP size limit exceeded)"
+                )
+                aspect_priority = "tight"
+
             # Filter by requested priority
             aspects_to_return = filter_aspects_by_priority(filtered_aspects, aspect_priority)
             effective_priority = aspect_priority
@@ -2213,46 +2458,22 @@ def generate_transit_to_natal(
         }
 
         # === LIFECYCLE EVENTS DETECTION ===
-        if include_lifecycle_events and LIFECYCLE_AVAILABLE:
-            try:
-                logger.info("[TRANSIT-FULL] Detecting lifecycle events")
-
-                # Parse datetime strings to datetime objects
-                def parse_datetime_string(date_str: str) -> datetime:
-                    """Parse ISO format datetime string."""
-                    # Handle both 'YYYY-MM-DD HH:MM:SS' and 'YYYY-MM-DDTHH:MM:SS' formats
-                    date_str = date_str.replace(' ', 'T') if 'T' not in date_str else date_str
-                    # Remove timezone if present for parsing
-                    date_str = date_str.split('+')[0].split('-')[0] if 'T' in date_str else date_str
-                    return datetime.fromisoformat(date_str)
-
-                natal_dt = parse_datetime_string(natal_date_time)
-                transit_dt = parse_datetime_string(transit_date_time)
-
-                # Call lifecycle detection
-                lifecycle_events = detect_lifecycle_events(
+        if include_lifecycle_events:
+            if LIFECYCLE_AVAILABLE:
+                attach_lifecycle_section(
+                    result,
                     natal_chart=natal_chart,
-                    transit_chart=transit_chart,
-                    birth_datetime=natal_dt,
-                    transit_datetime=transit_dt,
-                    include_future=True,
-                    future_years=20,
-                    max_future_events=10
+                    comparison_chart=transit_chart,
+                    birth_datetime=natal_date_time,
+                    comparison_datetime=transit_date_time
                 )
-
-                result["lifecycle_events"] = lifecycle_events
-                logger.info(
-                    f"[TRANSIT-FULL] Lifecycle events added: "
-                    f"{lifecycle_events['lifecycle_summary']['active_event_count']} current events"
-                )
-
-            except Exception as e:
-                logger.warning(f"[TRANSIT-FULL] Lifecycle events detection failed: {e}", exc_info=True)
-                # Gracefully degrade - don't break the response
+            else:
+                logger.warning("[TRANSIT-FULL] Lifecycle events requested but module not available")
                 result["lifecycle_events"] = None
-        elif include_lifecycle_events and not LIFECYCLE_AVAILABLE:
-            logger.warning("[TRANSIT-FULL] Lifecycle events requested but module not available")
+                result["lifecycle_summary"] = None
+        else:
             result["lifecycle_events"] = None
+            result["lifecycle_summary"] = None
 
         # Verify result is JSON serializable before returning
         logger.debug("[TRANSIT-FULL] Verifying JSON serializability")
@@ -2281,7 +2502,8 @@ def generate_compact_transit_to_natal(
     transit_latitude: str | None = None,
     transit_longitude: str | None = None,
     timezone: str | None = None,
-    include_interpretations: bool = True
+    include_interpretations: bool = True,
+    include_lifecycle_events: bool = True
 ) -> Dict[str, Any]:
     """
     Calculates compact transiting planet aspects to a natal chart with interpretation hints.
@@ -2298,6 +2520,7 @@ def generate_compact_transit_to_natal(
         transit_longitude: Optional transit location longitude (defaults to natal location).
         timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
         include_interpretations: Include aspect interpretation keywords (default: True).
+        include_lifecycle_events: Include lifecycle analysis (default: True).
 
     Returns:
         Compact dictionary with natal summary, transit positions, and filtered major aspects
@@ -2385,6 +2608,23 @@ def generate_compact_transit_to_natal(
             "transit_to_natal_aspects": aspects,
             "timezone": timezone
         }
+
+        if include_lifecycle_events:
+            if LIFECYCLE_AVAILABLE:
+                attach_lifecycle_section(
+                    result,
+                    natal_chart=natal_chart,
+                    comparison_chart=transit_chart,
+                    birth_datetime=natal_date_time,
+                    comparison_datetime=transit_date_time
+                )
+            else:
+                logger.warning("[TRANSIT-COMPACT] Lifecycle requested but module unavailable")
+                result["lifecycle_events"] = None
+                result["lifecycle_summary"] = None
+        else:
+            result["lifecycle_events"] = None
+            result["lifecycle_summary"] = None
 
         logger.info("Compact transit-to-natal generated successfully")
         return result
