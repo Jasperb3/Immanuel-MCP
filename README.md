@@ -34,6 +34,21 @@ See [`docs/FULL_ENDPOINT_DIAGNOSIS.md`](docs/FULL_ENDPOINT_DIAGNOSIS.md) for tec
 - **Full Charts**: Complete astrological data with all objects, aspects, and detailed properties
 - **Compact Charts**: Filtered data focusing on major planets and aspects for LLM optimization
 
+### Lifecycle Events Detection (🆕 NEW)
+- **Automatic Detection**: Identifies planetary returns (Saturn Return, Jupiter Return, etc.) and major life transits
+- **Life Stage Context**: Shows where you are in your astrological life journey
+- **Future Timeline**: Predicts upcoming returns and transits (10-20 years ahead)
+- **Significance Levels**: Prioritizes events by astrological importance (CRITICAL, HIGH, MODERATE, LOW)
+- **Major Transits Tracked**:
+  - Saturn Return (ages 29-30, 58-60, 87-90) - Karmic maturation
+  - Uranus Opposition (age 41-42) - Midlife awakening
+  - Neptune Square (age 39-40) - Spiritual crisis/awakening
+  - Pluto Square (age 36-37) - Deep transformation
+  - Chiron Return (age 50+) - Wounded healer emergence
+  - Jupiter Returns every ~12 years - Expansion and growth
+- **Seamless Integration**: Automatically included in `generate_transit_to_natal` responses (can be disabled)
+- **Size Efficient**: Adds only ~3-5 KB to responses while providing rich context
+
 ### Configuration
 - Dynamically configure all Immanuel library settings (house systems, orbs, calculation methods, etc.)
 - View current settings and available options
