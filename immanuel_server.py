@@ -23,7 +23,7 @@ from immanuel.const import data as data_const
 from immanuel.classes.serialize import ToJSON
 from immanuel.tools import convert
 from mcp.server.fastmcp import FastMCP
-from compact_serializer import CompactJSONSerializer
+from scripts.compact_serializer import CompactJSONSerializer
 
 # Configure logging to file only (CRITICAL: logging to stdout/stderr breaks stdio transport)
 # Create logs directory if it doesn't exist

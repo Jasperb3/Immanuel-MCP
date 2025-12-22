@@ -4,9 +4,14 @@ Comprehensive test for lifecycle events bug fixes.
 
 Tests all fixes from the December 22, 2025 bug report:
 - Critical #2: Date logic (dates should be in future, not past)
-- Critical #3: Orb values (should be calculated for future events)
+- Critical #3: Angular separation values (should be calculated for future events)
 - High #4: Date ranges (should be present for all events)
 - High #5: Status field logic (should correctly identify past/active/upcoming)
+
+Note: "current_angular_separation" represents the actual degrees (0-180°) between
+current position and the position at which the event will be exact. This is NOT
+the traditional astrological "orb" (aspect tolerance), but the angular distance
+remaining until the event occurs.
 """
 
 import sys
@@ -110,8 +115,8 @@ def test_lifecycle_fixes():
     all_passed = all_passed and date_test_passed
     print()
 
-    # TEST 2: Orb values should be present for future events
-    print("TEST 2: Orb Values (Critical #3)")
+    # TEST 2: Angular separation values should be present for future events
+    print("TEST 2: Angular Separation Values (Critical #3)")
     print("-" * 40)
     orb_test_passed = True
     events_with_orbs = 0
@@ -120,27 +125,27 @@ def test_lifecycle_fixes():
 
     for event in future_timeline:
         event_name = event.get("planet") or event.get("name", "Unknown")
-        current_orb = event.get("current_orb")
+        current_angular_separation = event.get("current_angular_separation")
         orb_status = event.get("orb_status")
 
-        if current_orb is not None and orb_status is not None:
-            print(f"  [OK] PASS: {event_name} has orb: {current_orb}° ({orb_status})")
+        if current_angular_separation is not None and orb_status is not None:
+            print(f"  [OK] PASS: {event_name} has angular separation: {current_angular_separation}° ({orb_status})")
             events_with_orbs += 1
         else:
             # Node returns may not have orbs due to accessibility limitations
             if "Node" in event_name:
-                print(f"  [WARN] SKIP: {event_name} missing orb (nodes not accessible in chart objects)")
+                print(f"  [WARN] SKIP: {event_name} missing angular separation (nodes not accessible in chart objects)")
                 skipped_nodes += 1
             else:
-                print(f"  [FAIL] FAIL: {event_name} missing orb (current_orb: {current_orb}, orb_status: {orb_status})")
+                print(f"  [FAIL] FAIL: {event_name} missing angular separation (current_angular_separation: {current_angular_separation}, orb_status: {orb_status})")
                 orb_test_passed = False
                 events_without_orbs += 1
 
     if orb_test_passed:
-        print(f"  [OK] {events_with_orbs} EVENTS HAVE ORB VALUES ({skipped_nodes} nodes skipped)")
+        print(f"  [OK] {events_with_orbs} EVENTS HAVE ANGULAR SEPARATION VALUES ({skipped_nodes} nodes skipped)")
     else:
-        print(f"  [FAIL] {events_without_orbs} events missing orb values")
-    test_results.append(("Orb Values", orb_test_passed))
+        print(f"  [FAIL] {events_without_orbs} events missing angular separation values")
+    test_results.append(("Angular Separation Values", orb_test_passed))
     all_passed = all_passed and orb_test_passed
     print()
 

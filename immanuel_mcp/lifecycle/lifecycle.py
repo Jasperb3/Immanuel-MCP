@@ -31,9 +31,21 @@ def _enrich_future_events_with_orbs(
     Calculate current angular separation for future timeline events.
 
     This enriches predicted events with current separation information to show
-    how close/far the person is from the predicted event. The "current_separation"
-    represents degrees of angular distance (0-180°) between current position and
-    the position at which the event will be exact.
+    how close/far the person is from the predicted event.
+
+    The "current_angular_separation" field represents the degrees of angular distance
+    (0-180°) between the planet's current position and the position at which the event
+    will be exact. This is NOT the traditional astrological "orb" (aspect tolerance),
+    but rather the actual angular distance remaining until the event occurs.
+
+    For example:
+    - Mars Return with 135° separation: Mars is currently 135° away from returning
+      to its natal position
+    - Saturn Return with 2° separation: Saturn is very close (within 2°) to its
+      natal position, indicating the return is imminent
+
+    Note: This value can range from 0° (exact) to 180° (maximum separation) and
+    decreases as the event approaches exactitude.
 
     Args:
         future_events: List of future event predictions (modified in place)
@@ -66,7 +78,8 @@ def _enrich_future_events_with_orbs(
                 tolerance = RETURN_ORB_TOLERANCE.get(planet_name, 2.0)
                 orb_status = determine_orb_status(orb, tolerance)
 
-                event["current_orb"] = round(abs(orb), 2)
+                # Angular distance (0-180°) between current and natal position
+                event["current_angular_separation"] = round(abs(orb), 2)
                 event["orb_status"] = "applicative" if abs(orb) > 0.5 else "exact"
 
             elif event_type == "major_transit":
@@ -95,7 +108,8 @@ def _enrich_future_events_with_orbs(
                 orb = calculate_aspect_orb(natal_pos, transit_pos, aspect_type)
 
                 if orb is not None:
-                    event["current_orb"] = round(abs(orb), 2)
+                    # Angular distance from exact aspect (e.g., 90° for square)
+                    event["current_angular_separation"] = round(abs(orb), 2)
                     event["orb_status"] = "applicative" if abs(orb) > 0.5 else "exact"
 
         except Exception as e:
@@ -437,11 +451,19 @@ def _build_return_event_entry(
     age: Optional[float],
     status: str,
     years_until: float = 0.0,
-    orb: Optional[float] = None,
+    orb: Optional[float] = None,  # Now represents current_angular_separation
     orb_status: Optional[str] = None,
     natal_position: Optional[float] = None,
     transit_position: Optional[float] = None
 ) -> Dict[str, Any]:
+    """
+    Build a return event entry for the lifecycle feed.
+
+    Args:
+        orb: Current angular separation (0-180°) between current and natal position.
+             NOT the traditional astrological orb, but the actual degrees remaining
+             until the planet returns to its natal position.
+    """
     tolerance = RETURN_ORB_TOLERANCE.get(planet, 2.0)
     date_range = _estimate_date_range(planet, tolerance, reference_datetime)
     exact_date = reference_datetime.strftime("%Y-%m-%d") if reference_datetime else None
@@ -454,7 +476,7 @@ def _build_return_event_entry(
         "natal_object": planet,
         "transiting_object": planet,
         "aspect_type": "Conjunction",
-        "orb": round(abs(orb), 2) if orb is not None else None,
+        "current_angular_separation": round(abs(orb), 2) if orb is not None else None,
         "orb_status": orb_status,
         "exact_date": exact_date,
         "date_range": date_range,
@@ -481,6 +503,14 @@ def _format_major_transit_event(
     reference_datetime: Optional[datetime],
     status: str = "active"
 ) -> Dict[str, Any]:
+    """
+    Format a major life transit event for the lifecycle feed.
+
+    The "current_angular_separation" field represents the degrees of angular distance
+    between the current position and the exact aspect position. This is NOT the
+    traditional astrological orb, but the actual degrees remaining until the aspect
+    becomes exact.
+    """
     exact_date = reference_datetime.strftime("%Y-%m-%d") if reference_datetime else None
 
     # Calculate date range for the transit window
@@ -490,8 +520,8 @@ def _format_major_transit_event(
         center=reference_datetime
     )
 
-    # Use event orb if present (from enrichment), otherwise use None for future events
-    orb_value = event.get("orb")
+    # Use current angular separation if present (from enrichment), otherwise None for future events
+    angular_separation = event.get("current_angular_separation")
     orb_status_value = event.get("orb_status")
 
     entry = {
@@ -501,7 +531,7 @@ def _format_major_transit_event(
         "natal_object": event.get("natal_object"),
         "transiting_object": event.get("transit_object"),
         "aspect_type": event.get("aspect_type"),
-        "orb": round(abs(orb_value), 2) if orb_value is not None else None,
+        "current_angular_separation": round(abs(angular_separation), 2) if angular_separation is not None else None,
         "orb_status": orb_status_value,
         "exact_date": exact_date,
         "date_range": date_range,
@@ -524,8 +554,8 @@ def _format_major_transit_event(
 
 
 def _format_future_event(event: Dict[str, Any]) -> Dict[str, Any]:
-    # Extract current orb if available (added by _enrich_future_events_with_orbs)
-    current_orb = event.get("current_orb")
+    # Extract current angular separation if available (added by _enrich_future_events_with_orbs)
+    current_angular_separation = event.get("current_angular_separation")
     orb_status = event.get("orb_status")
 
     if event.get("event_type") == "return":
@@ -544,7 +574,7 @@ def _format_future_event(event: Dict[str, Any]) -> Dict[str, Any]:
             age=event.get("predicted_age"),
             status="upcoming",
             years_until=event.get("years_until", 0.0),
-            orb=current_orb,
+            orb=current_angular_separation,
             orb_status=orb_status
         )
 
@@ -558,7 +588,7 @@ def _format_future_event(event: Dict[str, Any]) -> Dict[str, Any]:
     future_event = _format_major_transit_event(
         {
             **event,
-            "orb": current_orb,
+            "current_angular_separation": current_angular_separation,
             "orb_status": orb_status,
         },
         predicted_dt,
