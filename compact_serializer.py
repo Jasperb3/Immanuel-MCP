@@ -238,7 +238,20 @@ class CompactJSONSerializer(ToJSON):
                                             'passive': passive_index
                                         })
 
-                compact_chart['aspects'] = simplified_aspects
+                # Deduplicate bidirectional aspects (e.g., Sun→Jupiter and Jupiter→Sun)
+                # Keep first occurrence of each unique planet pair + aspect type combination
+                seen_aspects = set()
+                deduplicated_aspects = []
+                for aspect in simplified_aspects:
+                    # Create a unique key using sorted planet names to match bidirectional aspects
+                    planet_pair = tuple(sorted([aspect['object1'], aspect['object2']]))
+                    aspect_key = (planet_pair, aspect['type'])
+
+                    if aspect_key not in seen_aspects:
+                        seen_aspects.add(aspect_key)
+                        deduplicated_aspects.append(aspect)
+
+                compact_chart['aspects'] = deduplicated_aspects
 
             return compact_chart
 

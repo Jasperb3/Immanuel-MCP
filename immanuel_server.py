@@ -20,6 +20,9 @@ from immanuel import charts
 from immanuel.const import chart as chart_const
 from immanuel.const import calc as calc_const
 from immanuel.const import data as data_const
+
+# Import lifecycle events detection - deferred to avoid circular dependency
+# Will be imported when needed in the functions
 from immanuel.classes.serialize import ToJSON
 from immanuel.tools import convert
 from mcp.server.fastmcp import FastMCP
@@ -825,7 +828,8 @@ def generate_compact_solar_return_chart(
     latitude: str,
     longitude: str,
     return_year: int,
-    timezone: str = None
+    timezone: str = None,
+    include_interpretations: bool = True
 ) -> Dict[str, Any]:
     """
     Generates a compact solar return chart for a given year.
@@ -840,9 +844,10 @@ def generate_compact_solar_return_chart(
         longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
         return_year: The year for which to calculate the solar return.
         timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
+        include_interpretations: Include aspect interpretation keywords (default: True).
 
     Returns:
-        A compact SolarReturn chart object serialized to a JSON dictionary.
+        A compact SolarReturn chart object serialized to a JSON dictionary with optional interpretations.
     """
     try:
         logger.info(f"Generating compact solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
@@ -863,9 +868,15 @@ def generate_compact_solar_return_chart(
 
         # Generate solar return chart
         solar_return = charts.SolarReturn(subject, return_year)
-        
+
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(solar_return, cls=CompactJSONSerializer))
+
+        # Add interpretation hints if requested
+        if include_interpretations:
+            aspects = result.get('aspects', [])
+            result['aspects'] = add_aspect_interpretations(aspects)
+
         logger.info("Compact solar return chart generated successfully")
         return result
 
@@ -928,7 +939,8 @@ def generate_compact_progressed_chart(
     latitude: str,
     longitude: str,
     progression_date_time: str,
-    timezone: str = None
+    timezone: str = None,
+    include_interpretations: bool = True
 ) -> Dict[str, Any]:
     """
     Generates a compact secondary progression chart for a native chart to a specific future date.
@@ -943,9 +955,10 @@ def generate_compact_progressed_chart(
         longitude: The longitude of the birth location, e.g., '117w09' or '-117.15'.
         progression_date_time: The date and time to progress the chart to, in ISO format.
         timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
+        include_interpretations: Include aspect interpretation keywords (default: True).
 
     Returns:
-        A compact Progressed chart object serialized to a JSON dictionary.
+        A compact Progressed chart object serialized to a JSON dictionary with optional interpretations.
     """
     try:
         logger.info(f"Generating compact progressed chart from {date_time} to {progression_date_time} at {latitude}, {longitude}")
@@ -963,9 +976,15 @@ def generate_compact_progressed_chart(
 
         # Generate progressed chart
         progressed = charts.Progressed(subject, progression_date_time)
-        
+
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(progressed, cls=CompactJSONSerializer))
+
+        # Add interpretation hints if requested
+        if include_interpretations:
+            aspects = result.get('aspects', [])
+            result['aspects'] = add_aspect_interpretations(aspects)
+
         logger.info("Compact progressed chart generated successfully")
         return result
 
@@ -2003,7 +2022,8 @@ def generate_transit_to_natal(
     transit_longitude: str | None = None,
     timezone: str | None = None,
     aspect_priority: str = "all",
-    include_all_aspects: bool = False
+    include_all_aspects: bool = False,
+    include_lifecycle_events: bool = True
 ) -> Dict[str, Any]:
     """
     Calculates transiting planet aspects to a natal chart for a specific date.
@@ -2185,6 +2205,27 @@ def generate_transit_to_natal(
         optimized_aspects = build_optimized_aspects(aspects_to_return)
         dignities = build_dignities_section(transit_data)
 
+        # === DETECT LIFECYCLE EVENTS ===
+        lifecycle_events = None
+        if include_lifecycle_events:
+            try:
+                logger.debug("[TRANSIT-FULL] Detecting lifecycle events")
+                # Import lifecycle detection here to avoid circular dependency
+                from immanuel_mcp.lifecycle.lifecycle import detect_lifecycle_events
+
+                # Parse datetime strings for lifecycle detection
+                from datetime import datetime
+                natal_dt = datetime.fromisoformat(natal_date_time.replace(' ', 'T'))
+                transit_dt = datetime.fromisoformat(transit_date_time.replace(' ', 'T'))
+
+                lifecycle_events = detect_lifecycle_events(
+                    natal_chart, transit_chart, natal_dt, transit_dt
+                )
+                logger.info(f"[TRANSIT-FULL] Lifecycle events detected: {lifecycle_events.get('lifecycle_summary', {}).get('active_event_count', 0)} active events")
+            except Exception as e:
+                logger.warning(f"[TRANSIT-FULL] Error detecting lifecycle events (non-fatal): {e}")
+                lifecycle_events = None
+
         result = {
             "natal_summary": {
                 "sun": sun_sign,
@@ -2199,6 +2240,10 @@ def generate_transit_to_natal(
             "pagination": pagination,
             "timezone": timezone
         }
+
+        # Add lifecycle events if detected
+        if lifecycle_events is not None:
+            result["lifecycle_events"] = lifecycle_events
 
         # Verify result is JSON serializable before returning
         logger.debug("[TRANSIT-FULL] Verifying JSON serializability")
@@ -2227,7 +2272,8 @@ def generate_compact_transit_to_natal(
     transit_latitude: str | None = None,
     transit_longitude: str | None = None,
     timezone: str | None = None,
-    include_interpretations: bool = True
+    include_interpretations: bool = True,
+    include_lifecycle_events: bool = True
 ) -> Dict[str, Any]:
     """
     Calculates compact transiting planet aspects to a natal chart with interpretation hints.
@@ -2318,6 +2364,27 @@ def generate_compact_transit_to_natal(
         except Exception as e:
             logger.debug(f"Could not extract rising sign: {e}")
 
+        # Detect lifecycle events
+        lifecycle_events = None
+        if include_lifecycle_events:
+            try:
+                logger.debug("Detecting lifecycle events for compact transit")
+                # Import lifecycle detection here to avoid circular dependency
+                from immanuel_mcp.lifecycle.lifecycle import detect_lifecycle_events
+
+                # Parse datetime strings for lifecycle detection
+                from datetime import datetime
+                natal_dt = datetime.fromisoformat(natal_date_time.replace(' ', 'T'))
+                transit_dt = datetime.fromisoformat(transit_date_time.replace(' ', 'T'))
+
+                lifecycle_events = detect_lifecycle_events(
+                    natal_chart, transit_chart, natal_dt, transit_dt
+                )
+                logger.info(f"Compact transit lifecycle events: {lifecycle_events.get('lifecycle_summary', {}).get('active_event_count', 0)} active")
+            except Exception as e:
+                logger.warning(f"Error detecting lifecycle events (non-fatal): {e}")
+                lifecycle_events = None
+
         # Build compact result
         result = {
             "natal_summary": {
@@ -2331,6 +2398,20 @@ def generate_compact_transit_to_natal(
             "transit_to_natal_aspects": aspects,
             "timezone": timezone
         }
+
+        # Add lifecycle events if detected
+        if lifecycle_events is not None:
+            result["lifecycle_events"] = lifecycle_events
+
+        # Verify result is JSON serializable before returning (critical for MCP transport)
+        logger.debug("Verifying JSON serializability of compact transit result")
+        try:
+            json_test = json.dumps(result)
+            result_size = len(json_test) / 1024
+            logger.info(f"Compact transit result successfully serialized, size: {result_size:.2f} KB")
+        except (TypeError, ValueError) as e:
+            logger.error(f"CRITICAL: Compact transit result not JSON serializable: {e}")
+            raise
 
         logger.info("Compact transit-to-natal generated successfully")
         return result
@@ -2479,38 +2560,78 @@ def configure_immanuel_settings(
 def list_available_settings() -> Dict[str, Any]:
     """
     List all available Immanuel settings and their current values.
-    
+
     Returns:
-        Dictionary of available settings and their current values.
+        Dictionary of available settings with both numeric codes and readable names.
     """
     try:
         from immanuel import setup
         settings = setup.settings
-        
+
+        # House system mapping (chart_const.X values to names)
+        HOUSE_SYSTEMS = {
+            101: "ALCABITUS",
+            102: "AZIMUTHAL",
+            103: "CAMPANUS",
+            104: "EQUAL",
+            105: "KOCH",
+            106: "MERIDIAN",
+            107: "MORINUS",
+            108: "PLACIDUS",
+            109: "POLICH_PAGE",
+            110: "PORPHYRIUS",
+            111: "REGIOMONTANUS",
+            112: "VEHLOW_EQUAL",
+            113: "WHOLE_SIGN"
+        }
+
+        # Aspect angle mapping (degrees to aspect names)
+        ASPECT_ANGLES = {
+            0.0: "Conjunction (0°)",
+            180.0: "Opposition (180°)",
+            90.0: "Square (90°)",
+            120.0: "Trine (120°)",
+            60.0: "Sextile (60°)",
+            150.0: "Quincunx (150°)",
+            30.0: "Semi-sextile (30°)",
+            45.0: "Semi-square (45°)",
+            135.0: "Sesquiquadrate (135°)"
+        }
+
+        # Get current values
+        house_system_code = getattr(settings, 'house_system', None)
+        house_system_name = HOUSE_SYSTEMS.get(house_system_code, f"Unknown ({house_system_code})")
+
+        current_aspects = getattr(settings, 'aspects', [])
+        aspect_names = [ASPECT_ANGLES.get(angle, f"{angle}°") for angle in current_aspects]
+
         setting_info = {
             'house_system': {
-                'current': getattr(settings, 'house_system', 'Unknown'),
-                'description': 'House system to use (e.g., PLACIDUS, CAMPANUS, etc.)'
+                'current': house_system_code,
+                'name': house_system_name,
+                'description': 'House system used for chart calculations',
+                'available_systems': list(HOUSE_SYSTEMS.values())
             },
             'locale': {
-                'current': getattr(settings, 'locale', 'Unknown'),
-                'description': 'Locale for formatting output'
+                'current': getattr(settings, 'locale', None),
+                'description': 'Locale for formatting output (None = default)'
             },
             'objects': {
                 'current': len(getattr(settings, 'objects', [])),
-                'description': 'Number of objects included in charts'
+                'description': 'Number of celestial objects included in charts'
             },
             'aspects': {
-                'current': len(getattr(settings, 'aspects', [])),
-                'description': 'Number of aspects calculated'
+                'current': len(current_aspects),
+                'aspect_angles': aspect_names,
+                'description': 'Aspects calculated between objects'
             }
         }
-        
+
         return {
             "status": "success",
             "settings": setting_info
         }
-        
+
     except Exception as e:
         logger.error(f"Error listing settings: {str(e)}")
         return handle_chart_error(e)
