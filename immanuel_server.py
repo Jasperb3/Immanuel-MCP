@@ -1134,7 +1134,17 @@ def generate_progressed_chart(
         # Serialize to JSON
         result = json.loads(json.dumps(progressed, cls=ToJSON))
 
-        progression_dt_value = getattr(progressed, 'progression_date_time', None) or progression_date_time
+        # Extract progression datetime (handle wrapped DateTime object)
+        progression_dt_obj = getattr(progressed, 'progression_date_time', None)
+        if progression_dt_obj and hasattr(progression_dt_obj, 'datetime'):
+            # It's a wrapped DateTime object, extract the datetime
+            progression_dt_value = progression_dt_obj.datetime.strftime("%Y-%m-%d %H:%M:%S")
+        elif progression_dt_obj:
+            # Try to convert to string
+            progression_dt_value = str(progression_dt_obj)
+        else:
+            # Fallback to input parameter
+            progression_dt_value = progression_date_time
 
         transit_subject = charts.Subject(
             date_time=progression_date_time,
@@ -1220,7 +1230,17 @@ def generate_compact_progressed_chart(
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(progressed, cls=CompactJSONSerializer))
 
-        progression_dt_value = getattr(progressed, 'progression_date_time', None) or progression_date_time
+        # Extract progression datetime (handle wrapped DateTime object)
+        progression_dt_obj = getattr(progressed, 'progression_date_time', None)
+        if progression_dt_obj and hasattr(progression_dt_obj, 'datetime'):
+            # It's a wrapped DateTime object, extract the datetime
+            progression_dt_value = progression_dt_obj.datetime.strftime("%Y-%m-%d %H:%M:%S")
+        elif progression_dt_obj:
+            # Try to convert to string
+            progression_dt_value = str(progression_dt_obj)
+        else:
+            # Fallback to input parameter
+            progression_dt_value = progression_date_time
 
         transit_subject = charts.Subject(
             date_time=progression_date_time,
