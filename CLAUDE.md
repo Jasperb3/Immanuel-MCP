@@ -126,9 +126,9 @@ The `generate_transit_to_natal` endpoint includes intelligent pagination to comp
 **Default Behavior:**
 Without specifying `aspect_priority`, the endpoint returns only tight aspects (0-2° orb), ensuring the response stays well under MCP limits while providing the most astrologically significant transits.
 
-### Lifecycle Events Detection System (🆕 v0.4.0)
+### Lifecycle Events Detection System (✅ v0.4.0 - Production Ready)
 
-The `generate_transit_to_natal` endpoint now includes comprehensive lifecycle events detection, automatically identifying planetary returns and major life transits to provide context about where someone is in their astrological life journey.
+All chart types (Transit-to-Natal, Solar Return, Progressed) include comprehensive lifecycle events detection, automatically identifying planetary returns and major life transits to provide context about where someone is in their astrological life journey.
 
 **What is Detected:**
 - **Planetary Returns**: Saturn Return, Jupiter Return, Uranus Opposition, Chiron Return, etc.
@@ -142,37 +142,45 @@ The `generate_transit_to_natal` endpoint now includes comprehensive lifecycle ev
 **Response Structure:**
 ```json
 {
-  "lifecycle_events": {
-    "current_events": [
-      {
-        "event_type": "return",
-        "planet": "Saturn",
-        "type": "saturn_return",
-        "cycle_number": 1,
-        "orb": 1.2,
-        "orb_status": "tight",
-        "significance": "CRITICAL",
-        "keywords": ["maturity", "responsibility", "karma", ...],
-        "age": 29.5,
-        "status": "active"
-      }
-    ],
-    "past_events": [...],
-    "future_timeline": [...],
-    "lifecycle_summary": {
-      "current_age": 29.5,
-      "current_stage": {
-        "stage_name": "Saturn Return",
-        "description": "Karmic maturation and life restructuring",
-        "age_range": [29, 31],
-        "themes": ["responsibility", "maturity", "commitment"]
-      },
-      "active_event_count": 1,
-      "highest_significance": "CRITICAL"
+  "lifecycle_events": [
+    {
+      "event_type": "Saturn Return Cycle 1",
+      "natal_object": "Saturn",
+      "transiting_object": "Saturn",
+      "aspect_type": "Conjunction",
+      "current_angular_separation": 1.2,
+      "orb_status": "applicative",
+      "exact_date": "2025-01-15",
+      "date_range": "2024-11-20 to 2025-03-12",
+      "age_at_event": 29.5,
+      "years_until_event": 0.0,
+      "significance": "CRITICAL",
+      "keywords": ["maturity", "responsibility", "karma", "structure"],
+      "status": "active",
+      "category": "return"
     }
+  ],
+  "lifecycle_summary": {
+    "current_age": 29.5,
+    "current_stage": {
+      "stage_name": "Saturn Return",
+      "description": "Karmic maturation and life restructuring",
+      "age_range": [29, 31],
+      "themes": ["responsibility", "maturity", "commitment"]
+    },
+    "active_event_count": 1,
+    "next_major_event": "Jupiter Return Cycle 3",
+    "years_until_event": 0.6,
+    "next_major_event_date": "2025-08-15"
   }
 }
 ```
+
+**Field Definitions:**
+- `current_angular_separation`: Degrees (0-180°) between current and exact position. NOT traditional astrological orb, but actual angular distance remaining until the event becomes exact.
+- `orb_status`: "applicative" (approaching), "exact" (< 0.5°), or "separative" (past exact)
+- `status`: "active" (happening now), "upcoming" (future), or "past" (historical)
+- `category`: "return" (planetary return) or "major_transit" (square/opposition)
 
 **Significance Levels:**
 - **CRITICAL**: Saturn Returns, Uranus Opposition, Neptune Square, Pluto Square
@@ -189,8 +197,15 @@ The `generate_transit_to_natal` endpoint now includes comprehensive lifecycle ev
 - Graceful degradation: If detection fails, lifecycle_events = null
 - Can be disabled with `include_lifecycle_events=False`
 
+**Chart Type Support:**
+Lifecycle events are available in:
+- ✅ Transit-to-Natal (full and compact)
+- ✅ Solar Return (full and compact)
+- ✅ Progressed (full and compact)
+- ✅ Lunar Return (full and compact)
+
 **Claude Desktop Integration:**
-The lifecycle events are automatically included in transit responses, providing Claude with rich context about the person's life stage. For example, when someone asks "What are my transits today?", Claude can naturally incorporate lifecycle context like "You're currently in your Saturn Return—one of the most significant astrological transits of your life!"
+The lifecycle events are automatically included in all supported chart responses, providing Claude with rich context about the person's life stage. For example, when someone asks "What are my transits today?", Claude can naturally incorporate lifecycle context like "You're currently in your Saturn Return—one of the most significant astrological transits of your life!"
 
 **Response Sizes (typical):**
 - Tight: ~25 KB (2-10 aspects)
