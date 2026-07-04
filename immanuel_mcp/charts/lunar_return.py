@@ -20,17 +20,10 @@ from immanuel import charts
 from immanuel.classes.serialize import ToJSON
 from scripts.compact_serializer import CompactJSONSerializer
 
-# Import from parent package
-import sys
-import os
-parent_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
-
-from immanuel_mcp.utils.coordinates import parse_coordinate
-from immanuel_mcp.utils.subjects import create_subject
-from immanuel_mcp.utils.errors import handle_chart_error, validate_inputs
-from immanuel_server import mcp  # Import the MCP server instance
+from ..app import mcp
+from ..utils.coordinates import parse_coordinate
+from ..utils.subjects import create_subject
+from ..utils.errors import handle_chart_error, validate_inputs
 
 logger = logging.getLogger(__name__)
 

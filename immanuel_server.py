@@ -22,7 +22,6 @@ from immanuel.const import calc as calc_const
 from immanuel.const import data as data_const
 from immanuel.classes.serialize import ToJSON
 from immanuel.tools import convert
-from mcp.server.fastmcp import FastMCP
 from scripts.compact_serializer import CompactJSONSerializer
 
 # Configure logging to file only (CRITICAL: logging to stdout/stderr breaks stdio transport)
@@ -41,25 +40,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Import lifecycle events detection system (after logger is configured)
-try:
-    from immanuel_mcp.lifecycle import (
-        detect_lifecycle_events,
-        detect_progressed_moon_return,
-        format_lifecycle_event_feed
-    )
-    LIFECYCLE_AVAILABLE = True
-    logger.info("Lifecycle events module loaded successfully")
-except ImportError as e:
-    logger.warning(f"Lifecycle events module not available: {e}")
-    LIFECYCLE_AVAILABLE = False
+# Import lifecycle events detection system (after logger is configured).
+# This import is intentionally unconditional: a broken lifecycle package
+# should fail the server at startup, not silently degrade every response.
+from immanuel_mcp.lifecycle import (
+    detect_lifecycle_events,
+    detect_progressed_moon_return,
+    format_lifecycle_event_feed
+)
 
 # Suppress any third-party library logging that might go to stdout/stderr
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 
-# Initialize the MCP server
-mcp = FastMCP("immanuel-astrology-server")
+# The single shared MCP server instance. All entry points (this script and
+# `python -m immanuel_mcp`) register tools against this same object.
+from immanuel_mcp.app import mcp
 
 
 # ============================================================================
@@ -594,11 +590,6 @@ def attach_lifecycle_section(
     additional_events: Optional[List[Dict[str, Any]]] = None
 ) -> None:
     """Populate lifecycle fields on the result dictionary."""
-    if not LIFECYCLE_AVAILABLE:
-        result["lifecycle_events"] = None
-        result["lifecycle_summary"] = None
-        return
-
     try:
         birth_dt = parse_datetime_value(birth_datetime)
         comparison_dt = parse_datetime_value(comparison_datetime)
@@ -1154,18 +1145,17 @@ def generate_progressed_chart(
         reference_transits = charts.Natal(transit_subject)
 
         additional_events: List[Dict[str, Any]] = []
-        if LIFECYCLE_AVAILABLE:
-            try:
-                birth_dt = parse_datetime_value(date_time)
-                progression_dt = parse_datetime_value(progression_dt_value)
-                additional_events = detect_progressed_moon_return(
-                    natal_chart,
-                    progressed,
-                    birth_dt,
-                    progression_dt
-                )
-            except Exception as moon_error:
-                logger.debug(f"Progressed Moon detection skipped: {moon_error}")
+        try:
+            birth_dt = parse_datetime_value(date_time)
+            progression_dt = parse_datetime_value(progression_dt_value)
+            additional_events = detect_progressed_moon_return(
+                natal_chart,
+                progressed,
+                birth_dt,
+                progression_dt
+            )
+        except Exception as moon_error:
+            logger.debug(f"Progressed Moon detection skipped: {moon_error}")
 
         attach_lifecycle_section(
             result,
@@ -1250,18 +1240,17 @@ def generate_compact_progressed_chart(
         reference_transits = charts.Natal(transit_subject)
 
         additional_events: List[Dict[str, Any]] = []
-        if LIFECYCLE_AVAILABLE:
-            try:
-                birth_dt = parse_datetime_value(date_time)
-                progression_dt = parse_datetime_value(progression_dt_value)
-                additional_events = detect_progressed_moon_return(
-                    natal_chart,
-                    progressed,
-                    birth_dt,
-                    progression_dt
-                )
-            except Exception as moon_error:
-                logger.debug(f"Progressed Moon detection skipped: {moon_error}")
+        try:
+            birth_dt = parse_datetime_value(date_time)
+            progression_dt = parse_datetime_value(progression_dt_value)
+            additional_events = detect_progressed_moon_return(
+                natal_chart,
+                progressed,
+                birth_dt,
+                progression_dt
+            )
+        except Exception as moon_error:
+            logger.debug(f"Progressed Moon detection skipped: {moon_error}")
 
         attach_lifecycle_section(
             result,
@@ -2526,18 +2515,13 @@ def generate_transit_to_natal(
 
         # === LIFECYCLE EVENTS DETECTION ===
         if include_lifecycle_events:
-            if LIFECYCLE_AVAILABLE:
-                attach_lifecycle_section(
-                    result,
-                    natal_chart=natal_chart,
-                    comparison_chart=transit_chart,
-                    birth_datetime=natal_date_time,
-                    comparison_datetime=transit_date_time
-                )
-            else:
-                logger.warning("[TRANSIT-FULL] Lifecycle events requested but module not available")
-                result["lifecycle_events"] = None
-                result["lifecycle_summary"] = None
+            attach_lifecycle_section(
+                result,
+                natal_chart=natal_chart,
+                comparison_chart=transit_chart,
+                birth_datetime=natal_date_time,
+                comparison_datetime=transit_date_time
+            )
         else:
             result["lifecycle_events"] = None
             result["lifecycle_summary"] = None
@@ -2677,18 +2661,13 @@ def generate_compact_transit_to_natal(
         }
 
         if include_lifecycle_events:
-            if LIFECYCLE_AVAILABLE:
-                attach_lifecycle_section(
-                    result,
-                    natal_chart=natal_chart,
-                    comparison_chart=transit_chart,
-                    birth_datetime=natal_date_time,
-                    comparison_datetime=transit_date_time
-                )
-            else:
-                logger.warning("[TRANSIT-COMPACT] Lifecycle requested but module unavailable")
-                result["lifecycle_events"] = None
-                result["lifecycle_summary"] = None
+            attach_lifecycle_section(
+                result,
+                natal_chart=natal_chart,
+                comparison_chart=transit_chart,
+                birth_datetime=natal_date_time,
+                comparison_datetime=transit_date_time
+            )
         else:
             result["lifecycle_events"] = None
             result["lifecycle_summary"] = None
@@ -2915,6 +2894,13 @@ def list_available_settings() -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error listing settings: {str(e)}")
         return handle_chart_error(e)
+
+
+# Register the lunar return tools on the shared MCP instance. This import
+# must come after the tool definitions above so a partially initialized
+# module is never observed, and must not be moved into a try/except: a
+# missing chart module is a startup error, not an optional feature.
+import immanuel_mcp.charts.lunar_return  # noqa: E402,F401
 
 
 def main():

@@ -220,7 +220,7 @@ def calculate_planetary_return(
     # Calculate age and cycle number
     age = (transit_datetime - birth_datetime).days / 365.25
     orbital_period = ORBITAL_PERIODS.get(planet_name, 1.0)
-    cycle_number = int(age / orbital_period) + 1
+    cycle_number = max(1, round(age / orbital_period))
 
     # Get significance
     significance = get_return_significance(planet_name, cycle_number)
