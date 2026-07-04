@@ -1,6 +1,6 @@
 """Position formatting and optimization"""
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from ..constants import CELESTIAL_BODIES
 
 def format_position(sign_longitude: Dict[str, Any], sign_name: str) -> str:

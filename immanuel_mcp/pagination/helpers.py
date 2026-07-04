@@ -1,10 +1,5 @@
 """Pagination helpers"""
 
-from typing import Any, Dict, List
-import json
-
-
-
 # ============================================================================
 # Aspect Pagination Helpers (for MCP size limit compliance)
 # ============================================================================
@@ -163,11 +158,3 @@ def build_pagination_object(
         pagination["instructions"] = f"To get {next_page} aspects, call again with aspect_priority='{next_page}'"
 
     return pagination
-
-
-def estimate_response_size(response: dict) -> int:
-    """
-    Estimate JSON response size in bytes.
-
-    Args:
-        response: Response dictionary
