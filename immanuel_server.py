@@ -1170,21 +1170,14 @@ def generate_transit_to_natal(
         transit_lon = parse_coordinate(transit_longitude, is_latitude=False) if transit_longitude else natal_lon
         logger.debug(f"[TRANSIT-FULL] Transit coords: lat={transit_lat}, lon={transit_lon}")
 
-        # Create natal subject
+        # Create natal and transit subjects. The optional timezone applies to
+        # both datetimes; when omitted, immanuel infers it from coordinates.
         logger.debug(f"[TRANSIT-FULL] Creating natal subject")
-        natal_subject = charts.Subject(
-            date_time=natal_date_time,
-            latitude=natal_lat,
-            longitude=natal_lon
-        )
+        natal_subject = create_subject(natal_date_time, natal_lat, natal_lon, timezone)
 
         # Create transit subject for the specified date
         logger.debug(f"[TRANSIT-FULL] Creating transit subject")
-        transit_subject = charts.Subject(
-            date_time=transit_date_time,
-            latitude=transit_lat,
-            longitude=transit_lon
-        )
+        transit_subject = create_subject(transit_date_time, transit_lat, transit_lon, timezone)
 
         # Generate natal chart
         logger.debug(f"[TRANSIT-FULL] Generating natal chart")
@@ -1409,19 +1402,12 @@ def generate_compact_transit_to_natal(
         transit_lat = parse_coordinate(transit_latitude, is_latitude=True) if transit_latitude else natal_lat
         transit_lon = parse_coordinate(transit_longitude, is_latitude=False) if transit_longitude else natal_lon
 
-        # Create natal subject
-        natal_subject = charts.Subject(
-            date_time=natal_date_time,
-            latitude=natal_lat,
-            longitude=natal_lon
-        )
+        # Create natal and transit subjects. The optional timezone applies to
+        # both datetimes; when omitted, immanuel infers it from coordinates.
+        natal_subject = create_subject(natal_date_time, natal_lat, natal_lon, timezone)
 
         # Create transit subject for the specified date
-        transit_subject = charts.Subject(
-            date_time=transit_date_time,
-            latitude=transit_lat,
-            longitude=transit_lon
-        )
+        transit_subject = create_subject(transit_date_time, transit_lat, transit_lon, timezone)
 
         # Generate natal chart
         natal_chart = charts.Natal(natal_subject)
