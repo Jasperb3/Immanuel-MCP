@@ -4,21 +4,47 @@
 # Aspect Pagination Helpers (for MCP size limit compliance)
 # ============================================================================
 
-def classify_aspect_priority(aspect: dict) -> str:
+def get_actual_orb(aspect: dict) -> float:
     """
-    Classify aspect by orb into priority tiers.
+    Return the actual deviation from exactness in degrees for an aspect.
 
-    Tight aspects (0-2°): Peak influence, most noticeable effects
-    Moderate aspects (2-5°): Secondary influence, still noticeable
-    Loose aspects (5-8°): Background influence, subtle effects
+    Immanuel's full (ToJSON) serialization is ambiguous here: its 'orb'
+    field holds the *configured maximum* orb for the aspect type (e.g. 10.0
+    for every planet-planet conjunction), while the actual deviation from
+    exact lives in 'difference'. The compact serializer already stores the
+    actual deviation directly in 'orb'. This helper resolves both shapes so
+    callers never classify or display the configured maximum by mistake.
 
     Args:
-        aspect: Aspect dictionary with 'orb' field
+        aspect: Aspect dictionary from either serializer
+
+    Returns:
+        Absolute deviation from exactness in degrees
+    """
+    difference = aspect.get('difference')
+    if isinstance(difference, dict) and 'raw' in difference:
+        return abs(difference['raw'])
+    if isinstance(difference, (int, float)):
+        return abs(difference)
+    return abs(aspect.get('orb') or 0)
+
+
+def classify_aspect_priority(aspect: dict) -> str:
+    """
+    Classify aspect by actual orb (deviation from exact) into priority tiers.
+
+    Tight aspects (0-2°, inclusive): Peak influence, most noticeable effects
+    Moderate aspects (>2-5°, inclusive): Secondary influence, still noticeable
+    Loose aspects (>5°): Background influence, subtle effects
+
+    Args:
+        aspect: Aspect dictionary with 'difference' (full serializer) or
+                'orb' (compact serializer) field
 
     Returns:
         "tight", "moderate", or "loose"
     """
-    orb = abs(aspect.get('orb', 0))
+    orb = get_actual_orb(aspect)
 
     if orb <= 2.0:
         return "tight"
