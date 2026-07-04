@@ -12,7 +12,12 @@ from .constants import (
     PROGRESSED_MOON_INTERPRETATION,
     PROGRESSED_MOON_KEYWORDS,
 )
-from .returns import calculate_signed_orb, determine_orb_status
+from .returns import (
+    calculate_signed_orb,
+    determine_orb_status,
+    determine_movement,
+    estimate_exact_datetime,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -50,11 +55,18 @@ def detect_progressed_moon_return(
     age = (progression_datetime - birth_datetime).days / 365.25
     cycle_number = int(max(age, 0) / PROGRESSED_MOON_PERIOD_YEARS) + 1
 
-    window_days = PROGRESSED_MOON_ORB / (360 / (PROGRESSED_MOON_PERIOD_YEARS * 365.25))
+    # The progressed Moon completes a cycle in ~27.3 years of real time and
+    # never retrogrades, so its orb closes at a steady mean rate.
+    progressed_moon_rate = 360 / (PROGRESSED_MOON_PERIOD_YEARS * 365.25)  # deg/day
+    movement = determine_movement(orb, progressed_moon_rate)
+    estimated_exact = estimate_exact_datetime(orb, progressed_moon_rate, progression_datetime)
+    exact_center = estimated_exact or progression_datetime
+
+    window_days = PROGRESSED_MOON_ORB / progressed_moon_rate
     date_range = None
     try:
-        start = (progression_datetime - timedelta(days=window_days)).date()
-        end = (progression_datetime + timedelta(days=window_days)).date()
+        start = (exact_center - timedelta(days=window_days)).date()
+        end = (exact_center + timedelta(days=window_days)).date()
         date_range = f"{start.isoformat()} to {end.isoformat()}"
     except Exception:  # pragma: no cover - defensive
         date_range = None
@@ -70,7 +82,9 @@ def detect_progressed_moon_return(
         "transit_position": round(progressed_pos, 2),
         "orb": round(abs(orb), 2),
         "orb_status": orb_status,
-        "exact_date": progression_datetime.strftime("%Y-%m-%d"),
+        "movement": movement,
+        "exact_date": exact_center.strftime("%Y-%m-%d"),
+        "exact_date_estimated": True,
         "date_range": date_range,
         "age_at_event": round(age, 1),
         "years_until_event": 0.0,
