@@ -13,11 +13,14 @@ this module implements custom logic to:
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Dict
 
 from immanuel import charts
 from immanuel.classes.serialize import ToJSON
+from immanuel.const import chart as chart_const
+from immanuel.tools import date as date_tools
+from immanuel.tools import ephemeris
 from scripts.compact_serializer import CompactJSONSerializer
 
 from ..app import mcp
@@ -26,6 +29,23 @@ from ..utils.subjects import create_subject
 from ..utils.errors import handle_chart_error, validate_inputs
 
 logger = logging.getLogger(__name__)
+
+# Search parameters. The Moon moves ~13 degrees/day and never retrogrades,
+# so a 6-hour scan step (~3.3 degrees) safely brackets the crossing, and
+# bisection converges to well under a minute of clock time.
+_SCAN_STEP_JD = 0.25
+_ONE_MINUTE_JD = 1 / 1440
+
+
+def _moon_longitude(jd: float) -> float:
+    """Geocentric ecliptic longitude of the Moon at a Julian date."""
+    return ephemeris.get_planet(chart_const.MOON, jd)['lon']
+
+
+def _signed_delta(moon_lon: float, target_lon: float) -> float:
+    """Signed angular distance from target to Moon, normalized to (-180, 180]."""
+    diff = (moon_lon - target_lon) % 360
+    return diff - 360 if diff > 180 else diff
 
 
 def find_lunar_return_date(
@@ -37,7 +57,16 @@ def find_lunar_return_date(
     timezone: str = None
 ) -> datetime:
     """
-    Find the date when the Moon returns to its natal position within a given month.
+    Find the moment the Moon returns to its natal position within a given month.
+
+    The search runs in Julian-day space against the ephemeris directly (a
+    single swisseph call per probe) rather than constructing a full chart
+    per probe, and bisects the bracketed crossing to under one minute of
+    clock time.
+
+    Note: the sidereal lunar month is ~27.3 days, so a 30/31-day calendar
+    month occasionally contains two returns (one near the 1st and one near
+    the end). This function returns the first.
 
     Args:
         natal_moon_longitude: The natal Moon's ecliptic longitude in degrees
@@ -45,153 +74,54 @@ def find_lunar_return_date(
         month: The month to search for the lunar return (1-12)
         lat: Latitude for the chart
         lon: Longitude for the chart
-        timezone: Optional IANA timezone
+        timezone: Optional IANA timezone (month boundaries and the returned
+            datetime are interpreted in this zone, or the zone inferred from
+            the coordinates when omitted)
 
     Returns:
-        datetime object for the lunar return moment
+        Naive datetime of the lunar return moment in the chart's local time
 
     Raises:
         ValueError: If no lunar return is found in the specified month
     """
-    # Start at the beginning of the month
-    start_date = datetime(year, month, 1, 0, 0, 0)
+    target = natal_moon_longitude % 360
 
-    # End at the last day of the month
-    if month == 12:
-        end_date = datetime(year + 1, 1, 1, 0, 0, 0)
-    else:
-        end_date = datetime(year, month + 1, 1, 0, 0, 0)
+    month_start = datetime(year, month, 1)
+    month_end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
 
-    # Check every 6 hours for Moon's position
-    # Moon moves ~13 degrees per day, so 6-hour intervals give us ~3.25 degrees resolution
-    current_date = start_date
-    prev_moon_lon = None
+    start_jd = date_tools.to_jd(month_start, lat=lat, lon=lon, time_zone=timezone)
+    end_jd = date_tools.to_jd(month_end, lat=lat, lon=lon, time_zone=timezone)
 
-    while current_date < end_date:
-        # Create a subject for this moment
-        subject = create_subject(
-            current_date.isoformat(),
-            lat,
-            lon,
-            timezone
-        )
+    # Scan for a sign change in the signed delta. The Moon only moves
+    # forward, so the delta increases through 0 at the return; jumps of
+    # ~360 at the antipode are excluded by the wrap check.
+    prev_jd = start_jd
+    prev_delta = _signed_delta(_moon_longitude(start_jd), target)
 
-        # Get Moon's current position
-        transit_chart = charts.Natal(subject)
-        moon = transit_chart.objects.get(4000002)  # Moon's index
+    jd = start_jd + _SCAN_STEP_JD
+    while jd < end_jd + _SCAN_STEP_JD:
+        probe_jd = min(jd, end_jd)
+        delta = _signed_delta(_moon_longitude(probe_jd), target)
 
-        if moon is None:
-            current_date += timedelta(hours=6)
-            continue
+        if prev_delta < 0 <= delta and (delta - prev_delta) < 180:
+            # Bracketed: bisect to under a minute.
+            lo, hi = prev_jd, probe_jd
+            while (hi - lo) > _ONE_MINUTE_JD / 2:
+                mid = (lo + hi) / 2
+                if _signed_delta(_moon_longitude(mid), target) >= 0:
+                    hi = mid
+                else:
+                    lo = mid
+            return_jd = (lo + hi) / 2
+            local_dt = date_tools.to_datetime(return_jd, lat=lat, lon=lon, time_zone=timezone)
+            return local_dt.replace(tzinfo=None)
 
-        current_moon_lon = moon.longitude.raw
-
-        # Check if we've crossed the natal position
-        if prev_moon_lon is not None:
-            # Handle 360-degree wrap-around
-            natal_normalized = natal_moon_longitude % 360
-
-            # Check if we crossed the natal position
-            crossed = False
-            if prev_moon_lon < natal_normalized <= current_moon_lon:
-                crossed = True
-            elif prev_moon_lon > current_moon_lon:  # Wrapped around 360 degrees
-                if prev_moon_lon < natal_normalized or natal_normalized <= current_moon_lon:
-                    crossed = True
-
-            if crossed:
-                # Found the approximate time - refine to within 1 hour
-                return refine_lunar_return_time(
-                    natal_moon_longitude,
-                    current_date - timedelta(hours=6),
-                    current_date,
-                    lat,
-                    lon,
-                    timezone
-                )
-
-        prev_moon_lon = current_moon_lon
-        current_date += timedelta(hours=6)
+        if probe_jd >= end_jd:
+            break
+        prev_jd, prev_delta = probe_jd, delta
+        jd += _SCAN_STEP_JD
 
     raise ValueError(f"No lunar return found in {year}-{month:02d}")
-
-
-def refine_lunar_return_time(
-    natal_moon_longitude: float,
-    start: datetime,
-    end: datetime,
-    lat: float,
-    lon: float,
-    timezone: str = None,
-    tolerance: float = 0.1
-) -> datetime:
-    """
-    Refine the lunar return time to within a small tolerance.
-
-    Uses binary search to find the exact moment the Moon returns.
-
-    Args:
-        natal_moon_longitude: The natal Moon's ecliptic longitude
-        start: Start of time range
-        end: End of time range
-        lat: Latitude
-        lon: Longitude
-        timezone: Optional IANA timezone
-        tolerance: Acceptable difference in degrees (default 0.1)
-
-    Returns:
-        datetime object for the refined lunar return moment
-    """
-    while (end - start).total_seconds() > 60:  # Refine to within 1 minute
-        mid = start + (end - start) / 2
-
-        subject = create_subject(
-            mid.isoformat(),
-            lat,
-            lon,
-            timezone
-        )
-
-        transit_chart = charts.Natal(subject)
-        moon = transit_chart.objects.get(4000002)
-
-        if moon is None:
-            return mid  # Best we can do
-
-        moon_lon = moon.longitude.raw
-        natal_normalized = natal_moon_longitude % 360
-
-        diff = abs(moon_lon - natal_normalized)
-        if diff > 180:
-            diff = 360 - diff
-
-        if diff < tolerance:
-            return mid
-
-        # Determine which half to search
-        # Check if we need to go forward or backward in time
-        future_subject = create_subject(
-            (mid + timedelta(hours=1)).isoformat(),
-            lat,
-            lon,
-            timezone
-        )
-        future_chart = charts.Natal(future_subject)
-        future_moon = future_chart.objects.get(4000002)
-
-        if future_moon:
-            future_diff = abs(future_moon.longitude.raw - natal_normalized)
-            if future_diff > 180:
-                future_diff = 360 - future_diff
-
-            if future_diff < diff:
-                start = mid
-            else:
-                end = mid
-        else:
-            return mid
-
-    return start + (end - start) / 2
 
 
 @mcp.tool()
