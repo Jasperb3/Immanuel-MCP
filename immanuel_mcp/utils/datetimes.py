@@ -16,10 +16,13 @@ def parse_datetime_value(value: Union[str, datetime]) -> datetime:
     if not cleaned:
         raise ValueError("Empty datetime string")
 
-    # Remove Olson/IANA timezone names (e.g., Europe/London)
+    # Remove a trailing timezone name: an IANA zone (Europe/London) or a
+    # short alphabetic abbreviation (UTC, GMT, BST). The token must contain
+    # no digits - a previous heuristic based on "uppercase and short" also
+    # matched times like "1:00" and silently dropped them.
     parts = cleaned.split()
-    if parts and ('/' in parts[-1] or parts[-1].upper() == parts[-1] and len(parts[-1]) <= 4):
-        cleaned = ' '.join(parts[:-1]) if len(parts) > 1 else cleaned
+    if len(parts) > 1 and ('/' in parts[-1] or (parts[-1].isalpha() and len(parts[-1]) <= 4)):
+        cleaned = ' '.join(parts[:-1])
 
     # Strip trailing timezone offsets or Z markers
     cleaned = re.sub(r'(Z|[+-]\d{2}:?\d{2})$', '', cleaned)
