@@ -24,6 +24,7 @@ from immanuel.tools import ephemeris
 from scripts.compact_serializer import CompactJSONSerializer
 
 from ..app import mcp
+from ..lifecycle.attach import attach_lifecycle_section
 from ..utils.coordinates import parse_coordinate
 from ..utils.subjects import create_subject
 from ..utils.errors import handle_chart_error, validate_inputs
@@ -206,6 +207,16 @@ def generate_lunar_return_chart(
             'return_month': return_month
         }
 
+        # Lifecycle context at the return moment (the return chart doubles
+        # as the transit reference)
+        attach_lifecycle_section(
+            result,
+            natal_chart=natal_chart,
+            comparison_chart=lunar_return_chart,
+            birth_datetime=date_time,
+            comparison_datetime=lunar_return_dt
+        )
+
         logger.info(f"Lunar return chart generated successfully for {lunar_return_dt.isoformat()}")
         return result
 
@@ -296,6 +307,16 @@ def generate_compact_lunar_return_chart(
             'return_year': return_year,
             'return_month': return_month
         }
+
+        # Lifecycle context at the return moment (the return chart doubles
+        # as the transit reference)
+        attach_lifecycle_section(
+            result,
+            natal_chart=natal_chart,
+            comparison_chart=lunar_return_chart,
+            birth_datetime=date_time,
+            comparison_datetime=lunar_return_dt
+        )
 
         logger.info(f"Compact lunar return chart generated successfully for {lunar_return_dt.isoformat()}")
         return result

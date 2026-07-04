@@ -77,6 +77,10 @@ def predict_next_return(
         "cycle_number": next_cycle,
         "predicted_age": round(predicted_age, 1),
         "predicted_date": predicted_datetime.strftime("%Y-%m-%d"),
+        # Mean-motion arithmetic, not an ephemeris search: actual returns
+        # drift months around the mean (Jupiter especially) and retrograde
+        # passes can produce several exact hits.
+        "prediction_basis": "mean_orbital_period",
         "years_until": round(years_until, 1),
         "significance": significance,
         "keywords": RETURN_KEYWORDS.get(planet_name, [])
@@ -145,6 +149,11 @@ def predict_major_transit(
         "typical_age": typical_age,
         "age_range": list(age_range),
         "predicted_date": predicted_datetime.strftime("%Y-%m-%d"),
+        # Based on the generic typical age, not this chart's ephemeris.
+        # Actual timing varies by birth cohort - Pluto's eccentric orbit has
+        # historically placed the Pluto square anywhere from the mid-30s to
+        # much later in life.
+        "prediction_basis": "typical_age",
         "years_until": round(years_until, 1),
         "significance": transit_config["significance"],
         "keywords": transit_config["keywords"],

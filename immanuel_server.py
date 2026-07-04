@@ -12,7 +12,7 @@ import sys
 import logging
 import re
 import os
-from datetime import datetime
+from datetime import datetime, timezone as dt_timezone
 from typing import Any, Dict, List, Optional, Union
 
 import immanuel
@@ -43,11 +43,8 @@ logger = logging.getLogger(__name__)
 # Import lifecycle events detection system (after logger is configured).
 # This import is intentionally unconditional: a broken lifecycle package
 # should fail the server at startup, not silently degrade every response.
-from immanuel_mcp.lifecycle import (
-    detect_lifecycle_events,
-    detect_progressed_moon_return,
-    format_lifecycle_event_feed
-)
+from immanuel_mcp.lifecycle import detect_progressed_moon_return
+from immanuel_mcp.lifecycle.attach import attach_lifecycle_section
 
 # Suppress any third-party library logging that might go to stdout/stderr
 logging.getLogger('httpx').setLevel(logging.WARNING)
@@ -79,47 +76,6 @@ from immanuel_mcp.interpretations.aspects import (
     add_aspect_interpretations,
     normalize_aspects_to_list,
 )
-
-
-def attach_lifecycle_section(
-    result: Dict[str, Any],
-    natal_chart,
-    comparison_chart,
-    birth_datetime: Union[str, datetime],
-    comparison_datetime: Union[str, datetime],
-    include_future: bool = True,
-    future_years: int = 20,
-    max_future_events: int = 10,
-    additional_events: Optional[List[Dict[str, Any]]] = None
-) -> None:
-    """Populate lifecycle fields on the result dictionary."""
-    try:
-        birth_dt = parse_datetime_value(birth_datetime)
-        comparison_dt = parse_datetime_value(comparison_datetime)
-
-        lifecycle_data = detect_lifecycle_events(
-            natal_chart=natal_chart,
-            transit_chart=comparison_chart,
-            birth_datetime=birth_dt,
-            transit_datetime=comparison_dt,
-            include_future=include_future,
-            future_years=future_years,
-            max_future_events=max_future_events
-        )
-
-        payload = format_lifecycle_event_feed(
-            lifecycle_data,
-            comparison_dt,
-            additional_events=additional_events
-        )
-
-        result["lifecycle_events"] = payload["events"]
-        result["lifecycle_summary"] = payload["summary"]
-
-    except Exception as exc:
-        logger.warning("Lifecycle events detection failed: %s", exc, exc_info=True)
-        result["lifecycle_events"] = None
-        result["lifecycle_summary"] = None
 
 
 @mcp.tool()
@@ -166,12 +122,14 @@ def generate_compact_natal_chart(
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(natal, cls=CompactJSONSerializer))
 
-        now_dt = datetime.utcnow().replace(microsecond=0)
+        # Lifecycle analysis uses current transits as reference. The UTC
+        # timestamp is paired with an explicit UTC timezone on the Subject;
+        # previously it was interpreted as local time at the birth
+        # coordinates, shifting the reference instant by up to +/-12 hours.
+        now_dt = datetime.now(dt_timezone.utc).replace(microsecond=0, tzinfo=None)
         try:
-            transit_subject = charts.Subject(
-                date_time=now_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                latitude=lat,
-                longitude=lon
+            transit_subject = create_subject(
+                now_dt.strftime("%Y-%m-%d %H:%M:%S"), lat, lon, 'UTC'
             )
             transit_chart = charts.Natal(transit_subject)
             attach_lifecycle_section(
@@ -232,13 +190,14 @@ def generate_natal_chart(
         # Serialize to JSON
         result = json.loads(json.dumps(natal, cls=ToJSON))
 
-        # Lifecycle analysis uses current transits as reference
-        now_dt = datetime.utcnow().replace(microsecond=0)
+        # Lifecycle analysis uses current transits as reference. The UTC
+        # timestamp is paired with an explicit UTC timezone on the Subject;
+        # previously it was interpreted as local time at the birth
+        # coordinates, shifting the reference instant by up to +/-12 hours.
+        now_dt = datetime.now(dt_timezone.utc).replace(microsecond=0, tzinfo=None)
         try:
-            transit_subject = charts.Subject(
-                date_time=now_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                latitude=lat,
-                longitude=lon
+            transit_subject = create_subject(
+                now_dt.strftime("%Y-%m-%d %H:%M:%S"), lat, lon, 'UTC'
             )
             transit_chart = charts.Natal(transit_subject)
             attach_lifecycle_section(
@@ -1277,31 +1236,32 @@ def generate_transit_to_natal(
         tight_aspects, moderate_aspects, loose_aspects = classify_all_aspects(filtered_aspects)
         logger.info(f"[TRANSIT-FULL] Classified aspects - tight: {len(tight_aspects)}, moderate: {len(moderate_aspects)}, loose: {len(loose_aspects)}")
 
-        # Determine which aspects to return
+        # Determine which aspects to return. The deprecated include_all_aspects
+        # flag is treated as aspect_priority="all" so it flows through the same
+        # lifecycle size guard instead of bypassing it.
         if include_all_aspects:
-            logger.warning(f"[TRANSIT-FULL] include_all_aspects=True - returning all {len(filtered_aspects)} aspects (may exceed MCP limits)")
-            aspects_to_return = filtered_aspects
-            effective_priority = "all"
-        else:
-            # Validate aspect_priority parameter
-            valid_priorities = ["tight", "moderate", "loose", "all"]
-            if aspect_priority not in valid_priorities:
-                logger.warning(f"[TRANSIT-FULL] Invalid aspect_priority '{aspect_priority}', defaulting to 'tight'")
-                aspect_priority = "tight"
+            logger.warning("[TRANSIT-FULL] include_all_aspects=True (deprecated) - treating as aspect_priority='all'")
+            aspect_priority = "all"
 
-            # CRITICAL FIX: Auto-adjust priority when lifecycle events enabled to avoid MCP size limits
-            # Full aspect data (~59 KB for "all" priority) + lifecycle events (~5-7 KB) exceeds ~50 KB MCP limit
-            if include_lifecycle_events and aspect_priority == "all":
-                logger.warning(
-                    f"[TRANSIT-FULL] Auto-adjusting aspect_priority from 'all' to 'tight' "
-                    f"because lifecycle events are enabled (prevents MCP size limit exceeded)"
-                )
-                aspect_priority = "tight"
+        # Validate aspect_priority parameter
+        valid_priorities = ["tight", "moderate", "loose", "all"]
+        if aspect_priority not in valid_priorities:
+            logger.warning(f"[TRANSIT-FULL] Invalid aspect_priority '{aspect_priority}', defaulting to 'tight'")
+            aspect_priority = "tight"
 
-            # Filter by requested priority
-            aspects_to_return = filter_aspects_by_priority(filtered_aspects, aspect_priority)
-            effective_priority = aspect_priority
-            logger.info(f"[TRANSIT-FULL] Returning {len(aspects_to_return)} {effective_priority} aspects")
+        # Auto-adjust priority when lifecycle events enabled to avoid MCP size limits.
+        # Full aspect data (~59 KB for "all" priority) + lifecycle events (~5-7 KB) exceeds ~50 KB MCP limit
+        if include_lifecycle_events and aspect_priority == "all":
+            logger.warning(
+                f"[TRANSIT-FULL] Auto-adjusting aspect_priority from 'all' to 'tight' "
+                f"because lifecycle events are enabled (prevents MCP size limit exceeded)"
+            )
+            aspect_priority = "tight"
+
+        # Filter by requested priority
+        aspects_to_return = filter_aspects_by_priority(filtered_aspects, aspect_priority)
+        effective_priority = aspect_priority
+        logger.info(f"[TRANSIT-FULL] Returning {len(aspects_to_return)} {effective_priority} aspects")
 
         # Build aspect summary
         aspect_summary = build_aspect_summary(
@@ -1651,24 +1611,12 @@ def list_available_settings() -> Dict[str, Any]:
     """
     try:
         from immanuel import setup
+        from immanuel.const import names as names_const
         settings = setup.settings
 
-        # House system mapping (chart_const.X values to names)
-        HOUSE_SYSTEMS = {
-            101: "ALCABITUS",
-            102: "AZIMUTHAL",
-            103: "CAMPANUS",
-            104: "EQUAL",
-            105: "KOCH",
-            106: "MERIDIAN",
-            107: "MORINUS",
-            108: "PLACIDUS",
-            109: "POLICH_PAGE",
-            110: "PORPHYRIUS",
-            111: "REGIOMONTANUS",
-            112: "VEHLOW_EQUAL",
-            113: "WHOLE_SIGN"
-        }
+        # House system mapping straight from the library so new systems
+        # never show up as "Unknown"
+        HOUSE_SYSTEMS = dict(names_const.HOUSE_SYSTEMS)
 
         # Aspect angle mapping (degrees to aspect names)
         ASPECT_ANGLES = {

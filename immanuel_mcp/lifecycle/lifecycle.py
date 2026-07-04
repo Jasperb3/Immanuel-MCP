@@ -362,7 +362,11 @@ def build_past_events_summary(current_age: float) -> list[Dict[str, Any]]:
                 "event_type": event_type,
                 "name": event_name,
                 "typical_age": typical_age,
-                "completed_at_age": typical_age,  # Approximation
+                "completed_at_age": typical_age,
+                # These are generic typical ages, not chart-derived dates.
+                # Actual timing varies by cohort (Pluto's eccentric orbit
+                # especially), so consumers must not present them as history.
+                "approximate": True,
                 "years_ago": round(current_age - typical_age, 1)
             })
 
