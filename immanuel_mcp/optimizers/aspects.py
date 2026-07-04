@@ -38,10 +38,19 @@ def build_optimized_aspects(aspects: List[Dict[str, Any]]) -> List[Dict[str, Any
         else:
             movement_str = str(movement)
 
+        # Prefer the true transit->natal direction when available;
+        # active/passive are speed-ordered and do not carry it.
+        transiting = aspect.get('transiting_object')
+        natal = aspect.get('natal_object')
+        if transiting and natal:
+            planets_label = f"transit {transiting} → natal {natal}"
+        else:
+            planets_label = f"{active_name} → {passive_name}"
+
         # Build optimized aspect. 'orb' is the actual deviation from exact,
         # not the configured maximum (see get_actual_orb).
         optimized_aspect = {
-            'planets': f"{active_name} → {passive_name}",
+            'planets': planets_label,
             'type': aspect.get('type'),
             'orb': round(get_actual_orb(aspect), 2),
             'movement': movement_str,

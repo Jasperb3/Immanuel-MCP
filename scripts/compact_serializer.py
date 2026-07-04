@@ -215,10 +215,15 @@ class CompactJSONSerializer(ToJSON):
 
                 aspects_data = chart_dict[data_const.ASPECTS]
 
-                # Handle nested dict format: {from_object_id: {to_object_id: aspect_dict}}
-                for aspects_for_object in aspects_data.values():
+                # Handle nested dict format: {from_object_id: {to_object_id: aspect_dict}}.
+                # The nesting keys carry direction: in an aspects_to chart
+                # (synastry, transit-to-natal), from = this chart's object and
+                # to = the aspected chart's object. active/passive cannot
+                # recover this (immanuel assigns those by speed), so the
+                # direction is captured here as from_object/to_object.
+                for from_key, aspects_for_object in aspects_data.items():
                     if isinstance(aspects_for_object, dict):
-                        for aspect in aspects_for_object.values():
+                        for to_key, aspect in aspects_for_object.items():
                             if isinstance(aspect, dict) and aspect.get('type', '').lower() in self.INCLUDED_ASPECTS:
                                 # Only include aspects between major objects
                                 active_index = aspect.get('active')
@@ -229,23 +234,38 @@ class CompactJSONSerializer(ToJSON):
                                     active_name = object_names.get(active_index)
                                     passive_name = object_names.get(passive_index)
                                     if active_name and passive_name:
+                                        try:
+                                            from_index = int(from_key)
+                                            to_index = int(to_key)
+                                        except (TypeError, ValueError):
+                                            from_index = to_index = None
                                         simplified_aspects.append({
                                             'type': aspect.get('type'),
                                             'object1': active_name,
                                             'object2': passive_name,
                                             'orb': aspect.get('difference', {}).get('raw'),
                                             'active': active_index,
-                                            'passive': passive_index
+                                            'passive': passive_index,
+                                            'from_object': object_names.get(from_index),
+                                            'to_object': object_names.get(to_index)
                                         })
 
-                # Deduplicate bidirectional aspects (e.g., Sun→Jupiter and Jupiter→Sun)
-                # Keep first occurrence of each unique planet pair + aspect type combination
+                # Deduplicate mirrored duplicates: in a single chart, each
+                # aspect appears under both objects with identical content.
+                # The key must include the orb so that genuinely distinct
+                # cross-chart aspects survive - in synastry, "A's Sun square
+                # B's Moon" and "A's Moon square B's Sun" share planets and
+                # type but differ in orb, and both are astrologically real.
                 seen_aspects = set()
                 deduplicated_aspects = []
                 for aspect in simplified_aspects:
-                    # Create a unique key using sorted planet names to match bidirectional aspects
-                    planet_pair = tuple(sorted([aspect['object1'], aspect['object2']]))
-                    aspect_key = (planet_pair, aspect['type'])
+                    orb = aspect.get('orb')
+                    aspect_key = (
+                        aspect['active'],
+                        aspect['passive'],
+                        aspect['type'],
+                        round(orb, 4) if isinstance(orb, float) else orb
+                    )
 
                     if aspect_key not in seen_aspects:
                         seen_aspects.add(aspect_key)

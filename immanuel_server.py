@@ -1019,6 +1019,13 @@ def generate_compact_synastry_aspects(
         compact_chart_data = json.loads(json.dumps(native_chart, cls=CompactJSONSerializer))
         filtered_aspects = compact_chart_data.get('aspects', [])
 
+        # The serializer's from_object/to_object carry the inter-chart
+        # direction: from = the native's planet, to = the partner's planet.
+        for aspect in filtered_aspects:
+            if isinstance(aspect, dict):
+                aspect['native_object'] = aspect.pop('from_object', None)
+                aspect['partner_object'] = aspect.pop('to_object', None)
+
         # Add interpretation hints if requested
         if include_interpretations:
             filtered_aspects = add_aspect_interpretations(filtered_aspects)
@@ -1244,7 +1251,11 @@ def generate_transit_to_natal(
             if isinstance(obj_data, dict) and 'index' in obj_data and 'name' in obj_data:
                 object_names[obj_data['index']] = obj_data['name']
 
-        # Add object1 and object2 fields to each aspect
+        # Add object1 and object2 fields to each aspect, plus the direction.
+        # active/passive are speed-ordered by immanuel and say nothing about
+        # which chart each object belongs to; from_index/to_index (captured
+        # from the nested aspect structure) do: from = transiting object,
+        # to = natal object.
         for aspect in filtered_aspects:
             if isinstance(aspect, dict):
                 active_id = aspect.get('active')
@@ -1253,6 +1264,11 @@ def generate_transit_to_natal(
                     aspect['object1'] = object_names[active_id]
                 if passive_id in object_names:
                     aspect['object2'] = object_names[passive_id]
+                from_id = aspect.pop('from_index', None)
+                to_id = aspect.pop('to_index', None)
+                if from_id in object_names and to_id in object_names:
+                    aspect['transiting_object'] = object_names[from_id]
+                    aspect['natal_object'] = object_names[to_id]
 
         logger.info(f"[TRANSIT-FULL] Total aspects after filtering: {len(filtered_aspects)}")
 
@@ -1418,8 +1434,14 @@ def generate_compact_transit_to_natal(
         # Serialize transit chart using compact serializer
         transit_data = json.loads(json.dumps(transit_chart, cls=CompactJSONSerializer))
 
-        # Get aspects and optionally add interpretations
+        # Get aspects and optionally add interpretations. The serializer's
+        # from_object/to_object carry the direction: from = transiting
+        # object, to = natal object.
         aspects = transit_data.get('aspects', [])
+        for aspect in aspects:
+            if isinstance(aspect, dict):
+                aspect['transiting_object'] = aspect.pop('from_object', None)
+                aspect['natal_object'] = aspect.pop('to_object', None)
         if include_interpretations:
             aspects = add_aspect_interpretations(aspects)
 
