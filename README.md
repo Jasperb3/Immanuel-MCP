@@ -55,7 +55,7 @@ See [`docs/FULL_ENDPOINT_DIAGNOSIS.md`](docs/FULL_ENDPOINT_DIAGNOSIS.md) for tec
   - Pluto Square (age 36-37) - Deep transformation
   - Chiron Return (age 50+) - Wounded healer emergence
   - Jupiter Returns every ~12 years - Expansion and growth
-- **Universal Integration**: Available in Transit-to-Natal, Solar Return, and Progressed charts
+- **Universal Integration**: Available in Natal, Transit-to-Natal, Solar Return, Lunar Return, and Progressed charts
 - **Size Efficient**: Adds only ~3-5 KB to responses while providing rich context
 - **Angular Separation**: Shows current distance (0-180°) from exact event occurrence
 

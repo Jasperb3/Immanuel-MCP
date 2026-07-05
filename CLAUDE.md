@@ -17,36 +17,44 @@ This is an MCP (Model Context Protocol) server that exposes the Immanuel Python 
 - **Entry Points**:
   - `immanuel_server.py` - Original single-file server (maintained for compatibility)
   - `python -m immanuel_mcp` - New modular package entry point
-- **Architecture**: FastMCP-based server with 18 main astrology tools (9 full + 9 compact)
+- **Architecture**: FastMCP-based server with 20 astrology tools (8 chart types in full/compact pairs, 2 summary tools, 2 configuration tools). A single shared FastMCP instance lives in `immanuel_mcp/app.py`; both entry points register the identical tool set against it.
 - **Package Structure**:
   ```
   immanuel_mcp/
-  ├── __init__.py                    # Package initialization
-  ├── server.py                      # MCP server setup and registration
+  ├── __init__.py                    # Package initialization (no eager server import)
+  ├── __main__.py                    # Enables `python -m immanuel_mcp`
+  ├── app.py                         # The single shared FastMCP instance
+  ├── server.py                      # Modular entry point (loads all tools onto app.mcp)
   ├── constants.py                   # CELESTIAL_BODIES mapping
   ├── utils/                         # Utility functions
-  │   ├── coordinates.py             # parse_coordinate, validate_inputs
+  │   ├── coordinates.py             # parse_coordinate
+  │   ├── datetimes.py               # parse_datetime_value
   │   ├── subjects.py                # create_subject helper
-  │   └── errors.py                  # handle_chart_error
+  │   └── errors.py                  # validate_inputs, handle_chart_error
   ├── optimizers/                    # Response optimization
   │   ├── positions.py               # format_position, optimized transit positions
   │   ├── aspects.py                 # build_optimized_aspects
   │   └── dignities.py               # extract_primary_dignity, build_dignities_section
   ├── pagination/                    # Aspect pagination
-  │   └── helpers.py                 # classify_aspect_priority, build_pagination_object
+  │   └── helpers.py                 # get_actual_orb, classify_aspect_priority, build_pagination_object
   ├── charts/                        # Chart generation
-  │   ├── _legacy_import.py          # Temporary bridge to original implementation
-  │   └── lunar_return.py            # 🆕 Lunar return charts (native modular implementation)
-  ├── lifecycle/                     # 🆕 Lifecycle events detection (v0.4.0)
+  │   └── lunar_return.py            # Lunar return charts (ephemeris-based search)
+  ├── lifecycle/                     # Lifecycle events detection (v0.4.0)
   │   ├── __init__.py                # Package exports
+  │   ├── attach.py                  # attach_lifecycle_section (shared by all endpoints)
   │   ├── constants.py               # Orbital periods, significance levels, keywords
-  │   ├── returns.py                 # Planetary return calculations
+  │   ├── returns.py                 # Planetary return calculations, movement helpers
   │   ├── transits.py                # Major life transit detection
   │   ├── timeline.py                # Future predictions and lifecycle stages
+  │   ├── progressed.py              # Progressed Moon return detection
   │   └── lifecycle.py               # Master orchestration function
   └── interpretations/               # Aspect interpretations
       └── aspects.py                 # ASPECT_INTERPRETATIONS, context-aware interpretations
   ```
+
+  The tool functions themselves are defined in `immanuel_server.py` (imported
+  by `immanuel_mcp/server.py`); all shared helpers live in the package and
+  `immanuel_server.py` imports them - there are no duplicated copies.
 - **Key Components**:
   - MCP tool decorators expose functions as callable tools
   - Coordinate parsing system supporting multiple formats
@@ -114,21 +122,29 @@ The `generate_transit_to_natal` endpoint includes intelligent pagination to comp
 **Pagination Parameters:**
 - `aspect_priority: str = "tight"` - Priority tier to return
   - `"tight"`: 0-2° orb aspects (most critical, peak influence)
-  - `"moderate"`: 2-5° orb aspects (secondary priority, building/waning influence)
-  - `"loose"`: 5-8° orb aspects (background influences, subtle themes)
+  - `"moderate"`: >2-5° orb aspects (secondary priority, building/waning influence)
+  - `"loose"`: >5° orb aspects (background influences, subtle themes)
   - `"all"`: Return all aspects (warning: may exceed MCP size limits)
-- `include_all_aspects: bool = False` - Override filtering and return all aspects
+- `include_all_aspects: bool = False` - Deprecated; treated as `aspect_priority="all"` (and subject to the same lifecycle size guard)
+
+Orbs here are the **actual deviation from exactness** (Immanuel's `difference`
+field), not the configured maximum orb for the aspect type. Tier boundaries
+are inclusive at their upper edge (an aspect at exactly 2.0° is "tight").
 
 **Response Structure Enhancements:**
 - `aspect_summary`: Counts for tight/moderate/loose/total aspects
 - `pagination`: Current page, total pages, has_more_aspects, next_page, navigation instructions
+- Each aspect carries `transiting_object`/`natal_object` and a direction-aware
+  `planets` label ("transit Saturn → natal Sun"). Compact synastry aspects
+  carry `native_object`/`partner_object`. Immanuel's `active`/`passive` are
+  speed-ordered and do NOT indicate which chart an object belongs to.
 
 **Default Behavior:**
 Without specifying `aspect_priority`, the endpoint returns only tight aspects (0-2° orb), ensuring the response stays well under MCP limits while providing the most astrologically significant transits.
 
 ### Lifecycle Events Detection System (✅ v0.4.0 - Production Ready)
 
-All chart types (Transit-to-Natal, Solar Return, Progressed) include comprehensive lifecycle events detection, automatically identifying planetary returns and major life transits to provide context about where someone is in their astrological life journey.
+All chart types (Natal, Transit-to-Natal, Solar Return, Lunar Return, Progressed) include comprehensive lifecycle events detection, automatically identifying planetary returns and major life transits to provide context about where someone is in their astrological life journey.
 
 **What is Detected:**
 - **Planetary Returns**: Saturn Return, Jupiter Return, Uranus Opposition, Chiron Return, etc.
@@ -149,8 +165,10 @@ All chart types (Transit-to-Natal, Solar Return, Progressed) include comprehensi
       "transiting_object": "Saturn",
       "aspect_type": "Conjunction",
       "current_angular_separation": 1.2,
-      "orb_status": "applicative",
+      "orb_status": "tight",
+      "movement": "applying",
       "exact_date": "2025-01-15",
+      "exact_date_estimated": true,
       "date_range": "2024-11-20 to 2025-03-12",
       "age_at_event": 29.5,
       "years_until_event": 0.0,
@@ -178,9 +196,12 @@ All chart types (Transit-to-Natal, Solar Return, Progressed) include comprehensi
 
 **Field Definitions:**
 - `current_angular_separation`: Degrees (0-180°) between current and exact position. NOT traditional astrological orb, but actual angular distance remaining until the event becomes exact.
-- `orb_status`: "applicative" (approaching), "exact" (< 0.5°), or "separative" (past exact)
+- `orb_status`: Closeness relative to the event's orb tolerance: "exact" (< 0.5°), "tight", "moderate", "loose", or "inactive" (beyond tolerance; only on future-timeline entries)
+- `movement`: "applying" (moving toward exact), "exact", "separating" (past exact), or "stationary" - derived from the transiting planet's actual speed
+- `exact_date` / `exact_date_estimated`: Speed-based linear estimate of the perfection date. Always flagged as an estimate: retrograde passes can produce multiple exact hits for slow outer-planet events, which a single date cannot represent.
 - `status`: "active" (happening now), "upcoming" (future), or "past" (historical)
 - `category`: "return" (planetary return) or "major_transit" (square/opposition)
+- Future-timeline entries also carry `prediction_basis` ("mean_orbital_period" or "typical_age"): these are age arithmetic, not ephemeris searches, and actual timing varies by birth cohort (Pluto's eccentric orbit especially).
 
 **Significance Levels:**
 - **CRITICAL**: Saturn Returns, Uranus Opposition, Neptune Square, Pluto Square
@@ -235,14 +256,15 @@ Lunar return charts are a monthly predictive technique that calculates the chart
 **Astrological Significance:**
 - **Monthly Themes**: Shows energies and themes for the coming lunar month
 - **Timing**: Each lunar return marks the beginning of a new monthly cycle
-- **Precision**: Calculated to within 1 minute of the exact Moon return moment
+- **Precision**: Calculated to well under 1 minute of the exact Moon return moment (Moon within ~0.001° of the natal position)
 - **Application**: Used for monthly forecasting, similar to how solar returns are used for annual forecasting
 
 **Implementation Details:**
-- Custom algorithm finds the exact moment of Moon return within the specified month
-- Uses binary search refinement to pinpoint the return time within 1-minute accuracy
+- Searches in Julian-day space against the ephemeris directly (one swisseph call per probe), then bisects the bracketed crossing to under a minute of clock time
+- A 30/31-day month occasionally contains two lunar returns (~27.3-day cycle); the first is returned
 - Generates a standard natal chart for the return moment
 - Includes metadata: return_date, natal_moon_longitude, return_year, return_month
+- Includes lifecycle events context calculated at the return moment
 
 **Function Signatures:**
 
@@ -276,9 +298,11 @@ result = generate_lunar_return_chart(
     return_month=1,
     timezone="America/Los_Angeles"
 )
-# Returns: return_date: "2025-01-18T04:57:04"
+# Returns: return_date: "2025-01-18T05:27:08"
 #          natal_moon_longitude: 172.94
 #          Full chart data...
+# (Earlier docs cited 04:57:04 - that value came from the old search's
+#  0.1-degree tolerance and is superseded by the verified time above.)
 ```
 
 **Response Size:**
