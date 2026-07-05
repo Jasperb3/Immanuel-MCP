@@ -2,7 +2,8 @@
 """Check which functions are registered as MCP tools"""
 
 import sys
-sys.path.insert(0, '/mnt/c/Users/BJJ/Documents/MCP/astro-mcp')
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from immanuel_server import mcp
 

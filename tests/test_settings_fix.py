@@ -3,7 +3,8 @@
 
 import sys
 import json
-sys.path.insert(0, '/mnt/c/Users/BJJ/Documents/MCP/astro-mcp')
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import the function directly (without MCP server running)
 from immanuel import setup

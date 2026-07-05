@@ -7,7 +7,8 @@ Comprehensive Phase 2 Testing
 
 import sys
 import json
-sys.path.insert(0, '/mnt/c/Users/BJJ/Documents/MCP/astro-mcp')
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from immanuel_server import generate_compact_transit_to_natal, generate_transit_to_natal
 
