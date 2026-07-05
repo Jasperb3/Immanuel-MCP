@@ -35,17 +35,25 @@ def parse_coordinate(coord: str, is_latitude: bool = True) -> float:
 
     logger.debug(f"Parsing {coord_type}: original='{original_coord}', cleaned='{coord}'")
 
-    # Check for DMS pattern FIRST (before float conversion) to avoid scientific notation issues
-    # Pattern for formats like: 32n43, 32N43, 32n43'30, 117w09, 117e09, etc.
-    # Pattern for formats like: 32n43, 32N43, 32n43'30, 117w09, etc.
-    pattern = r'^(\d+)([nsewNSEW])(\d+)(?:[\'\"]*(\d+))?[\'\"]*$'
-    match = re.match(pattern, coord.replace(' ', ''))
+    # Check for DMS pattern FIRST (before float conversion) to avoid scientific notation issues.
+    # Matches formats like: 32n43, 32N43, 32n43'30 and 117w09, 117w09'30 (the
+    # delimiters were normalized to spaces above). Minutes and seconds are
+    # limited to two digits each and seconds must be delimiter-separated:
+    # matching on a digit-fused string let the minutes group swallow the
+    # seconds (117w09'30 parsed as 117 deg 930 min = -132.5 instead of -117.158).
+    pattern = r'^(\d{1,3})\s*([nsewNSEW])\s*(\d{1,2})(?:\s+(\d{1,2}(?:\.\d+)?))?\s*$'
+    match = re.match(pattern, coord)
 
     if match:
         degrees = int(match.group(1))
         direction = match.group(2).lower()
         minutes = int(match.group(3)) if match.group(3) else 0
-        seconds = int(match.group(4)) if match.group(4) else 0
+        seconds = float(match.group(4)) if match.group(4) else 0
+
+        if minutes >= 60 or seconds >= 60:
+            raise ValueError(
+                f"Invalid {coord_type}: '{original_coord}' has minutes or seconds >= 60"
+            )
 
         logger.debug(f"Matched DMS pattern: {degrees}° {minutes}' {seconds}\" {direction.upper()}")
 
@@ -79,6 +87,11 @@ def parse_coordinate(coord: str, is_latitude: bool = True) -> float:
             minutes = int(parts[1]) if len(parts) > 2 else 0
             seconds = int(parts[2]) if len(parts) > 3 else 0
             direction = parts[-1].lower()
+
+            if minutes >= 60 or seconds >= 60:
+                raise ValueError(
+                    f"Invalid {coord_type}: '{original_coord}' has minutes or seconds >= 60"
+                )
 
             logger.debug(f"Matched space-separated: {degrees}° {minutes}' {seconds}\" {direction.upper()}")
 

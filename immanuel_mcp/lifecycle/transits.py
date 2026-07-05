@@ -20,7 +20,12 @@ import logging
 from immanuel.const import chart as chart_const
 
 from .constants import MAJOR_LIFE_TRANSITS
-from .returns import PLANET_CONSTANTS, calculate_signed_orb
+from .returns import (
+    PLANET_CONSTANTS,
+    calculate_signed_orb,
+    determine_movement,
+    estimate_exact_datetime,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,25 +70,16 @@ def calculate_aspect_orb(
 
     target_angle = aspect_angles[aspect_type]
 
-    # Calculate raw angular separation
+    # Angular separation is |signed distance| and therefore lies in [0, 180],
+    # so both the waxing and waning square appear as separation ~= 90 and a
+    # single signed orb (separation - target) covers every case. The sign
+    # convention: negative = separation still short of the aspect angle,
+    # positive = past it. Whether that means applying or separating depends
+    # on the transiting planet's direction of motion - see
+    # check_major_transit, which derives it from the planet's speed.
     separation = abs(calculate_signed_orb(natal_pos, transit_pos))
 
-    # For square, check both 90° and 270° (waning square)
-    if aspect_type == "Square":
-        # Distance from 90° square
-        orb_90 = abs(separation - 90.0)
-        # Distance from 270° square (same as 90° waning)
-        orb_270 = abs(separation - 270.0)
-        # Use whichever is closer
-        orb = min(orb_90, orb_270)
-        # Return signed orb (negative if approaching, positive if separating)
-        # This is simplified - proper implementation would track transit motion
-        return orb if separation > target_angle else -orb
-
-    # For opposition (180°)
-    orb = separation - target_angle
-
-    return orb
+    return separation - target_angle
 
 
 def check_major_transit(
@@ -179,6 +175,18 @@ def check_major_transit(
     # Calculate age
     age = (transit_datetime - birth_datetime).days / 365.25
 
+    # Applying/separating from the transiting planet's speed. The signed
+    # aspect orb is (separation - target); separation = |signed distance|,
+    # so its rate of change is sign(distance) * speed.
+    speed = getattr(transit_planet, 'speed', None)
+    movement = None
+    estimated_exact = None
+    if isinstance(speed, (int, float)):
+        signed_distance = calculate_signed_orb(natal_pos, transit_pos)
+        orb_rate = speed if signed_distance >= 0 else -speed
+        movement = determine_movement(orb, orb_rate)
+        estimated_exact = estimate_exact_datetime(orb, orb_rate, transit_datetime)
+
     # Build transit data
     transit_data = {
         "name": transit_config["name"],
@@ -190,6 +198,8 @@ def check_major_transit(
         "transit_position": round(transit_pos, 2),
         "orb": round(orb, 2),
         "orb_status": orb_status,
+        "movement": movement,
+        "estimated_exact_date": estimated_exact.strftime("%Y-%m-%d") if estimated_exact else None,
         "significance": transit_config["significance"],
         "keywords": transit_config["keywords"],
         "description": transit_config["description"],

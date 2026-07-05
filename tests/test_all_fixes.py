@@ -7,7 +7,8 @@ Tests issues #2, #3, and #4
 import sys
 import json
 from datetime import datetime
-sys.path.insert(0, '/mnt/c/Users/BJJ/Documents/MCP/astro-mcp')
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from immanuel_server import (
     generate_compact_progressed_chart,

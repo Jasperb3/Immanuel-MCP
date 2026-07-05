@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, List
 from ..constants import CELESTIAL_BODIES
-from ..pagination.helpers import classify_aspect_priority
+from ..pagination.helpers import classify_aspect_priority, get_actual_orb
 
 def build_optimized_aspects(aspects: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
@@ -38,11 +38,21 @@ def build_optimized_aspects(aspects: List[Dict[str, Any]]) -> List[Dict[str, Any
         else:
             movement_str = str(movement)
 
-        # Build optimized aspect
+        # Prefer the true transit->natal direction when available;
+        # active/passive are speed-ordered and do not carry it.
+        transiting = aspect.get('transiting_object')
+        natal = aspect.get('natal_object')
+        if transiting and natal:
+            planets_label = f"transit {transiting} → natal {natal}"
+        else:
+            planets_label = f"{active_name} → {passive_name}"
+
+        # Build optimized aspect. 'orb' is the actual deviation from exact,
+        # not the configured maximum (see get_actual_orb).
         optimized_aspect = {
-            'planets': f"{active_name} → {passive_name}",
+            'planets': planets_label,
             'type': aspect.get('type'),
-            'orb': round(abs(aspect.get('orb', 0)), 2),
+            'orb': round(get_actual_orb(aspect), 2),
             'movement': movement_str,
             'priority': classify_aspect_priority(aspect)
         }

@@ -4,7 +4,8 @@ This package provides a Model Context Protocol (MCP) server that exposes
 the Immanuel Python astrology library as a set of tools for chart generation.
 
 Main Components:
-- server: MCP server setup and tool registration
+- app: The shared FastMCP server instance
+- server: Entry point that loads all tools onto the shared instance
 - constants: CELESTIAL_BODIES mapping and other constants
 - utils: Coordinate parsing, subject creation, error handling
 - optimizers: Response optimization (positions, aspects, dignities)
@@ -13,14 +14,15 @@ Main Components:
 - interpretations: Aspect interpretation data and logic
 
 Usage:
-    from immanuel_mcp import mcp
+    python -m immanuel_mcp
 
-    if __name__ == "__main__":
-        mcp.run()
+Note: this __init__ deliberately does NOT import .server. Tool modules
+import subpackages like immanuel_mcp.lifecycle at load time, so an eager
+.server import here would create a circular import chain.
 """
 
-from .server import mcp
+from .app import mcp
 from .constants import CELESTIAL_BODIES
 
-__version__ = "0.3.0"
+__version__ = "0.5.0"
 __all__ = ["mcp", "CELESTIAL_BODIES"]

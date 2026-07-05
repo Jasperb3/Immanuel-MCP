@@ -458,12 +458,22 @@ def normalize_aspects_to_list(aspects: Union[List[Dict[str, Any]], Dict[str, Any
     if isinstance(aspects, list):
         aspect_list = aspects
     elif isinstance(aspects, dict):
-        # Handle nested dict format: {from_id: {to_id: aspect_data}}
+        # Handle nested dict format: {from_id: {to_id: aspect_data}}.
+        # The nesting keys carry the only record of direction (in an
+        # aspects_to chart, from = this chart's object, to = the aspected
+        # chart's object), so they are preserved as from_index/to_index.
+        # Entries are copied so the caller's nested structure is not mutated.
         for from_key, to_aspects in aspects.items():
             if isinstance(to_aspects, dict):
                 for to_key, aspect_data in to_aspects.items():
                     if isinstance(aspect_data, dict):
-                        aspect_list.append(aspect_data)
+                        entry = dict(aspect_data)
+                        try:
+                            entry['from_index'] = int(from_key)
+                            entry['to_index'] = int(to_key)
+                        except (TypeError, ValueError):
+                            pass
+                        aspect_list.append(entry)
 
     # Filter out self-aspects if requested
     if filter_self_aspects:

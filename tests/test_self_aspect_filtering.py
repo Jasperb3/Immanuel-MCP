@@ -22,10 +22,11 @@ def test_no_self_aspects_in_full_endpoint():
     # Get all aspects (should already be a list after Task 1 fix)
     aspects = result.get("transit_to_natal_aspects", [])
 
-    # Check for self-aspects (using 'active' and 'passive' fields)
+    # Check for self-aspects (using 'active' and 'passive' fields, or 'planets' string)
     self_aspects = [
         asp for asp in aspects
-        if asp.get('active') == asp.get('passive')
+        if (asp.get('active') is not None and asp.get('active') == asp.get('passive')) or
+           (asp.get('planets') is not None and asp.get('planets').split(' → ')[0] == asp.get('planets').split(' → ')[1])
     ]
 
     assert len(self_aspects) == 0, f"Found {len(self_aspects)} self-aspects: {self_aspects}"
@@ -46,10 +47,11 @@ def test_no_self_aspects_in_compact_endpoint():
     # Get aspects (compact returns list directly)
     aspects = result.get("transit_to_natal_aspects", [])
 
-    # Check for self-aspects (using 'active' and 'passive' fields)
+    # Check for self-aspects (using 'active' and 'passive' fields, or 'planets' string)
     self_aspects = [
         asp for asp in aspects
-        if asp.get('active') == asp.get('passive')
+        if (asp.get('active') is not None and asp.get('active') == asp.get('passive')) or
+           (asp.get('planets') is not None and asp.get('planets').split(' → ')[0] == asp.get('planets').split(' → ')[1])
     ]
 
     assert len(self_aspects) == 0, f"Found {len(self_aspects)} self-aspects: {self_aspects}"

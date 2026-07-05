@@ -1,47 +1,34 @@
 #!/usr/bin/env python3
-"""Test script to verify modular structure imports correctly."""
+"""Verify the modular package structure imports correctly.
 
-import sys
+The tool functions live in immanuel_server.py and register against the
+shared FastMCP instance in immanuel_mcp.app; the former _legacy_import
+bridge is gone.
+"""
 
-print("Testing immanuel_mcp package imports...")
-print()
 
-# Test package import
-try:
+def test_package_import():
     import immanuel_mcp
-    print("[OK] Package import successful")
-    print(f"     Version: {immanuel_mcp.__version__}")
-except Exception as e:
-    print(f"[FAIL] Package import failed: {e}")
-    sys.exit(1)
+    assert immanuel_mcp.__version__
 
-# Test MCP server import
-try:
+
+def test_shared_mcp_instance():
     from immanuel_mcp import mcp
-    print("[OK] MCP server import successful")
-except Exception as e:
-    print(f"[FAIL] MCP server import failed: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
+    from immanuel_mcp.app import mcp as app_mcp
+    import immanuel_server
 
-# Test constants import
-try:
+    assert mcp is app_mcp
+    assert immanuel_server.mcp is app_mcp
+
+
+def test_constants_import():
     from immanuel_mcp import CELESTIAL_BODIES
-    print(f"[OK] CELESTIAL_BODIES import successful ({len(CELESTIAL_BODIES)} bodies)")
-except Exception as e:
-    print(f"[FAIL] CELESTIAL_BODIES import failed: {e}")
-    sys.exit(1)
+    assert len(CELESTIAL_BODIES) == 20
 
-# Test chart function imports (via legacy bridge)
-try:
-    from immanuel_mcp.charts._legacy_import import generate_natal_chart
-    print("[OK] Chart function imports successful")
-except Exception as e:
-    print(f"[FAIL] Chart function imports failed: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
 
-print()
-print("[SUCCESS] All modular structure imports working correctly!")
+def test_chart_functions_importable():
+    from immanuel_server import generate_natal_chart
+    from immanuel_mcp.charts.lunar_return import generate_lunar_return_chart
+
+    assert callable(generate_natal_chart)
+    assert callable(generate_lunar_return_chart)

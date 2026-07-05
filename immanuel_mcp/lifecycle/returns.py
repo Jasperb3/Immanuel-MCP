@@ -13,7 +13,7 @@ Key concepts:
 """
 
 from typing import Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 from immanuel.const import chart as chart_const
@@ -79,6 +79,55 @@ def calculate_signed_orb(natal_pos: float, transit_pos: float) -> float:
         diff += 360
 
     return diff
+
+
+def determine_movement(signed_orb: float, orb_rate: float, exact_threshold: float = 0.5) -> str:
+    """
+    Determine whether an event is applying, exact, or separating.
+
+    Args:
+        signed_orb: Signed deviation from exactness in degrees. The event is
+            exact when this reaches 0.
+        orb_rate: Rate of change of signed_orb in degrees per day (for a
+            return this is simply the transiting planet's speed; for an
+            aspect it must incorporate the direction of the separation).
+        exact_threshold: Within this many degrees the event counts as exact.
+
+    Returns:
+        "exact", "applying", "separating", or "stationary"
+    """
+    if abs(signed_orb) <= exact_threshold:
+        return "exact"
+    if orb_rate == 0:
+        return "stationary"
+    # The absolute orb shrinks when the orb and its rate have opposite signs.
+    return "applying" if signed_orb * orb_rate < 0 else "separating"
+
+
+def estimate_exact_datetime(signed_orb: float, orb_rate: float, reference: datetime):
+    """
+    Linear estimate of when an event perfects, from the current rate.
+
+    Retrograde loops mean slow outer-planet events can perfect several times
+    over one to two years; this single-date estimate cannot represent that
+    and is flagged as an estimate wherever it is surfaced.
+
+    Args:
+        signed_orb: Signed deviation from exactness in degrees
+        orb_rate: Rate of change of signed_orb in degrees per day
+        reference: Datetime the orb was measured at
+
+    Returns:
+        Estimated datetime of exactness, or None if the body is effectively
+        stationary or the estimate lands implausibly far away (> ~2 years,
+        where a linear projection through retrograde loops is meaningless).
+    """
+    if abs(orb_rate) < 1e-4:
+        return None
+    days = -signed_orb / orb_rate
+    if abs(days) > 730:
+        return None
+    return reference + timedelta(days=days)
 
 
 def determine_orb_status(orb: float, tolerance: float) -> str:
@@ -220,10 +269,20 @@ def calculate_planetary_return(
     # Calculate age and cycle number
     age = (transit_datetime - birth_datetime).days / 365.25
     orbital_period = ORBITAL_PERIODS.get(planet_name, 1.0)
-    cycle_number = int(age / orbital_period) + 1
+    cycle_number = max(1, round(age / orbital_period))
 
     # Get significance
     significance = get_return_significance(planet_name, cycle_number)
+
+    # Applying/separating and estimated perfection date from the transiting
+    # planet's current speed. For a return, the signed orb closes at exactly
+    # the planet's own rate of motion.
+    speed = getattr(transit_planet, 'speed', None)
+    movement = None
+    estimated_exact = None
+    if isinstance(speed, (int, float)):
+        movement = determine_movement(orb, speed)
+        estimated_exact = estimate_exact_datetime(orb, speed, transit_datetime)
 
     # Build return data
     return_data = {
@@ -234,6 +293,8 @@ def calculate_planetary_return(
         "transit_position": round(transit_pos, 2),
         "orb": round(orb, 2),
         "orb_status": orb_status,
+        "movement": movement,
+        "estimated_exact_date": estimated_exact.strftime("%Y-%m-%d") if estimated_exact else None,
         "natal_sign": natal_planet.sign.name,
         "transit_sign": transit_planet.sign.name,
         "significance": significance,

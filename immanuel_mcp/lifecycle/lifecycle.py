@@ -10,7 +10,13 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 import logging
 
-from .returns import detect_all_returns, PLANET_CONSTANTS, calculate_signed_orb, determine_orb_status
+from .returns import (
+    detect_all_returns,
+    PLANET_CONSTANTS,
+    calculate_signed_orb,
+    determine_orb_status,
+    determine_movement,
+)
 from .transits import detect_all_major_transits, calculate_aspect_orb, TRANSIT_ORB_TOLERANCE
 from .timeline import build_future_timeline, get_lifecycle_stage
 from .constants import (
@@ -76,11 +82,13 @@ def _enrich_future_events_with_orbs(
 
                 orb = calculate_signed_orb(natal_pos, transit_pos)
                 tolerance = RETURN_ORB_TOLERANCE.get(planet_name, 2.0)
-                orb_status = determine_orb_status(orb, tolerance)
 
                 # Angular distance (0-180°) between current and natal position
                 event["current_angular_separation"] = round(abs(orb), 2)
-                event["orb_status"] = "applicative" if abs(orb) > 0.5 else "exact"
+                event["orb_status"] = determine_orb_status(orb, tolerance)
+                speed = getattr(transit_planet, 'speed', None)
+                if isinstance(speed, (int, float)):
+                    event["movement"] = determine_movement(orb, speed)
 
             elif event_type == "major_transit":
                 # Calculate orb for major life transit
@@ -109,8 +117,14 @@ def _enrich_future_events_with_orbs(
 
                 if orb is not None:
                     # Angular distance from exact aspect (e.g., 90° for square)
+                    tolerance = TRANSIT_ORB_TOLERANCE.get(aspect_type, 3.0)
                     event["current_angular_separation"] = round(abs(orb), 2)
-                    event["orb_status"] = "applicative" if abs(orb) > 0.5 else "exact"
+                    event["orb_status"] = determine_orb_status(orb, tolerance)
+                    speed = getattr(transit_planet, 'speed', None)
+                    if isinstance(speed, (int, float)):
+                        signed_distance = calculate_signed_orb(natal_pos, transit_pos)
+                        orb_rate = speed if signed_distance >= 0 else -speed
+                        event["movement"] = determine_movement(orb, orb_rate)
 
         except Exception as e:
             logger.warning(
@@ -348,7 +362,11 @@ def build_past_events_summary(current_age: float) -> list[Dict[str, Any]]:
                 "event_type": event_type,
                 "name": event_name,
                 "typical_age": typical_age,
-                "completed_at_age": typical_age,  # Approximation
+                "completed_at_age": typical_age,
+                # These are generic typical ages, not chart-derived dates.
+                # Actual timing varies by cohort (Pluto's eccentric orbit
+                # especially), so consumers must not present them as history.
+                "approximate": True,
                 "years_ago": round(current_age - typical_age, 1)
             })
 
@@ -453,6 +471,8 @@ def _build_return_event_entry(
     years_until: float = 0.0,
     orb: Optional[float] = None,  # Now represents current_angular_separation
     orb_status: Optional[str] = None,
+    movement: Optional[str] = None,
+    estimated_exact_date: Optional[str] = None,
     natal_position: Optional[float] = None,
     transit_position: Optional[float] = None
 ) -> Dict[str, Any]:
@@ -463,10 +483,23 @@ def _build_return_event_entry(
         orb: Current angular separation (0-180°) between current and natal position.
              NOT the traditional astrological orb, but the actual degrees remaining
              until the planet returns to its natal position.
+        movement: "applying", "exact", "separating", or "stationary" derived
+             from the transiting planet's speed.
+        estimated_exact_date: Speed-based linear estimate of the perfection
+             date. Retrograde loops can produce multiple exact hits, so this
+             is always an estimate (exact_date_estimated is set on the entry).
     """
     tolerance = RETURN_ORB_TOLERANCE.get(planet, 2.0)
-    date_range = _estimate_date_range(planet, tolerance, reference_datetime)
-    exact_date = reference_datetime.strftime("%Y-%m-%d") if reference_datetime else None
+    exact_center = None
+    if estimated_exact_date:
+        try:
+            exact_center = datetime.fromisoformat(estimated_exact_date)
+        except ValueError:
+            exact_center = None
+    date_range = _estimate_date_range(planet, tolerance, exact_center or reference_datetime)
+    exact_date = estimated_exact_date or (
+        reference_datetime.strftime("%Y-%m-%d") if reference_datetime else None
+    )
     interpretation = _get_return_interpretation(planet, cycle)
 
     entry = {
@@ -478,7 +511,9 @@ def _build_return_event_entry(
         "aspect_type": "Conjunction",
         "current_angular_separation": round(abs(orb), 2) if orb is not None else None,
         "orb_status": orb_status,
+        "movement": movement,
         "exact_date": exact_date,
+        "exact_date_estimated": True,
         "date_range": date_range,
         "age_at_event": round(age, 1) if age is not None else None,
         "years_until_event": round(max(years_until, 0.0), 1),
@@ -511,17 +546,32 @@ def _format_major_transit_event(
     traditional astrological orb, but the actual degrees remaining until the aspect
     becomes exact.
     """
-    exact_date = reference_datetime.strftime("%Y-%m-%d") if reference_datetime else None
+    # Prefer the speed-based perfection estimate over echoing the request
+    # date; both are estimates (retrograde passes can produce several exact
+    # hits) and are flagged as such.
+    estimated_exact_date = event.get("estimated_exact_date")
+    exact_center = None
+    if estimated_exact_date:
+        try:
+            exact_center = datetime.fromisoformat(estimated_exact_date)
+        except ValueError:
+            exact_center = None
+    exact_date = estimated_exact_date or (
+        reference_datetime.strftime("%Y-%m-%d") if reference_datetime else None
+    )
 
     # Calculate date range for the transit window
     date_range = _estimate_transit_date_range(
         transit_object=event.get("transit_object"),
         aspect_type=event.get("aspect_type"),
-        center=reference_datetime
+        center=exact_center or reference_datetime
     )
 
-    # Use current angular separation if present (from enrichment), otherwise None for future events
+    # Use current angular separation if present (from enrichment); active
+    # events from check_major_transit carry it as a signed "orb" instead.
     angular_separation = event.get("current_angular_separation")
+    if angular_separation is None and event.get("orb") is not None:
+        angular_separation = event.get("orb")
     orb_status_value = event.get("orb_status")
 
     entry = {
@@ -533,7 +583,9 @@ def _format_major_transit_event(
         "aspect_type": event.get("aspect_type"),
         "current_angular_separation": round(abs(angular_separation), 2) if angular_separation is not None else None,
         "orb_status": orb_status_value,
+        "movement": event.get("movement"),
         "exact_date": exact_date,
+        "exact_date_estimated": True,
         "date_range": date_range,
         "age_at_event": round(event.get("age"), 1) if event.get("age") else event.get("typical_age"),
         "years_until_event": 0.0 if status == "active" else event.get("years_until"),
@@ -575,7 +627,8 @@ def _format_future_event(event: Dict[str, Any]) -> Dict[str, Any]:
             status="upcoming",
             years_until=event.get("years_until", 0.0),
             orb=current_angular_separation,
-            orb_status=orb_status
+            orb_status=orb_status,
+            movement=event.get("movement")
         )
 
     predicted_dt = None
@@ -667,6 +720,8 @@ def format_lifecycle_event_feed(
                     years_until=0.0,
                     orb=event.get("orb"),
                     orb_status=event.get("orb_status"),
+                    movement=event.get("movement"),
+                    estimated_exact_date=event.get("estimated_exact_date"),
                     natal_position=event.get("natal_position"),
                     transit_position=event.get("transit_position")
                 )
