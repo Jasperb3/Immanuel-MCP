@@ -193,3 +193,74 @@ def test_lunar_return_cross_aspects_use_return_object_labels():
         and a["type"] == "Conjunction"
         for a in cross
     )
+
+
+# ---------------------------------------------------------------------------
+# I3: relocated solar and lunar returns
+# ---------------------------------------------------------------------------
+
+LONDON = ("51.5", "-0.12")
+
+
+def test_relocated_solar_return_same_instant_different_ascendant():
+    home = immanuel_server.generate_solar_return_chart(*BIRTH, 2025, timezone=TZ)
+    reloc = immanuel_server.generate_solar_return_chart(
+        *BIRTH, 2025, timezone=TZ,
+        return_latitude=LONDON[0], return_longitude=LONDON[1])
+    assert not home.get("error") and not reloc.get("error"), (home, reloc)
+
+    # Same return moment: both charts express it in the birth timezone, so
+    # the serialized return datetimes must be identical (sidereal_time is
+    # location-dependent by definition and rightly differs).
+    assert home["solar_return_date_time"]["datetime"] == \
+        reloc["solar_return_date_time"]["datetime"]
+    assert home["solar_return_date_time"]["timezone"] == \
+        reloc["solar_return_date_time"]["timezone"]
+
+    # Different houses: Ascendant moves with the location
+    home_asc = home["objects"]["3000001"]["longitude"]["raw"]
+    reloc_asc = reloc["objects"]["3000001"]["longitude"]["raw"]
+    assert abs(home_asc - reloc_asc) > 1.0
+
+    assert reloc["return_location"] == {
+        "latitude": 51.5, "longitude": -0.12, "relocated": True}
+    assert home["return_location"]["relocated"] is False
+
+
+def test_relocated_lunar_return_same_instant_different_houses():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    home = lunar_return_module.generate_lunar_return_chart(
+        *BIRTH, 2025, 1, timezone=TZ)
+    reloc = lunar_return_module.generate_lunar_return_chart(
+        *BIRTH, 2025, 1, timezone=TZ,
+        return_latitude=LONDON[0], return_longitude=LONDON[1])
+    assert not home.get("error") and not reloc.get("error"), (home, reloc)
+
+    # Same absolute instant: home return_date is naive local (birth tz),
+    # relocated return_date is aware local at the return location.
+    home_utc = datetime.fromisoformat(home["lunar_return_info"]["return_date"]) \
+        .replace(tzinfo=ZoneInfo(TZ)).astimezone(ZoneInfo("UTC"))
+    reloc_utc = datetime.fromisoformat(reloc["lunar_return_info"]["return_date"]) \
+        .astimezone(ZoneInfo("UTC"))
+    assert abs((home_utc - reloc_utc).total_seconds()) < 60
+
+    # Natal Moon longitude comes from the birth-location natal chart either way
+    assert home["lunar_return_info"]["natal_moon_longitude"] == pytest.approx(
+        reloc["lunar_return_info"]["natal_moon_longitude"])
+
+    home_asc = home["objects"]["3000001"]["longitude"]["raw"]
+    reloc_asc = reloc["objects"]["3000001"]["longitude"]["raw"]
+    assert abs(home_asc - reloc_asc) > 1.0
+
+    assert reloc["return_location"]["relocated"] is True
+
+
+def test_unrelocated_returns_unchanged_from_v050():
+    # Regression pin: omitting the relocation params keeps prior behaviour
+    result = lunar_return_module.generate_lunar_return_chart(
+        *BIRTH, 2025, 1, timezone=TZ)
+    assert result["lunar_return_info"]["return_date"].startswith("2025-01-18T05:27")
+    assert result["return_location"] == {
+        "latitude": 32.71, "longitude": -117.15, "relocated": False}

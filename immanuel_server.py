@@ -408,10 +408,18 @@ def generate_solar_return_chart(
     return_year: int,
     timezone: str = None,
     house_system: str = None,
-    include_natal_aspects: bool = True
+    include_natal_aspects: bool = True,
+    return_latitude: str = None,
+    return_longitude: str = None
 ) -> Dict[str, Any]:
     """
     Generates a solar return chart for a given year.
+
+    Return charts are conventionally cast for where the person is at the
+    return moment, not the birthplace: pass return_latitude/return_longitude
+    to relocate. The return moment itself is location-independent and stays
+    identical; only the houses/angles change. Timestamps remain expressed in
+    the birth timezone.
 
     Args:
         date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
@@ -424,11 +432,15 @@ def generate_solar_return_chart(
         include_natal_aspects: Include return-planet-to-natal aspects — a primary
                                layer of return interpretation — under
                                'natal_cross_aspects' (default: True).
+        return_latitude: Optional latitude to relocate the return chart to
+                         (defaults to the birth latitude).
+        return_longitude: Optional longitude to relocate the return chart to
+                          (defaults to the birth longitude).
 
     Returns:
         The full SolarReturn chart object serialized to a JSON dictionary, plus
         return-to-natal aspects under 'natal_cross_aspects' (each entry carries
-        'return_object' and 'natal_object').
+        'return_object' and 'natal_object') and a 'return_location' echo.
     """
     try:
         logger.info(f"Generating solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
@@ -446,12 +458,28 @@ def generate_solar_return_chart(
 
         call_settings = build_call_settings(house_system)
 
+        relocated = return_latitude is not None or return_longitude is not None
+        return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
+        return_lon = parse_coordinate(return_longitude, is_latitude=False) if return_longitude else lon
+
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate charts
         natal_chart = charts.Natal(subject, settings=call_settings)
-        solar_return = charts.SolarReturn(subject, return_year, settings=call_settings)
+
+        if relocated:
+            # The return moment depends only on the Sun's geocentric longitude
+            # (location-independent), so relocation = casting the same moment
+            # at other coordinates. The birth *instant* must be preserved:
+            # pass the resolved birth timezone explicitly, otherwise it would
+            # be reinterpreted in the return location's zone and the whole
+            # chart silently wrong.
+            birth_tz = timezone or str(subject.date_time.tzinfo)
+            return_subject = create_subject(date_time, return_lat, return_lon, birth_tz)
+        else:
+            return_subject = subject
+        solar_return = charts.SolarReturn(return_subject, return_year, settings=call_settings)
 
         # Serialize to JSON
         result = json.loads(json.dumps(solar_return, cls=ToJSON))
@@ -460,7 +488,7 @@ def generate_solar_return_chart(
         # under 'aspects'; the two lists are never merged)
         if include_natal_aspects:
             cross_chart = charts.SolarReturn(
-                subject, return_year,
+                return_subject, return_year,
                 aspects_to=natal_chart, settings=call_settings
             )
             cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
@@ -502,6 +530,11 @@ def generate_solar_return_chart(
             result["lifecycle_events"] = None
             result["lifecycle_summary"] = None
 
+        result["return_location"] = {
+            "latitude": return_lat,
+            "longitude": return_lon,
+            "relocated": relocated
+        }
         result["applied_settings"] = build_applied_settings(house_system)
         logger.info("Solar return chart generated successfully")
         return result
@@ -520,7 +553,9 @@ def generate_compact_solar_return_chart(
     timezone: str = None,
     house_system: str = None,
     include_natal_aspects: bool = True,
-    aspect_priority: str = "tight"
+    aspect_priority: str = "tight",
+    return_latitude: str = None,
+    return_longitude: str = None
 ) -> Dict[str, Any]:
     """
     Generates a compact solar return chart for a given year.
@@ -528,6 +563,12 @@ def generate_compact_solar_return_chart(
     This tool provides a streamlined version of the solar return chart, focusing on the most critical
     astrological data: major celestial objects, their positions, and major aspects. It omits
     more detailed data like weightings and chart shape for a faster and more concise output.
+
+    Return charts are conventionally cast for where the person is at the
+    return moment, not the birthplace: pass return_latitude/return_longitude
+    to relocate. The return moment itself is location-independent and stays
+    identical; only the houses/angles change. Timestamps remain expressed in
+    the birth timezone.
 
     Args:
         date_time: The birth date and time in ISO format, e.g., 'YYYY-MM-DD HH:MM:SS'.
@@ -542,11 +583,15 @@ def generate_compact_solar_return_chart(
         aspect_priority: Priority tier for the natal cross-aspects - "tight"
                          (default, 0-2° actual orb), "moderate" (>2-5°),
                          "loose" (>5°), or "all".
+        return_latitude: Optional latitude to relocate the return chart to
+                         (defaults to the birth latitude).
+        return_longitude: Optional longitude to relocate the return chart to
+                          (defaults to the birth longitude).
 
     Returns:
         A compact SolarReturn chart object serialized to a JSON dictionary, plus
         return-to-natal aspects under 'natal_cross_aspects' (each entry carries
-        'return_object' and 'natal_object').
+        'return_object' and 'natal_object') and a 'return_location' echo.
     """
     try:
         logger.info(f"Generating compact solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
@@ -564,12 +609,28 @@ def generate_compact_solar_return_chart(
 
         call_settings = build_call_settings(house_system)
 
+        relocated = return_latitude is not None or return_longitude is not None
+        return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
+        return_lon = parse_coordinate(return_longitude, is_latitude=False) if return_longitude else lon
+
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate charts
         natal_chart = charts.Natal(subject, settings=call_settings)
-        solar_return = charts.SolarReturn(subject, return_year, settings=call_settings)
+
+        if relocated:
+            # The return moment depends only on the Sun's geocentric longitude
+            # (location-independent), so relocation = casting the same moment
+            # at other coordinates. The birth *instant* must be preserved:
+            # pass the resolved birth timezone explicitly, otherwise it would
+            # be reinterpreted in the return location's zone and the whole
+            # chart silently wrong.
+            birth_tz = timezone or str(subject.date_time.tzinfo)
+            return_subject = create_subject(date_time, return_lat, return_lon, birth_tz)
+        else:
+            return_subject = subject
+        solar_return = charts.SolarReturn(return_subject, return_year, settings=call_settings)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(solar_return, cls=CompactJSONSerializer))
@@ -577,7 +638,7 @@ def generate_compact_solar_return_chart(
         # Return-to-natal aspects (major objects/aspects, priority-filtered)
         if include_natal_aspects:
             cross_chart = charts.SolarReturn(
-                subject, return_year,
+                return_subject, return_year,
                 aspects_to=natal_chart, settings=call_settings
             )
             cross_data = json.loads(json.dumps(cross_chart, cls=CompactJSONSerializer))
@@ -621,6 +682,11 @@ def generate_compact_solar_return_chart(
             result["lifecycle_events"] = None
             result["lifecycle_summary"] = None
 
+        result["return_location"] = {
+            "latitude": return_lat,
+            "longitude": return_lon,
+            "relocated": relocated
+        }
         result["applied_settings"] = build_applied_settings(house_system)
         logger.info("Compact solar return chart generated successfully")
         return result
