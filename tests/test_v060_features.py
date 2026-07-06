@@ -124,3 +124,72 @@ def test_house_system_accepted_by_all_chart_tools():
         assert not result.get("error"), result
         assert result["applied_settings"]["house_system"] == "Campanus"
         assert result["applied_settings"]["source"] == "per-call"
+
+
+# ---------------------------------------------------------------------------
+# I2: natal cross-aspects on predictive charts
+# ---------------------------------------------------------------------------
+
+PROGRESSION_DATE = "2026-07-06 12:00:00"
+
+
+def test_progressed_chart_carries_natal_cross_aspects():
+    result = immanuel_server.generate_progressed_chart(
+        *BIRTH, PROGRESSION_DATE, timezone=TZ)
+    assert not result.get("error"), result
+    cross = result["natal_cross_aspects"]
+    assert cross, "expected progressed-to-natal aspects"
+    for aspect in cross:
+        assert "progressed_object" in aspect and "natal_object" in aspect
+        assert aspect["priority"] in {"tight", "moderate", "loose"}
+    # Known contact for this subject: progressed Sun conjunct natal MC (~1.0 orb)
+    assert any(
+        a["progressed_object"] == "Sun" and a["natal_object"] == "MC"
+        and a["type"] == "Conjunction" and a["orb"] < 2.0
+        for a in cross
+    )
+    # The chart's own internal aspects are untouched (nested dict keyed by object)
+    assert isinstance(result["aspects"], dict)
+
+
+def test_include_natal_aspects_false_yields_none():
+    result = immanuel_server.generate_progressed_chart(
+        *BIRTH, PROGRESSION_DATE, timezone=TZ, include_natal_aspects=False)
+    assert not result.get("error"), result
+    assert result["natal_cross_aspects"] is None
+
+
+def test_compact_progressed_cross_aspects_respect_priority():
+    tight = immanuel_server.generate_compact_progressed_chart(
+        *BIRTH, PROGRESSION_DATE, timezone=TZ, aspect_priority="tight")
+    moderate = immanuel_server.generate_compact_progressed_chart(
+        *BIRTH, PROGRESSION_DATE, timezone=TZ, aspect_priority="moderate")
+    assert not tight.get("error") and not moderate.get("error")
+    assert all(a["orb"] <= 2.0 for a in tight["natal_cross_aspects"])
+    assert all(2.0 < a["orb"] <= 5.0 for a in moderate["natal_cross_aspects"])
+    summary = tight["natal_cross_aspect_summary"]
+    assert summary["total_aspects"] == (
+        summary["tight_aspects"] + summary["moderate_aspects"] + summary["loose_aspects"])
+
+
+def test_solar_return_cross_aspects_use_return_object_labels():
+    result = immanuel_server.generate_solar_return_chart(*BIRTH, 2025, timezone=TZ)
+    assert not result.get("error"), result
+    cross = result["natal_cross_aspects"]
+    assert cross
+    assert all("return_object" in a and "natal_object" in a for a in cross)
+
+
+def test_lunar_return_cross_aspects_use_return_object_labels():
+    result = lunar_return_module.generate_compact_lunar_return_chart(
+        *BIRTH, 2025, 1, timezone=TZ)
+    assert not result.get("error"), result
+    cross = result["natal_cross_aspects"]
+    assert cross
+    assert all("return_object" in a and "natal_object" in a for a in cross)
+    # Moon-to-natal-Moon conjunction is definitional for a lunar return
+    assert any(
+        a["return_object"] == "Moon" and a["natal_object"] == "Moon"
+        and a["type"] == "Conjunction"
+        for a in cross
+    )

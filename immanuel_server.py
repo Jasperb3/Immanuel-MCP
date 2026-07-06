@@ -67,6 +67,10 @@ from immanuel_mcp.utils.settings import build_call_settings, build_applied_setti
 from immanuel_mcp.optimizers.positions import build_optimized_transit_positions
 from immanuel_mcp.optimizers.dignities import build_dignities_section
 from immanuel_mcp.optimizers.aspects import build_optimized_aspects
+from immanuel_mcp.optimizers.cross_aspects import (
+    build_full_cross_aspects,
+    build_compact_cross_aspects,
+)
 from immanuel_mcp.pagination.helpers import (
     classify_all_aspects,
     filter_aspects_by_priority,
@@ -403,7 +407,8 @@ def generate_solar_return_chart(
     longitude: str,
     return_year: int,
     timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    include_natal_aspects: bool = True
 ) -> Dict[str, Any]:
     """
     Generates a solar return chart for a given year.
@@ -416,9 +421,14 @@ def generate_solar_return_chart(
         timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        include_natal_aspects: Include return-planet-to-natal aspects — a primary
+                               layer of return interpretation — under
+                               'natal_cross_aspects' (default: True).
 
     Returns:
-        The full SolarReturn chart object serialized to a JSON dictionary.
+        The full SolarReturn chart object serialized to a JSON dictionary, plus
+        return-to-natal aspects under 'natal_cross_aspects' (each entry carries
+        'return_object' and 'natal_object').
     """
     try:
         logger.info(f"Generating solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
@@ -445,6 +455,19 @@ def generate_solar_return_chart(
 
         # Serialize to JSON
         result = json.loads(json.dumps(solar_return, cls=ToJSON))
+
+        # Return-to-natal aspects (the chart's own internal aspects stay
+        # under 'aspects'; the two lists are never merged)
+        if include_natal_aspects:
+            cross_chart = charts.SolarReturn(
+                subject, return_year,
+                aspects_to=natal_chart, settings=call_settings
+            )
+            cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
+            result["natal_cross_aspects"] = build_full_cross_aspects(
+                cross_data, "return_object")
+        else:
+            result["natal_cross_aspects"] = None
 
         # Extract solar return datetime (handle wrapped DateTime object)
         solar_return_dt_obj = getattr(solar_return, 'solar_return_date_time', None)
@@ -495,7 +518,9 @@ def generate_compact_solar_return_chart(
     longitude: str,
     return_year: int,
     timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    include_natal_aspects: bool = True,
+    aspect_priority: str = "tight"
 ) -> Dict[str, Any]:
     """
     Generates a compact solar return chart for a given year.
@@ -512,9 +537,16 @@ def generate_compact_solar_return_chart(
         timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        include_natal_aspects: Include return-planet-to-natal aspects under
+                               'natal_cross_aspects' (default: True).
+        aspect_priority: Priority tier for the natal cross-aspects - "tight"
+                         (default, 0-2° actual orb), "moderate" (>2-5°),
+                         "loose" (>5°), or "all".
 
     Returns:
-        A compact SolarReturn chart object serialized to a JSON dictionary.
+        A compact SolarReturn chart object serialized to a JSON dictionary, plus
+        return-to-natal aspects under 'natal_cross_aspects' (each entry carries
+        'return_object' and 'natal_object').
     """
     try:
         logger.info(f"Generating compact solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
@@ -541,6 +573,20 @@ def generate_compact_solar_return_chart(
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(solar_return, cls=CompactJSONSerializer))
+
+        # Return-to-natal aspects (major objects/aspects, priority-filtered)
+        if include_natal_aspects:
+            cross_chart = charts.SolarReturn(
+                subject, return_year,
+                aspects_to=natal_chart, settings=call_settings
+            )
+            cross_data = json.loads(json.dumps(cross_chart, cls=CompactJSONSerializer))
+            cross_aspects, cross_summary = build_compact_cross_aspects(
+                cross_data, "return_object", aspect_priority)
+            result["natal_cross_aspects"] = cross_aspects
+            result["natal_cross_aspect_summary"] = cross_summary
+        else:
+            result["natal_cross_aspects"] = None
 
         # Extract solar return datetime (handle wrapped DateTime object)
         solar_return_dt_obj = getattr(solar_return, 'solar_return_date_time', None)
@@ -591,7 +637,8 @@ def generate_progressed_chart(
     longitude: str,
     progression_date_time: str,
     timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    include_natal_aspects: bool = True
 ) -> Dict[str, Any]:
     """
     Generates a secondary progression chart for a native chart to a specific future date.
@@ -604,9 +651,14 @@ def generate_progressed_chart(
         timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        include_natal_aspects: Include progressed-to-natal aspects — the core
+                               technique of secondary progressions — under
+                               'natal_cross_aspects' (default: True).
 
     Returns:
-        The full Progressed chart object serialized to a JSON dictionary.
+        The full Progressed chart object serialized to a JSON dictionary, plus
+        progressed-to-natal aspects under 'natal_cross_aspects' (each entry
+        carries 'progressed_object' and 'natal_object').
     """
     try:
         logger.info(f"Generating progressed chart from {date_time} to {progression_date_time} at {latitude}, {longitude}")
@@ -630,6 +682,19 @@ def generate_progressed_chart(
 
         # Serialize to JSON
         result = json.loads(json.dumps(progressed, cls=ToJSON))
+
+        # Progressed-to-natal aspects (the chart's own internal aspects stay
+        # under 'aspects'; the two lists are never merged)
+        if include_natal_aspects:
+            cross_chart = charts.Progressed(
+                subject, progression_date_time,
+                aspects_to=natal_chart, settings=call_settings
+            )
+            cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
+            result["natal_cross_aspects"] = build_full_cross_aspects(
+                cross_data, "progressed_object")
+        else:
+            result["natal_cross_aspects"] = None
 
         # Extract progression datetime (handle wrapped DateTime object)
         progression_dt_obj = getattr(progressed, 'progression_date_time', None)
@@ -688,7 +753,9 @@ def generate_compact_progressed_chart(
     longitude: str,
     progression_date_time: str,
     timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    include_natal_aspects: bool = True,
+    aspect_priority: str = "tight"
 ) -> Dict[str, Any]:
     """
     Generates a compact secondary progression chart for a native chart to a specific future date.
@@ -705,9 +772,16 @@ def generate_compact_progressed_chart(
         timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York').
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        include_natal_aspects: Include progressed-to-natal aspects under
+                               'natal_cross_aspects' (default: True).
+        aspect_priority: Priority tier for the natal cross-aspects - "tight"
+                         (default, 0-2° actual orb), "moderate" (>2-5°),
+                         "loose" (>5°), or "all".
 
     Returns:
-        A compact Progressed chart object serialized to a JSON dictionary.
+        A compact Progressed chart object serialized to a JSON dictionary, plus
+        progressed-to-natal aspects under 'natal_cross_aspects' (each entry
+        carries 'progressed_object' and 'natal_object').
     """
     try:
         logger.info(f"Generating compact progressed chart from {date_time} to {progression_date_time} at {latitude}, {longitude}")
@@ -731,6 +805,20 @@ def generate_compact_progressed_chart(
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(progressed, cls=CompactJSONSerializer))
+
+        # Progressed-to-natal aspects (major objects/aspects, priority-filtered)
+        if include_natal_aspects:
+            cross_chart = charts.Progressed(
+                subject, progression_date_time,
+                aspects_to=natal_chart, settings=call_settings
+            )
+            cross_data = json.loads(json.dumps(cross_chart, cls=CompactJSONSerializer))
+            cross_aspects, cross_summary = build_compact_cross_aspects(
+                cross_data, "progressed_object", aspect_priority)
+            result["natal_cross_aspects"] = cross_aspects
+            result["natal_cross_aspect_summary"] = cross_summary
+        else:
+            result["natal_cross_aspects"] = None
 
         # Extract progression datetime (handle wrapped DateTime object)
         progression_dt_obj = getattr(progressed, 'progression_date_time', None)

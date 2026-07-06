@@ -29,6 +29,10 @@ from ..utils.coordinates import parse_coordinate
 from ..utils.subjects import create_subject
 from ..utils.errors import handle_chart_error, validate_inputs
 from ..utils.settings import build_call_settings, build_applied_settings
+from ..optimizers.cross_aspects import (
+    build_full_cross_aspects,
+    build_compact_cross_aspects,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +138,8 @@ def generate_lunar_return_chart(
     return_year: int,
     return_month: int,
     timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    include_natal_aspects: bool = True
 ) -> Dict[str, Any]:
     """
     Calculate lunar return chart for specified month/year.
@@ -152,9 +157,13 @@ def generate_lunar_return_chart(
         timezone: Optional IANA timezone name (e.g., 'America/New_York')
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        include_natal_aspects: Include return-planet-to-natal aspects under
+                               'natal_cross_aspects' (default: True).
 
     Returns:
-        Full lunar return chart with all positions and aspects
+        Full lunar return chart with all positions and aspects, plus
+        return-to-natal aspects under 'natal_cross_aspects' (each entry
+        carries 'return_object' and 'natal_object')
     """
     try:
         logger.info(f"Generating lunar return chart for {date_time} at {latitude}, {longitude} for {return_year}-{return_month:02d}")
@@ -205,6 +214,17 @@ def generate_lunar_return_chart(
         # Serialize to JSON
         result = json.loads(json.dumps(lunar_return_chart, cls=ToJSON))
 
+        # Return-to-natal aspects (the chart's own internal aspects stay
+        # under 'aspects'; the two lists are never merged)
+        if include_natal_aspects:
+            cross_chart = charts.Natal(
+                return_subject, aspects_to=natal_chart, settings=call_settings)
+            cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
+            result["natal_cross_aspects"] = build_full_cross_aspects(
+                cross_data, "return_object")
+        else:
+            result["natal_cross_aspects"] = None
+
         # Add metadata about the lunar return
         result['lunar_return_info'] = {
             'return_date': lunar_return_dt.isoformat(),
@@ -240,7 +260,9 @@ def generate_compact_lunar_return_chart(
     return_year: int,
     return_month: int,
     timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    include_natal_aspects: bool = True,
+    aspect_priority: str = "tight"
 ) -> Dict[str, Any]:
     """
     Calculate compact lunar return chart with optimized response.
@@ -259,9 +281,16 @@ def generate_compact_lunar_return_chart(
         timezone: Optional IANA timezone name (e.g., 'America/New_York')
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        include_natal_aspects: Include return-planet-to-natal aspects under
+                               'natal_cross_aspects' (default: True).
+        aspect_priority: Priority tier for the natal cross-aspects - "tight"
+                         (default, 0-2° actual orb), "moderate" (>2-5°),
+                         "loose" (>5°), or "all".
 
     Returns:
-        Compact lunar return chart optimized for LLM processing
+        Compact lunar return chart optimized for LLM processing, plus
+        return-to-natal aspects under 'natal_cross_aspects' (each entry
+        carries 'return_object' and 'natal_object')
     """
     try:
         logger.info(f"Generating compact lunar return chart for {date_time} at {latitude}, {longitude} for {return_year}-{return_month:02d}")
@@ -311,6 +340,18 @@ def generate_compact_lunar_return_chart(
 
         # Serialize to JSON using compact serializer
         result = json.loads(json.dumps(lunar_return_chart, cls=CompactJSONSerializer))
+
+        # Return-to-natal aspects (major objects/aspects, priority-filtered)
+        if include_natal_aspects:
+            cross_chart = charts.Natal(
+                return_subject, aspects_to=natal_chart, settings=call_settings)
+            cross_data = json.loads(json.dumps(cross_chart, cls=CompactJSONSerializer))
+            cross_aspects, cross_summary = build_compact_cross_aspects(
+                cross_data, "return_object", aspect_priority)
+            result["natal_cross_aspects"] = cross_aspects
+            result["natal_cross_aspect_summary"] = cross_summary
+        else:
+            result["natal_cross_aspects"] = None
 
         # Add metadata about the lunar return
         result['lunar_return_info'] = {
