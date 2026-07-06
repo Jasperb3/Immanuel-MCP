@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-07-06
+
+Interpretive-capability release: exposes per-call settings and the
+natal-aspect cross-referencing the immanuel library already supports, and
+removes the remaining mutable-global-settings hazard.
+
+### Added
+- **Per-call `house_system` on every chart tool** (e.g. `"CAMPANUS"`,
+  `"WHOLE_SIGN"`), applied to all charts built within the call via an
+  isolated settings object — the session-global settings are untouched.
+  Invalid names return a structured error listing all 23 valid values.
+  Per-call overrides start from library defaults and deliberately ignore
+  session-level `configure_immanuel_settings` changes.
+- **`applied_settings` echo on chart responses**
+  (`{"house_system": "<display name>", "source": "per-call" |
+  "session-global"}`) so the consuming LLM can verify instead of assume.
+- **Progressed-to-natal and return-to-natal aspects** (`aspects_to`):
+  progressed, solar return and lunar return tools gain
+  `include_natal_aspects` (default true) exposing cross aspects under
+  `natal_cross_aspects` with explicit `progressed_object`/`return_object`
+  and `natal_object` direction keys. Compact variants filter by
+  `aspect_priority` (tight/moderate/loose/all, actual-orb classification)
+  with interpretation hints and a `natal_cross_aspect_summary`.
+- **Relocated solar and lunar returns** via
+  `return_latitude`/`return_longitude`: casts the same return instant at
+  the person's actual location (probe-verified: identical UTC return
+  moment, different Ascendant). Responses echo `return_location`.
+- **`reset_immanuel_settings` tool** (21 tools total): restores library
+  defaults, undoing session mutations.
+- **`status` field on all responses**: `"success"` on success paths,
+  `"error"` on error responses (existing error keys kept).
+
+### Changed
+- **`generate_synastry_aspects` response shape (breaking)**: the payload
+  is now wrapped under an `aspects` key (previously the raw aspects dict
+  was the top level) to make room for the response envelope.
+- `configure_immanuel_settings` validates `house_system`,
+  `mc_progression_method` and `orb_calculation` against the library's real
+  constants (errors list every valid value), flags its session-global
+  scope in the response and docstring, and accepts the legacy
+  `orb_calculation_method` key as an alias for the real `orb_calculation`.
+- Requires `immanuel>=1.5.4` (first version with per-call chart settings).
+
+### Removed
+- `lunar_phase_method` and `solar_arc_method` from
+  `configure_immanuel_settings`: these settings do not exist in the
+  immanuel library and configuring them was a silent no-op.
+
 ## [0.5.0] - 2026-07-05
 
 Comprehensive fix release from a full codebase audit (see

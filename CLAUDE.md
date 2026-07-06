@@ -17,7 +17,8 @@ This is an MCP (Model Context Protocol) server that exposes the Immanuel Python 
 - **Entry Points**:
   - `immanuel_server.py` - Original single-file server (maintained for compatibility)
   - `python -m immanuel_mcp` - New modular package entry point
-- **Architecture**: FastMCP-based server with 20 astrology tools (8 chart types in full/compact pairs, 2 summary tools, 2 configuration tools). A single shared FastMCP instance lives in `immanuel_mcp/app.py`; both entry points register the identical tool set against it.
+- **Architecture**: FastMCP-based server with 21 astrology tools (8 chart types in full/compact pairs, 2 summary tools, 3 configuration tools). A single shared FastMCP instance lives in `immanuel_mcp/app.py`; both entry points register the identical tool set against it.
+- **Per-call settings (v0.6.0)**: every chart tool accepts `house_system` for that call only (isolated `ImmanuelSettings`, session globals untouched; helper in `immanuel_mcp/utils/settings.py`), and chart responses echo `applied_settings` (`{house_system, source: "per-call" | "session-global"}`) plus `status: "success" | "error"`. Progressed/solar-return/lunar-return tools expose `include_natal_aspects` (cross aspects under `natal_cross_aspects` with `progressed_object`/`return_object`/`natal_object` keys; helper in `immanuel_mcp/optimizers/cross_aspects.py`), and the return tools accept `return_latitude`/`return_longitude` for relocation (return instant preserved). Requires `immanuel>=1.5.4`.
 - **Package Structure**:
   ```
   immanuel_mcp/
@@ -310,7 +311,8 @@ result = generate_lunar_return_chart(
 - Compact version: ~18 KB (major objects and aspects only)
 
 ### Configuration Tools
-- `configure_immanuel_settings` - Modify global Immanuel library settings (house systems, orbs, celestial objects)
+- `configure_immanuel_settings` - Modify global Immanuel library settings (house systems, orbs, celestial objects). Session-global; for one-off changes prefer the per-call `house_system` parameter on the chart tools
+- `reset_immanuel_settings` - Restore the global settings to library defaults
 - `list_available_settings` - View current Immanuel library settings
 
 ## Coordinate System
