@@ -250,6 +250,16 @@ Person 2: Born November 22, 1990 at 9:45 AM in Paris (48n52, 2e20)"
 
 ## Tool Reference
 
+### Common parameters and response envelope (v0.6.0)
+
+Every chart tool accepts, in addition to the parameters listed per tool:
+- `timezone`: Optional IANA timezone name (e.g., "Europe/London"). Inferred from coordinates when omitted.
+- `house_system`: Optional house system **for that call only** (e.g., "CAMPANUS", "WHOLE_SIGN"). Applied to every chart built within the call without touching the session-global settings; an invalid name returns an error listing all 23 valid values. Per-call overrides start from library defaults and deliberately ignore session-level `configure_immanuel_settings` changes.
+
+Every response carries:
+- `status`: `"success"` or `"error"` (error responses keep the existing `error`/`message`/`type`/`suggestion` keys).
+- `applied_settings`: `{"house_system": "<display name>", "source": "per-call" | "session-global"}` on chart responses — lets the consuming LLM verify which settings produced the chart instead of assuming.
+
 ### `generate_natal_chart`
 Generates a complete birth chart with full astrological data.
 
@@ -296,6 +306,8 @@ Calculates a solar return chart for a specific year.
 - `latitude`: Birth location latitude
 - `longitude`: Birth location longitude
 - `return_year`: Year for the solar return
+- `include_natal_aspects`: Include return-planet-to-natal aspects under `natal_cross_aspects` (default: true). Each entry carries explicit `return_object`/`natal_object` keys.
+- `return_latitude` / `return_longitude`: Optional coordinates to relocate the return chart to where the person is at the return moment (the astrological convention). The return *moment* is unchanged; only houses/angles move. The response echoes `return_location: {latitude, longitude, relocated}`.
 
 ### `generate_compact_solar_return_chart`
 Generates a streamlined solar return chart optimized for LLM processing.
@@ -305,8 +317,26 @@ Generates a streamlined solar return chart optimized for LLM processing.
 - `latitude`: Birth location latitude (e.g., "32n43" or "32.71")
 - `longitude`: Birth location longitude (e.g., "117w09" or "-117.15")
 - `return_year`: Year for the solar return
+- `include_natal_aspects`: As on the full tool (default: true)
+- `aspect_priority`: Priority tier for the natal cross-aspects — "tight" (default, 0–2° actual orb), "moderate" (>2–5°), "loose" (>5°), or "all". A `natal_cross_aspect_summary` reports the per-tier counts.
+- `return_latitude` / `return_longitude`: As on the full tool
 
 **Output:** Same filtering as compact natal charts - major objects and aspects only
+
+### `generate_lunar_return_chart`
+Calculates the monthly lunar return chart (the moment the Moon returns to its natal position, found by ephemeris search to sub-minute precision).
+
+**Parameters:**
+- `date_time`: Birth date and time (ISO format: "YYYY-MM-DD HH:MM:SS")
+- `latitude`: Birth location latitude (e.g., "32n43" or "32.71")
+- `longitude`: Birth location longitude (e.g., "117w09" or "-117.15")
+- `return_year`: Year for the lunar return (e.g., 2025)
+- `return_month`: Month for the lunar return (1–12)
+- `include_natal_aspects`: Include return-to-natal aspects under `natal_cross_aspects` (default: true)
+- `return_latitude` / `return_longitude`: Optional relocation coordinates; the return instant is preserved and reported in the return location's zone
+
+### `generate_compact_lunar_return_chart`
+Streamlined lunar return chart optimized for LLM processing. Same parameters as the full tool, plus `aspect_priority` for the natal cross-aspects (see compact solar return).
 
 ### `generate_progressed_chart`
 Creates a secondary progression chart.
@@ -316,6 +346,7 @@ Creates a secondary progression chart.
 - `latitude`: Birth location latitude
 - `longitude`: Birth location longitude
 - `progression_date_time`: Date to progress the chart to
+- `include_natal_aspects`: Include progressed-to-natal aspects — the core technique of secondary progressions — under `natal_cross_aspects` (default: true). Each entry carries explicit `progressed_object`/`natal_object` keys.
 
 ### `generate_compact_progressed_chart`
 Generates a streamlined progressed chart optimized for LLM processing.
@@ -325,6 +356,8 @@ Generates a streamlined progressed chart optimized for LLM processing.
 - `latitude`: Birth location latitude (e.g., "32n43" or "32.71")
 - `longitude`: Birth location longitude (e.g., "117w09" or "-117.15")
 - `progression_date_time`: Date to progress the chart to (ISO format)
+- `include_natal_aspects`: As on the full tool (default: true)
+- `aspect_priority`: Priority tier for the natal cross-aspects — "tight" (default), "moderate", "loose", or "all"
 
 **Output:** Same filtering as compact natal charts - major objects and aspects only
 
@@ -358,6 +391,8 @@ Calculates aspects between two charts.
 **Parameters:**
 - `native_*`: First person's birth data (will receive the aspects)
 - `partner_*`: Second person's birth data (planets being aspected)
+
+**Breaking change (v0.6.0):** the payload is now wrapped under an `aspects` key (previously the raw aspects dict was the top level) to make room for the response envelope.
 
 ### `generate_compact_synastry_aspects`
 Calculates filtered synastry aspects optimized for LLM processing.
@@ -401,14 +436,14 @@ Calculates transiting planet aspects to a natal chart with intelligent paginatio
 - `transit_latitude`: Optional transit location latitude (defaults to natal location)
 - `transit_longitude`: Optional transit location longitude (defaults to natal location)
 - `timezone`: Optional IANA timezone name (e.g., "Europe/London", "America/New_York")
-- `aspect_priority`: Priority tier to return - "all" (default), "tight", "moderate", or "loose"
-- `include_all_aspects`: Deprecated - "all" is now the default (kept for compatibility)
+- `aspect_priority`: Priority tier to return - "tight" (default), "moderate", "loose", or "all"
+- `include_all_aspects`: Deprecated - treated as `aspect_priority="all"` (kept for compatibility)
 
 **Pagination System:**
-- **All** (default): Return all aspects (~10 KB, well under MCP limits)
-- **Tight** (0-2° orb): Most critical transits only (~4 KB)
+- **Tight** (0-2° orb, default): Most critical transits only (~4 KB)
 - **Moderate** (2-5° orb): Secondary priority, building/waning influence
 - **Loose** (5-8° orb): Background influences, subtle themes
+- **All**: Every aspect (auto-adjusts to "tight" when lifecycle events are enabled, to stay under MCP size limits)
 
 **Optimized Response Structure:**
 - `natal_summary`: Simplified Sun/Moon/Rising (no redundant date_time)
@@ -440,16 +475,27 @@ Calculates compact transit-to-natal aspects with optional interpretations.
 **Output:** Streamlined aspects between major objects only with context-aware interpretations
 
 ### `configure_immanuel_settings`
-Modifies global Immanuel library settings.
+Modifies global Immanuel library settings. **This changes global state for every subsequent chart in the session** (the response carries `scope: "session-global"`); for a one-off setting, prefer the per-call parameters (e.g. `house_system`) on the chart tools.
 
 **Parameters:**
 - `setting_key`: Name of the setting (e.g., "house_system", "objects")
 - `setting_value`: Value to set (e.g., "WHOLE_SIGN", "4000001,4000002,Chiron")
 
 #### Common Settings:
-- **House Systems**: `PLACIDUS`, `KOCH`, `WHOLE_SIGN`, `EQUAL`, `CAMPANUS`, etc.
+- **House Systems**: `PLACIDUS`, `KOCH`, `WHOLE_SIGN`, `EQUAL`, `CAMPANUS`, etc. (invalid names return an error listing all valid values)
 - **Objects**: Comma-separated list of celestial bodies (e.g., "Sun,Moon,Mercury,Venus,Mars,Jupiter,Saturn,Uranus,Neptune,Pluto,Chiron")
 - **Orbs**: `conjunction_orb`, `opposition_orb`, `trine_orb`, etc. (numeric values)
+- **MC progression method**: `NAIBOD`, `SOLAR_ARC`, `DAILY_HOUSES`
+- **Orb calculation**: `MEAN`, `MAX` (key: `orb_calculation`)
+
+Note (v0.6.0): the `lunar_phase_method` and `solar_arc_method` keys were removed — they do not exist in the immanuel library and configuring them was a silent no-op.
+
+### `reset_immanuel_settings`
+Resets the global Immanuel settings to library defaults, undoing every `configure_immanuel_settings` change made in the session.
+
+**Parameters:** None
+
+**Returns:** Confirmation with a summary of the restored defaults
 
 ### `list_available_settings`
 Lists all available Immanuel settings and their current values.
@@ -457,6 +503,14 @@ Lists all available Immanuel settings and their current values.
 **Parameters:** None
 
 **Returns:** Dictionary of current settings with descriptions
+
+## Scope and Division of Labour
+
+This server is **tropical-zodiac only** (the underlying immanuel settings expose no zodiac/ayanamsha option) and produces **structured chart data, not chart images**. For sidereal zodiacs, rendered chart wheels/SVG, synastry scoring, or electional/event charts, use the companion kerykeion MCP server instead — reaching for this server for those jobs will not work.
+
+## Roadmap
+
+- **Per-call extra chart objects on `generate_natal_chart`** (asteroids, points, fixed stars): deferred. Probed 2026-07-06 — asteroid/point constants (e.g. `CERES`) work via per-call settings, but named fixed stars (e.g. `'Antares'`) raise `ValueError: Invalid object index` because immanuel's bundled ephemeris ships no `sefstars.txt` star catalogue. Revisit if a star catalogue is bundled or an ephemeris-path option is exposed.
 
 ## Troubleshooting
 

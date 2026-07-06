@@ -77,7 +77,8 @@ def handle_chart_error(e: Exception) -> Dict[str, Any]:
         message = str(e)
 
     return {
-        "error": True,
+        "status": "error",
+        "error": True,  # kept for backward compatibility alongside "status"
         "message": message,
         "type": error_type,
         "suggestion": get_error_suggestion(error_type, str(e))

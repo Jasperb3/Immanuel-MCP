@@ -28,6 +28,11 @@ from ..lifecycle.attach import attach_lifecycle_section
 from ..utils.coordinates import parse_coordinate
 from ..utils.subjects import create_subject
 from ..utils.errors import handle_chart_error, validate_inputs
+from ..utils.settings import build_call_settings, build_applied_settings
+from ..optimizers.cross_aspects import (
+    build_full_cross_aspects,
+    build_compact_cross_aspects,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +52,61 @@ def _signed_delta(moon_lon: float, target_lon: float) -> float:
     """Signed angular distance from target to Moon, normalized to (-180, 180]."""
     diff = (moon_lon - target_lon) % 360
     return diff - 360 if diff > 180 else diff
+
+
+def _find_lunar_return_jd(
+    natal_moon_longitude: float,
+    year: int,
+    month: int,
+    lat: float,
+    lon: float,
+    timezone: str = None
+) -> float:
+    """
+    Find the Julian date of the Moon's return to its natal position within
+    a given month. See find_lunar_return_date for the search semantics; the
+    month window is interpreted in the given timezone (or the zone inferred
+    from the coordinates when omitted).
+
+    Raises:
+        ValueError: If no lunar return is found in the specified month
+    """
+    target = natal_moon_longitude % 360
+
+    month_start = datetime(year, month, 1)
+    month_end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
+
+    start_jd = date_tools.to_jd(month_start, lat=lat, lon=lon, time_zone=timezone)
+    end_jd = date_tools.to_jd(month_end, lat=lat, lon=lon, time_zone=timezone)
+
+    # Scan for a sign change in the signed delta. The Moon only moves
+    # forward, so the delta increases through 0 at the return; jumps of
+    # ~360 at the antipode are excluded by the wrap check.
+    prev_jd = start_jd
+    prev_delta = _signed_delta(_moon_longitude(start_jd), target)
+
+    jd = start_jd + _SCAN_STEP_JD
+    while jd < end_jd + _SCAN_STEP_JD:
+        probe_jd = min(jd, end_jd)
+        delta = _signed_delta(_moon_longitude(probe_jd), target)
+
+        if prev_delta < 0 <= delta and (delta - prev_delta) < 180:
+            # Bracketed: bisect to under a minute.
+            lo, hi = prev_jd, probe_jd
+            while (hi - lo) > _ONE_MINUTE_JD / 2:
+                mid = (lo + hi) / 2
+                if _signed_delta(_moon_longitude(mid), target) >= 0:
+                    hi = mid
+                else:
+                    lo = mid
+            return (lo + hi) / 2
+
+        if probe_jd >= end_jd:
+            break
+        prev_jd, prev_delta = probe_jd, delta
+        jd += _SCAN_STEP_JD
+
+    raise ValueError(f"No lunar return found in {year}-{month:02d}")
 
 
 def find_lunar_return_date(
@@ -85,44 +145,9 @@ def find_lunar_return_date(
     Raises:
         ValueError: If no lunar return is found in the specified month
     """
-    target = natal_moon_longitude % 360
-
-    month_start = datetime(year, month, 1)
-    month_end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
-
-    start_jd = date_tools.to_jd(month_start, lat=lat, lon=lon, time_zone=timezone)
-    end_jd = date_tools.to_jd(month_end, lat=lat, lon=lon, time_zone=timezone)
-
-    # Scan for a sign change in the signed delta. The Moon only moves
-    # forward, so the delta increases through 0 at the return; jumps of
-    # ~360 at the antipode are excluded by the wrap check.
-    prev_jd = start_jd
-    prev_delta = _signed_delta(_moon_longitude(start_jd), target)
-
-    jd = start_jd + _SCAN_STEP_JD
-    while jd < end_jd + _SCAN_STEP_JD:
-        probe_jd = min(jd, end_jd)
-        delta = _signed_delta(_moon_longitude(probe_jd), target)
-
-        if prev_delta < 0 <= delta and (delta - prev_delta) < 180:
-            # Bracketed: bisect to under a minute.
-            lo, hi = prev_jd, probe_jd
-            while (hi - lo) > _ONE_MINUTE_JD / 2:
-                mid = (lo + hi) / 2
-                if _signed_delta(_moon_longitude(mid), target) >= 0:
-                    hi = mid
-                else:
-                    lo = mid
-            return_jd = (lo + hi) / 2
-            local_dt = date_tools.to_datetime(return_jd, lat=lat, lon=lon, time_zone=timezone)
-            return local_dt.replace(tzinfo=None)
-
-        if probe_jd >= end_jd:
-            break
-        prev_jd, prev_delta = probe_jd, delta
-        jd += _SCAN_STEP_JD
-
-    raise ValueError(f"No lunar return found in {year}-{month:02d}")
+    return_jd = _find_lunar_return_jd(natal_moon_longitude, year, month, lat, lon, timezone)
+    local_dt = date_tools.to_datetime(return_jd, lat=lat, lon=lon, time_zone=timezone)
+    return local_dt.replace(tzinfo=None)
 
 
 @mcp.tool()
@@ -132,7 +157,11 @@ def generate_lunar_return_chart(
     longitude: str,
     return_year: int,
     return_month: int,
-    timezone: str = None
+    timezone: str = None,
+    house_system: str = None,
+    include_natal_aspects: bool = True,
+    return_latitude: str = None,
+    return_longitude: str = None
 ) -> Dict[str, Any]:
     """
     Calculate lunar return chart for specified month/year.
@@ -141,6 +170,12 @@ def generate_lunar_return_chart(
     happening approximately every 27-28 days. This is a monthly predictive
     technique showing themes and energies for the coming month.
 
+    Return charts are conventionally cast for where the person is at the
+    return moment, not the birthplace: pass return_latitude/return_longitude
+    to relocate. The return moment itself (found by ephemeris search from the
+    birth-location natal Moon) stays identical; only the houses/angles change.
+    Relocated charts report the return moment in the return location's zone.
+
     Args:
         date_time: Birth date and time in ISO format (e.g., '1990-01-15 14:30:00')
         latitude: Birth location latitude (e.g., '32n43' or '32.71')
@@ -148,9 +183,20 @@ def generate_lunar_return_chart(
         return_year: Year for the lunar return (e.g., 2025)
         return_month: Month for the lunar return (1-12)
         timezone: Optional IANA timezone name (e.g., 'America/New_York')
+        house_system: Optional house system for this call only (e.g., 'CAMPANUS',
+                      'WHOLE_SIGN'). Does not affect the session-global settings.
+        include_natal_aspects: Include return-planet-to-natal aspects under
+                               'natal_cross_aspects' (default: True).
+        return_latitude: Optional latitude to relocate the return chart to
+                         (defaults to the birth latitude).
+        return_longitude: Optional longitude to relocate the return chart to
+                          (defaults to the birth longitude).
 
     Returns:
-        Full lunar return chart with all positions and aspects
+        Full lunar return chart with all positions and aspects, plus
+        return-to-natal aspects under 'natal_cross_aspects' (each entry
+        carries 'return_object' and 'natal_object') and a 'return_location'
+        echo
     """
     try:
         logger.info(f"Generating lunar return chart for {date_time} at {latitude}, {longitude} for {return_year}-{return_month:02d}")
@@ -167,9 +213,15 @@ def generate_lunar_return_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
+        call_settings = build_call_settings(house_system)
+
+        relocated = return_latitude is not None or return_longitude is not None
+        return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
+        return_lon = parse_coordinate(return_longitude, is_latitude=False) if return_longitude else lon
+
         # Get natal Moon's position
         natal_subject = create_subject(date_time, lat, lon, timezone)
-        natal_chart = charts.Natal(natal_subject)
+        natal_chart = charts.Natal(natal_subject, settings=call_settings)
         natal_moon = natal_chart.objects.get(4000002)  # Moon's index
 
         if natal_moon is None:
@@ -177,8 +229,9 @@ def generate_lunar_return_chart(
 
         natal_moon_longitude = natal_moon.longitude.raw
 
-        # Find the lunar return date
-        lunar_return_dt = find_lunar_return_date(
+        # Find the lunar return moment. The search always runs against the
+        # birth-location natal Moon and month window (unchanged by relocation).
+        return_jd = _find_lunar_return_jd(
             natal_moon_longitude,
             return_year,
             return_month,
@@ -186,25 +239,57 @@ def generate_lunar_return_chart(
             lon,
             timezone
         )
+        lunar_return_dt = date_tools.to_datetime(
+            return_jd, lat=lat, lon=lon, time_zone=timezone
+        ).replace(tzinfo=None)
 
-        # Generate chart for lunar return moment
-        return_subject = create_subject(
-            lunar_return_dt.isoformat(),
-            lat,
-            lon,
-            timezone
-        )
-        lunar_return_chart = charts.Natal(return_subject)
+        # Generate chart for the return moment. Relocation must preserve the
+        # absolute instant, not the wall-clock string: the timezone-aware
+        # local datetime at the return location carries its own zone into
+        # the Subject.
+        if relocated:
+            return_local_dt = date_tools.to_datetime(return_jd, lat=return_lat, lon=return_lon)
+            return_subject = charts.Subject(
+                date_time=return_local_dt,
+                latitude=return_lat,
+                longitude=return_lon
+            )
+            return_date_value = return_local_dt.isoformat()
+        else:
+            return_subject = create_subject(
+                lunar_return_dt.isoformat(),
+                lat,
+                lon,
+                timezone
+            )
+            return_date_value = lunar_return_dt.isoformat()
+        lunar_return_chart = charts.Natal(return_subject, settings=call_settings)
 
         # Serialize to JSON
         result = json.loads(json.dumps(lunar_return_chart, cls=ToJSON))
 
+        # Return-to-natal aspects (the chart's own internal aspects stay
+        # under 'aspects'; the two lists are never merged)
+        if include_natal_aspects:
+            cross_chart = charts.Natal(
+                return_subject, aspects_to=natal_chart, settings=call_settings)
+            cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
+            result["natal_cross_aspects"] = build_full_cross_aspects(
+                cross_data, "return_object")
+        else:
+            result["natal_cross_aspects"] = None
+
         # Add metadata about the lunar return
         result['lunar_return_info'] = {
-            'return_date': lunar_return_dt.isoformat(),
+            'return_date': return_date_value,
             'natal_moon_longitude': natal_moon_longitude,
             'return_year': return_year,
             'return_month': return_month
+        }
+        result['return_location'] = {
+            'latitude': return_lat,
+            'longitude': return_lon,
+            'relocated': relocated
         }
 
         # Lifecycle context at the return moment (the return chart doubles
@@ -217,6 +302,8 @@ def generate_lunar_return_chart(
             comparison_datetime=lunar_return_dt
         )
 
+        result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info(f"Lunar return chart generated successfully for {lunar_return_dt.isoformat()}")
         return result
 
@@ -232,10 +319,21 @@ def generate_compact_lunar_return_chart(
     longitude: str,
     return_year: int,
     return_month: int,
-    timezone: str = None
+    timezone: str = None,
+    house_system: str = None,
+    include_natal_aspects: bool = True,
+    aspect_priority: str = "tight",
+    return_latitude: str = None,
+    return_longitude: str = None
 ) -> Dict[str, Any]:
     """
     Calculate compact lunar return chart with optimized response.
+
+    Return charts are conventionally cast for where the person is at the
+    return moment, not the birthplace: pass return_latitude/return_longitude
+    to relocate. The return moment itself (found by ephemeris search from the
+    birth-location natal Moon) stays identical; only the houses/angles change.
+    Relocated charts report the return moment in the return location's zone.
 
     Same as generate_lunar_return_chart but with streamlined output:
     - Major objects only (Sun through Pluto, angles)
@@ -249,9 +347,23 @@ def generate_compact_lunar_return_chart(
         return_year: Year for the lunar return (e.g., 2025)
         return_month: Month for the lunar return (1-12)
         timezone: Optional IANA timezone name (e.g., 'America/New_York')
+        house_system: Optional house system for this call only (e.g., 'CAMPANUS',
+                      'WHOLE_SIGN'). Does not affect the session-global settings.
+        include_natal_aspects: Include return-planet-to-natal aspects under
+                               'natal_cross_aspects' (default: True).
+        aspect_priority: Priority tier for the natal cross-aspects - "tight"
+                         (default, 0-2° actual orb), "moderate" (>2-5°),
+                         "loose" (>5°), or "all".
+        return_latitude: Optional latitude to relocate the return chart to
+                         (defaults to the birth latitude).
+        return_longitude: Optional longitude to relocate the return chart to
+                          (defaults to the birth longitude).
 
     Returns:
-        Compact lunar return chart optimized for LLM processing
+        Compact lunar return chart optimized for LLM processing, plus
+        return-to-natal aspects under 'natal_cross_aspects' (each entry
+        carries 'return_object' and 'natal_object') and a 'return_location'
+        echo
     """
     try:
         logger.info(f"Generating compact lunar return chart for {date_time} at {latitude}, {longitude} for {return_year}-{return_month:02d}")
@@ -268,9 +380,15 @@ def generate_compact_lunar_return_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
+        call_settings = build_call_settings(house_system)
+
+        relocated = return_latitude is not None or return_longitude is not None
+        return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
+        return_lon = parse_coordinate(return_longitude, is_latitude=False) if return_longitude else lon
+
         # Get natal Moon's position
         natal_subject = create_subject(date_time, lat, lon, timezone)
-        natal_chart = charts.Natal(natal_subject)
+        natal_chart = charts.Natal(natal_subject, settings=call_settings)
         natal_moon = natal_chart.objects.get(4000002)  # Moon's index
 
         if natal_moon is None:
@@ -278,8 +396,9 @@ def generate_compact_lunar_return_chart(
 
         natal_moon_longitude = natal_moon.longitude.raw
 
-        # Find the lunar return date
-        lunar_return_dt = find_lunar_return_date(
+        # Find the lunar return moment. The search always runs against the
+        # birth-location natal Moon and month window (unchanged by relocation).
+        return_jd = _find_lunar_return_jd(
             natal_moon_longitude,
             return_year,
             return_month,
@@ -287,25 +406,58 @@ def generate_compact_lunar_return_chart(
             lon,
             timezone
         )
+        lunar_return_dt = date_tools.to_datetime(
+            return_jd, lat=lat, lon=lon, time_zone=timezone
+        ).replace(tzinfo=None)
 
-        # Generate chart for lunar return moment
-        return_subject = create_subject(
-            lunar_return_dt.isoformat(),
-            lat,
-            lon,
-            timezone
-        )
-        lunar_return_chart = charts.Natal(return_subject)
+        # Generate chart for the return moment. Relocation must preserve the
+        # absolute instant, not the wall-clock string: the timezone-aware
+        # local datetime at the return location carries its own zone into
+        # the Subject.
+        if relocated:
+            return_local_dt = date_tools.to_datetime(return_jd, lat=return_lat, lon=return_lon)
+            return_subject = charts.Subject(
+                date_time=return_local_dt,
+                latitude=return_lat,
+                longitude=return_lon
+            )
+            return_date_value = return_local_dt.isoformat()
+        else:
+            return_subject = create_subject(
+                lunar_return_dt.isoformat(),
+                lat,
+                lon,
+                timezone
+            )
+            return_date_value = lunar_return_dt.isoformat()
+        lunar_return_chart = charts.Natal(return_subject, settings=call_settings)
 
         # Serialize to JSON using compact serializer
         result = json.loads(json.dumps(lunar_return_chart, cls=CompactJSONSerializer))
 
+        # Return-to-natal aspects (major objects/aspects, priority-filtered)
+        if include_natal_aspects:
+            cross_chart = charts.Natal(
+                return_subject, aspects_to=natal_chart, settings=call_settings)
+            cross_data = json.loads(json.dumps(cross_chart, cls=CompactJSONSerializer))
+            cross_aspects, cross_summary = build_compact_cross_aspects(
+                cross_data, "return_object", aspect_priority)
+            result["natal_cross_aspects"] = cross_aspects
+            result["natal_cross_aspect_summary"] = cross_summary
+        else:
+            result["natal_cross_aspects"] = None
+
         # Add metadata about the lunar return
         result['lunar_return_info'] = {
-            'return_date': lunar_return_dt.isoformat(),
+            'return_date': return_date_value,
             'natal_moon_longitude': natal_moon_longitude,
             'return_year': return_year,
             'return_month': return_month
+        }
+        result['return_location'] = {
+            'latitude': return_lat,
+            'longitude': return_lon,
+            'relocated': relocated
         }
 
         # Lifecycle context at the return moment (the return chart doubles
@@ -318,6 +470,8 @@ def generate_compact_lunar_return_chart(
             comparison_datetime=lunar_return_dt
         )
 
+        result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info(f"Compact lunar return chart generated successfully for {lunar_return_dt.isoformat()}")
         return result
 
