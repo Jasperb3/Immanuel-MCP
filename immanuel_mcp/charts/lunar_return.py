@@ -28,6 +28,7 @@ from ..lifecycle.attach import attach_lifecycle_section
 from ..utils.coordinates import parse_coordinate
 from ..utils.subjects import create_subject
 from ..utils.errors import handle_chart_error, validate_inputs
+from ..utils.settings import build_call_settings, build_applied_settings
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +133,8 @@ def generate_lunar_return_chart(
     longitude: str,
     return_year: int,
     return_month: int,
-    timezone: str = None
+    timezone: str = None,
+    house_system: str = None
 ) -> Dict[str, Any]:
     """
     Calculate lunar return chart for specified month/year.
@@ -148,6 +150,8 @@ def generate_lunar_return_chart(
         return_year: Year for the lunar return (e.g., 2025)
         return_month: Month for the lunar return (1-12)
         timezone: Optional IANA timezone name (e.g., 'America/New_York')
+        house_system: Optional house system for this call only (e.g., 'CAMPANUS',
+                      'WHOLE_SIGN'). Does not affect the session-global settings.
 
     Returns:
         Full lunar return chart with all positions and aspects
@@ -167,9 +171,11 @@ def generate_lunar_return_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
+        call_settings = build_call_settings(house_system)
+
         # Get natal Moon's position
         natal_subject = create_subject(date_time, lat, lon, timezone)
-        natal_chart = charts.Natal(natal_subject)
+        natal_chart = charts.Natal(natal_subject, settings=call_settings)
         natal_moon = natal_chart.objects.get(4000002)  # Moon's index
 
         if natal_moon is None:
@@ -194,7 +200,7 @@ def generate_lunar_return_chart(
             lon,
             timezone
         )
-        lunar_return_chart = charts.Natal(return_subject)
+        lunar_return_chart = charts.Natal(return_subject, settings=call_settings)
 
         # Serialize to JSON
         result = json.loads(json.dumps(lunar_return_chart, cls=ToJSON))
@@ -217,6 +223,7 @@ def generate_lunar_return_chart(
             comparison_datetime=lunar_return_dt
         )
 
+        result["applied_settings"] = build_applied_settings(house_system)
         logger.info(f"Lunar return chart generated successfully for {lunar_return_dt.isoformat()}")
         return result
 
@@ -232,7 +239,8 @@ def generate_compact_lunar_return_chart(
     longitude: str,
     return_year: int,
     return_month: int,
-    timezone: str = None
+    timezone: str = None,
+    house_system: str = None
 ) -> Dict[str, Any]:
     """
     Calculate compact lunar return chart with optimized response.
@@ -249,6 +257,8 @@ def generate_compact_lunar_return_chart(
         return_year: Year for the lunar return (e.g., 2025)
         return_month: Month for the lunar return (1-12)
         timezone: Optional IANA timezone name (e.g., 'America/New_York')
+        house_system: Optional house system for this call only (e.g., 'CAMPANUS',
+                      'WHOLE_SIGN'). Does not affect the session-global settings.
 
     Returns:
         Compact lunar return chart optimized for LLM processing
@@ -268,9 +278,11 @@ def generate_compact_lunar_return_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
+        call_settings = build_call_settings(house_system)
+
         # Get natal Moon's position
         natal_subject = create_subject(date_time, lat, lon, timezone)
-        natal_chart = charts.Natal(natal_subject)
+        natal_chart = charts.Natal(natal_subject, settings=call_settings)
         natal_moon = natal_chart.objects.get(4000002)  # Moon's index
 
         if natal_moon is None:
@@ -295,7 +307,7 @@ def generate_compact_lunar_return_chart(
             lon,
             timezone
         )
-        lunar_return_chart = charts.Natal(return_subject)
+        lunar_return_chart = charts.Natal(return_subject, settings=call_settings)
 
         # Serialize to JSON using compact serializer
         result = json.loads(json.dumps(lunar_return_chart, cls=CompactJSONSerializer))
@@ -318,6 +330,7 @@ def generate_compact_lunar_return_chart(
             comparison_datetime=lunar_return_dt
         )
 
+        result["applied_settings"] = build_applied_settings(house_system)
         logger.info(f"Compact lunar return chart generated successfully for {lunar_return_dt.isoformat()}")
         return result
 
