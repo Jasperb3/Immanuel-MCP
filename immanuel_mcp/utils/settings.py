@@ -7,6 +7,7 @@ manages for the rest of the session.
 """
 
 from immanuel import setup
+from immanuel.const import calc as calc_const
 from immanuel.const import chart as chart_const
 from immanuel.const import names as names_const
 from immanuel.setup import ImmanuelSettings
@@ -68,6 +69,68 @@ def build_call_settings(house_system: str = None):
     call_settings = ImmanuelSettings()
     call_settings.house_system = resolve_house_system(house_system)
     return call_settings
+
+
+PROGRESSION_METHOD_CONSTANTS = {
+    "NAIBOD": calc_const.NAIBOD,
+    "SOLAR_ARC": calc_const.SOLAR_ARC,
+    "DAILY_HOUSES": calc_const.DAILY_HOUSES,
+}
+
+ORB_CALCULATION_CONSTANTS = {
+    "MEAN": calc_const.MEAN,
+    "MAX": calc_const.MAX,
+}
+
+
+def _resolve_named_constant(name: str, constants: dict, display_names: dict, setting: str) -> int:
+    """Resolve a constant name against an allowlist, or raise a ValueError
+    listing every valid value as "CONSTANT_NAME — Display Name"."""
+    key = name.strip().upper().replace(" ", "_").replace("-", "_")
+    if key not in constants:
+        valid = ", ".join(
+            f"{attr} — {display_names.get(value, attr.title())}"
+            for attr, value in constants.items()
+        )
+        raise ValueError(f"Unknown {setting} '{name}'. Valid values: {valid}")
+    return constants[key]
+
+
+def resolve_progression_method(name: str) -> int:
+    """Resolve an MC progression method name (e.g. 'DAILY_HOUSES'), with validation."""
+    return _resolve_named_constant(
+        name, PROGRESSION_METHOD_CONSTANTS,
+        dict(names_const.PROGRESSION_METHODS), "MC progression method")
+
+
+def resolve_orb_calculation(name: str) -> int:
+    """Resolve an orb calculation method name ('MEAN' or 'MAX'), with validation."""
+    return _resolve_named_constant(
+        name, ORB_CALCULATION_CONSTANTS, {}, "orb calculation method")
+
+
+def reset_global_settings() -> dict:
+    """
+    Restore the global settings singleton to library defaults and return a
+    summary of the restored values.
+
+    Implemented as an attribute copy from a fresh ImmanuelSettings rather
+    than immanuel's own settings.reset(): that method also resets the
+    locale machinery via locale.setlocale(..., 'en_US'), which crashes on
+    systems without that locale installed. The copy assigns the backing
+    attributes directly (including property backings like _locale), so no
+    property side effects fire.
+    """
+    defaults = ImmanuelSettings()
+    for key, value in vars(defaults).items():
+        setattr(setup.settings, key, value)
+    return {
+        "house_system": house_system_display_name(setup.settings.house_system),
+        "mc_progression_method": dict(names_const.PROGRESSION_METHODS).get(
+            setup.settings.mc_progression_method),
+        "objects": len(setup.settings.objects),
+        "aspects": len(setup.settings.aspects),
+    }
 
 
 def build_applied_settings(house_system: str = None) -> dict:

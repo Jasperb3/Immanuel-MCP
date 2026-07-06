@@ -18,7 +18,6 @@ from typing import Any, Dict, List, Optional, Union
 import immanuel
 from immanuel import charts
 from immanuel.const import chart as chart_const
-from immanuel.const import calc as calc_const
 from immanuel.const import data as data_const
 from immanuel.classes.serialize import ToJSON
 from immanuel.tools import convert
@@ -1734,45 +1733,60 @@ def configure_immanuel_settings(
     """
     Configures the global settings for the Immanuel library, affecting all subsequent chart calculations.
     See the Immanuel documentation for available keys and values.
-    
+
+    This changes global state for every subsequent chart in the session. For
+    a one-off setting, prefer the per-call parameters (e.g. `house_system`)
+    on the chart tools. Use `reset_immanuel_settings` to restore defaults.
+
     Args:
         setting_key: The name of the setting to change, e.g., 'house_system' or 'locale'.
-        setting_value: The value to set. For lists like 'objects', provide a comma-separated string of 
-                      integer constants or names, e.g., '4000001,4000002,Antares'. For constants, 
+        setting_value: The value to set. For lists like 'objects', provide a comma-separated string of
+                      integer constants or names, e.g., '4000001,4000002,Antares'. For constants,
                       provide the string name, e.g., 'CAMPANUS'.
-    
+
     Returns:
         A confirmation message with old and new values.
     """
     try:
         logger.info(f"Configuring setting: {setting_key} = {setting_value}")
-        
+
         from immanuel import setup
-        
-        # Validate setting key
+        from immanuel_mcp.utils.settings import (
+            resolve_house_system,
+            resolve_progression_method,
+            resolve_orb_calculation,
+        )
+
+        # The legacy 'orb_calculation_method' key never matched the library
+        # attribute; accept it as an alias for the real 'orb_calculation'.
+        if setting_key == 'orb_calculation_method':
+            setting_key = 'orb_calculation'
+
+        # Validate setting key. (lunar_phase_method and solar_arc_method were
+        # dropped in v0.6.0: they do not exist in the immanuel library and
+        # configuring them was a silent no-op.)
         valid_settings = [
             'house_system', 'objects', 'angles', 'aspects', 'locale',
-            'mc_progression_method', 'lunar_phase_method', 'solar_arc_method',
-            'orb_calculation_method'
+            'mc_progression_method', 'orb_calculation'
         ]
-        
+
         if setting_key not in valid_settings and not setting_key.endswith('_orb'):
             return {
                 "status": "warning",
                 "message": f"Unknown setting '{setting_key}'. Valid options: {', '.join(valid_settings)}",
                 "applied": False
             }
-        
+
         # Get the current settings object
         settings = setup.settings
         old_value = getattr(settings, setting_key, None)
-        
+
         # Special handling for different setting types
         if setting_key == 'house_system':
-            # Convert string to constant
-            const_value = getattr(chart_const, setting_value.upper())
+            # Convert string to constant, with validation listing valid names
+            const_value = resolve_house_system(setting_value)
             setattr(settings, setting_key, const_value)
-            
+
         elif setting_key == 'objects':
             # Parse comma-separated list of objects
             object_list = []
@@ -1808,20 +1822,15 @@ def configure_immanuel_settings(
             setattr(settings, setting_key, setting_value)
             
         elif setting_key == 'mc_progression_method':
-            # Convert string to constant
-            const_value = getattr(calc_const, setting_value.upper())
+            # Convert string to constant, with validation listing valid names
+            const_value = resolve_progression_method(setting_value)
             setattr(settings, setting_key, const_value)
-            
-        elif setting_key in ['lunar_phase_method', 'solar_arc_method']:
-            # Convert string to constant
-            const_value = getattr(calc_const, setting_value.upper())
+
+        elif setting_key == 'orb_calculation':
+            # Convert string to constant, with validation listing valid names
+            const_value = resolve_orb_calculation(setting_value)
             setattr(settings, setting_key, const_value)
-            
-        elif setting_key == 'orb_calculation_method':
-            # Convert string to constant
-            const_value = getattr(chart_const, setting_value.upper())
-            setattr(settings, setting_key, const_value)
-            
+
         elif setting_key.endswith('_orb'):
             # Numeric orb values
             setattr(settings, setting_key, float(setting_value))
@@ -1851,13 +1860,40 @@ def configure_immanuel_settings(
             "status": "success",
             "message": f"Setting '{setting_key}' updated from '{old_value}' to '{setting_value}'.",
             "old_value": str(old_value),
-            "new_value": setting_value
+            "new_value": setting_value,
+            "scope": "session-global"
         }
         logger.info("Setting configured successfully")
         return result
-        
+
     except Exception as e:
         logger.error(f"Error configuring setting: {str(e)}")
+        return handle_chart_error(e)
+
+
+@mcp.tool()
+def reset_immanuel_settings() -> Dict[str, Any]:
+    """
+    Reset the global Immanuel settings to library defaults, undoing every
+    change made via configure_immanuel_settings in this session.
+
+    Returns:
+        Confirmation with a summary of the restored default values.
+    """
+    try:
+        from immanuel_mcp.utils.settings import reset_global_settings
+
+        logger.info("Resetting Immanuel settings to library defaults")
+        restored = reset_global_settings()
+        return {
+            "status": "success",
+            "message": "Immanuel settings restored to library defaults.",
+            "scope": "session-global",
+            "restored_defaults": restored
+        }
+
+    except Exception as e:
+        logger.error(f"Error resetting settings: {str(e)}")
         return handle_chart_error(e)
 
 

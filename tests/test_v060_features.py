@@ -257,6 +257,47 @@ def test_relocated_lunar_return_same_instant_different_houses():
     assert reloc["return_location"]["relocated"] is True
 
 
+# ---------------------------------------------------------------------------
+# I4: settings hygiene
+# ---------------------------------------------------------------------------
+
+def test_configure_invalid_house_system_lists_valid_values():
+    result = immanuel_server.configure_immanuel_settings("house_system", "WHOLESIGN")
+    assert result.get("error") is True
+    assert "WHOLE_SIGN" in result["message"]
+    assert "Whole Sign" in result["message"]
+    # the failed call must not have mutated the global settings
+    assert setup.settings.house_system == chart_const.PLACIDUS
+
+
+def test_configure_response_carries_session_scope():
+    result = immanuel_server.configure_immanuel_settings("house_system", "CAMPANUS")
+    assert result["status"] == "success"
+    assert result["scope"] == "session-global"
+
+
+def test_reset_restores_defaults_observed_by_charts():
+    immanuel_server.configure_immanuel_settings("house_system", "CAMPANUS")
+    campanus = immanuel_server.get_chart_summary(*BIRTH, timezone=TZ)
+    assert campanus["applied_settings"] == {
+        "house_system": "Campanus", "source": "session-global"}
+
+    result = immanuel_server.reset_immanuel_settings()
+    assert result["status"] == "success"
+    assert result["restored_defaults"]["house_system"] == "Placidus"
+
+    after = immanuel_server.get_chart_summary(*BIRTH, timezone=TZ)
+    assert after["applied_settings"] == {
+        "house_system": "Placidus", "source": "session-global"}
+
+
+def test_configure_invalid_progression_method_lists_valid_values():
+    result = immanuel_server.configure_immanuel_settings(
+        "mc_progression_method", "BOGUS")
+    assert result.get("error") is True
+    assert "NAIBOD" in result["message"]
+
+
 def test_unrelocated_returns_unchanged_from_v050():
     # Regression pin: omitting the relocation params keeps prior behaviour
     result = lunar_return_module.generate_lunar_return_chart(

@@ -112,9 +112,10 @@ def test_all_tools_registered_on_shared_instance():
     assert modular_server.mcp is shared
 
     tools = {t.name for t in asyncio.run(shared.list_tools())}
-    assert len(tools) == 20
+    assert len(tools) == 21
     assert "generate_lunar_return_chart" in tools
     assert "generate_compact_lunar_return_chart" in tools
+    assert "reset_immanuel_settings" in tools
 
 
 # ---------------------------------------------------------------------------
