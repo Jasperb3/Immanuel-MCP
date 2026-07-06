@@ -303,6 +303,7 @@ def generate_lunar_return_chart(
         )
 
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info(f"Lunar return chart generated successfully for {lunar_return_dt.isoformat()}")
         return result
 
@@ -470,6 +471,7 @@ def generate_compact_lunar_return_chart(
         )
 
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info(f"Compact lunar return chart generated successfully for {lunar_return_dt.isoformat()}")
         return result
 

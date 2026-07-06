@@ -154,6 +154,7 @@ def generate_compact_natal_chart(
             result["lifecycle_summary"] = None
 
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info("Compact natal chart generated successfully")
         return result
 
@@ -228,6 +229,7 @@ def generate_natal_chart(
             result["lifecycle_summary"] = None
 
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info("Natal chart generated successfully")
         return result
         
@@ -323,7 +325,8 @@ def get_chart_summary(
             "moon_phase": moon_phase,
             "diurnal": diurnal,
             "house_system": chart_house_system,
-            "applied_settings": build_applied_settings(house_system)
+            "applied_settings": build_applied_settings(house_system),
+            "status": "success"
         }
 
         logger.info(f"Chart summary generated successfully: {result}")
@@ -389,7 +392,8 @@ def get_planetary_positions(
         
         result = {
             "planets": planets,
-            "applied_settings": build_applied_settings(house_system)
+            "applied_settings": build_applied_settings(house_system),
+            "status": "success"
         }
         logger.info("Planetary positions retrieved successfully")
         return result
@@ -535,6 +539,7 @@ def generate_solar_return_chart(
             "relocated": relocated
         }
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info("Solar return chart generated successfully")
         return result
 
@@ -687,6 +692,7 @@ def generate_compact_solar_return_chart(
             "relocated": relocated
         }
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info("Compact solar return chart generated successfully")
         return result
 
@@ -803,6 +809,7 @@ def generate_progressed_chart(
         )
 
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info("Progressed chart generated successfully")
         return result
 
@@ -927,6 +934,7 @@ def generate_compact_progressed_chart(
         )
 
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info("Compact progressed chart generated successfully")
         return result
 
@@ -992,6 +1000,7 @@ def generate_composite_chart(
         # Serialize to JSON
         result = json.loads(json.dumps(composite, cls=ToJSON))
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info("Composite chart generated successfully")
         return result
 
@@ -1061,6 +1070,7 @@ def generate_compact_composite_chart(
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(composite, cls=CompactJSONSerializer))
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info("Compact composite chart generated successfully")
         return result
 
@@ -1131,7 +1141,8 @@ def generate_synastry_aspects(
         chart_data = json.loads(json.dumps(native_chart, cls=ToJSON))
         result = {
             "aspects": chart_data.get('aspects', {}),
-            "applied_settings": build_applied_settings(house_system)
+            "applied_settings": build_applied_settings(house_system),
+            "status": "success"
         }
         logger.info("Synastry aspects generated successfully")
         return result
@@ -1221,7 +1232,8 @@ def generate_compact_synastry_aspects(
 
         result = {
             "aspects": filtered_aspects,
-            "applied_settings": build_applied_settings(house_system)
+            "applied_settings": build_applied_settings(house_system),
+            "status": "success"
         }
         logger.info("Compact synastry aspects generated successfully")
         return result
@@ -1264,6 +1276,7 @@ def generate_transit_chart(
         # Serialize to JSON
         result = json.loads(json.dumps(transits, cls=ToJSON))
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info("Transit chart generated successfully")
         return result
 
@@ -1309,6 +1322,7 @@ def generate_compact_transit_chart(
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(transits, cls=CompactJSONSerializer))
         result["applied_settings"] = build_applied_settings(house_system)
+        result["status"] = "success"
         logger.info("Compact transit chart generated successfully")
         return result
 
@@ -1549,7 +1563,8 @@ def generate_transit_to_natal(
             "aspect_summary": aspect_summary,
             "pagination": pagination,
             "timezone": timezone,
-            "applied_settings": build_applied_settings(house_system)
+            "applied_settings": build_applied_settings(house_system),
+            "status": "success"
         }
 
         # === LIFECYCLE EVENTS DETECTION ===
@@ -1702,7 +1717,8 @@ def generate_compact_transit_to_natal(
             "transit_positions": transit_data.get('objects', {}),
             "transit_to_natal_aspects": aspects,
             "timezone": timezone,
-            "applied_settings": build_applied_settings(house_system)
+            "applied_settings": build_applied_settings(house_system),
+            "status": "success"
         }
 
         if include_lifecycle_events:

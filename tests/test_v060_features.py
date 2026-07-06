@@ -258,6 +258,28 @@ def test_relocated_lunar_return_same_instant_different_houses():
 
 
 # ---------------------------------------------------------------------------
+# I5: response envelope
+# ---------------------------------------------------------------------------
+
+def test_success_responses_carry_status():
+    natal = immanuel_server.generate_compact_natal_chart(*BIRTH, timezone=TZ)
+    summary = immanuel_server.get_chart_summary(*BIRTH, timezone=TZ)
+    transit = immanuel_server.generate_compact_transit_to_natal(
+        *BIRTH, "2026-07-04 12:00:00")
+    lunar = lunar_return_module.generate_compact_lunar_return_chart(
+        *BIRTH, 2025, 1, timezone=TZ)
+    for result in (natal, summary, transit, lunar):
+        assert result["status"] == "success", result.get("message")
+
+
+def test_error_responses_carry_status():
+    result = immanuel_server.generate_natal_chart("not-a-date", "32.71", "-117.15")
+    assert result["error"] is True          # backward-compatible keys kept
+    assert result["status"] == "error"
+    assert result["type"] and result["message"]
+
+
+# ---------------------------------------------------------------------------
 # I4: settings hygiene
 # ---------------------------------------------------------------------------
 
