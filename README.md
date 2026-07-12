@@ -2,48 +2,31 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-## 🎉 Project Status: 100% Feature Complete
-
-**Production Ready** - All features fully implemented and tested:
-- ✅ All chart types with lifecycle events support
-- ✅ Comprehensive lifecycle events detection (planetary returns & major transits)
-- ✅ Intelligent pagination and response optimization
-- ✅ Complete test coverage with all tests passing
-- ✅ Clean, maintainable codebase
-
-## ✨ Recent Optimization
-
-**87% size reduction achieved!** The full `generate_transit_to_natal` endpoint has been optimized from ~74 KB to ~10 KB through intelligent response structuring:
-- Named object keys instead of numeric IDs (`"Sun"` instead of `4000001`)
-- Consolidated dignities section
-- Streamlined position and aspect data
-- Intelligent pagination by orb tightness
-
-See [`docs/FULL_ENDPOINT_DIAGNOSIS.md`](docs/FULL_ENDPOINT_DIAGNOSIS.md) for technical details.
+**v0.6.0 · 21 tools · 112 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
 ### Chart Generation Tools
-- **Natal Charts**: Generate complete birth charts with houses, planets, and aspects
-- **Compact Natal Charts**: **NEW** - Streamlined charts optimized for faster processing and reduced LLM token usage
+- **Natal Charts**: Complete birth charts with houses, planets, and aspects (full and compact variants)
 - **Chart Summaries**: Essential information (Sun/Moon/Rising signs, chart shape, moon phase)
 - **Planetary Positions**: Simplified planetary positions in signs and houses
-- **Solar Returns**: Calculate solar return charts for any year
-- **Compact Solar Returns**: **NEW** - Streamlined solar return charts
-- **Progressions**: Create secondary progression charts
-- **Compact Progressions**: **NEW** - Streamlined progressed charts
-- **Composite Charts**: Generate relationship composite charts
-- **Compact Composite Charts**: **NEW** - Streamlined composite charts
-- **Synastry Aspects**: Calculate inter-chart aspects between two people
-- **Compact Synastry Aspects**: **NEW** - Filtered synastry aspects (major objects and aspects only)
-- **Transit Charts**: Show current planetary positions for any location
-- **Compact Transit Charts**: **NEW** - Streamlined transit charts
+- **Solar Returns**: Annual solar return charts, with optional relocation (full and compact variants)
+- **Lunar Returns**: Monthly lunar return charts, found by ephemeris search to sub-minute precision, with optional relocation (full and compact variants)
+- **Progressions**: Secondary progression charts (full and compact variants)
+- **Composite Charts**: Relationship midpoint charts (full and compact variants)
+- **Synastry Aspects**: Inter-chart aspects between two people (full and compact variants)
+- **Transit Charts**: Current planetary positions for any location (full and compact variants)
+- **Transit-to-Natal**: Transiting aspects to a natal chart, with intelligent orb-based pagination (full and compact variants)
+
+Compact variants filter output to major objects (Sun through Pluto, Ascendant, Midheaven) and major aspects (Conjunction, Opposition, Square, Trine, Sextile) for reduced LLM token usage — see [Chart Output Options](#chart-output-options) below.
+
+Every chart-generating tool accepts a per-call `house_system` override and returns a `status`/`applied_settings` response envelope — see [Common parameters and response envelope](#common-parameters-and-response-envelope-v060) in the Tool Reference.
 
 ### Chart Output Options
 - **Full Charts**: Complete astrological data with all objects, aspects, and detailed properties
 - **Compact Charts**: Filtered data focusing on major planets and aspects for LLM optimization
 
-### Lifecycle Events Detection (✅ PRODUCTION READY)
+### Lifecycle Events Detection
 - **Automatic Detection**: Identifies planetary returns (Saturn Return, Jupiter Return, etc.) and major life transits
 - **Life Stage Context**: Shows where you are in your astrological life journey
 - **Future Timeline**: Predicts upcoming returns and transits (10-20 years ahead)
@@ -115,7 +98,7 @@ Follow the Linux instructions above within your WSL environment.
 
 1. **Navigate to the project directory**:
    ```bash
-   cd immanuel-mcp-server
+   cd Immanuel-MCP
    ```
 
 2. **Install dependencies**:
@@ -126,9 +109,11 @@ Follow the Linux instructions above within your WSL environment.
 3. **Test the server**:
    ```bash
    uv run immanuel_server.py
+   # or, equivalently, the modular package entry point:
+   uv run python -m immanuel_mcp
    ```
-   
-   You should see the server start without errors. Press `Ctrl+C` to stop it.
+
+   Both commands register the identical set of 21 tools against the same server. You should see the server start without errors. Press `Ctrl+C` to stop it.
 
 ## Claude Desktop Configuration
 
@@ -570,6 +555,9 @@ uv --directory /path/to/astro-mcp run immanuel_server.py
 
 # Check dependencies
 uv pip list
+
+# Run the test suite
+uv run pytest tests/
 ```
 
 #### Verify Claude Desktop can find the server
@@ -577,16 +565,6 @@ uv pip list
 2. **Restart Claude Desktop**: Required after any config changes
 3. **Check Claude Desktop logs**: Look for error messages in the application
 4. **Test the exact command**: Run the command from the configuration manually
-
-### Common Issues and Solutions
-
-| Problem | Solution |
-|---------|----------|
-| "Failed to spawn: immanuel_server.py" | Use full path to uv executable |
-| "ModuleNotFoundError: No module named 'immanuel'" | Run `uv sync` to install dependencies |
-| "File not found" errors | Use `--directory` flag instead of `cwd` |
-| Server tools not available in Claude | Restart Claude Desktop after config changes |
-| JSON syntax errors | Validate configuration file with JSON validator |
 
 ## Contributing
 
