@@ -34,6 +34,10 @@ Thumbs.db
 new_codex/
 .worktrees/
 
+# Local-only docs and scripts (not published to the public repo)
+docs/
+scripts/
+
 # IDE
 .vscode/
 .idea/
