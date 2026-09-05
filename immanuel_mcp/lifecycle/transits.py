@@ -23,11 +23,18 @@ from .constants import MAJOR_LIFE_TRANSITS
 from .returns import (
     PLANET_CONSTANTS,
     calculate_signed_orb,
+    closest_exact_date,
     determine_movement,
-    estimate_exact_datetime,
+    find_event_exact_dates,
 )
 
 logger = logging.getLogger(__name__)
+
+# Target angles for the aspects used by the tracked major transits
+ASPECT_ANGLES = {
+    "Opposition": 180.0,
+    "Square": 90.0,
+}
 
 # Orb tolerance for major transits (wider than returns)
 TRANSIT_ORB_TOLERANCE = {
@@ -58,17 +65,11 @@ def calculate_aspect_orb(
         >>> calculate_aspect_orb(10.0, 101.0, "Square")
         1.0   # 1° past exact square
     """
-    # Get target angle for aspect
-    aspect_angles = {
-        "Opposition": 180.0,
-        "Square": 90.0,
-    }
-
-    if aspect_type not in aspect_angles:
+    if aspect_type not in ASPECT_ANGLES:
         logger.warning(f"Unknown aspect type: {aspect_type}")
         return None
 
-    target_angle = aspect_angles[aspect_type]
+    target_angle = ASPECT_ANGLES[aspect_type]
 
     # Angular separation is |signed distance| and therefore lies in [0, 180],
     # so both the waxing and waning square appear as separation ~= 90 and a
@@ -177,15 +178,24 @@ def check_major_transit(
 
     # Applying/separating from the transiting planet's speed. The signed
     # aspect orb is (separation - target); separation = |signed distance|,
-    # so its rate of change is sign(distance) * speed.
+    # so its rate of change is sign(distance) * speed. The perfection dates
+    # themselves come from an ephemeris search, not from that rate.
     speed = getattr(transit_planet, 'speed', None)
     movement = None
-    estimated_exact = None
+    exact_dates = []
+    exact_datetime = None
     if isinstance(speed, (int, float)):
         signed_distance = calculate_signed_orb(natal_pos, transit_pos)
         orb_rate = speed if signed_distance >= 0 else -speed
         movement = determine_movement(orb, orb_rate)
-        estimated_exact = estimate_exact_datetime(orb, orb_rate, transit_datetime)
+        try:
+            exact_dates = find_event_exact_dates(
+                transit_planet_const, natal_pos, ASPECT_ANGLES[aspect_type],
+                transit_datetime, tolerance, speed)
+        except Exception as e:
+            logger.warning(
+                f"Exact-date search failed for {transit_config['name']}: {e}")
+        exact_datetime = closest_exact_date(exact_dates, transit_datetime)
 
     # Build transit data
     transit_data = {
@@ -199,7 +209,8 @@ def check_major_transit(
         "orb": round(orb, 2),
         "orb_status": orb_status,
         "movement": movement,
-        "estimated_exact_date": estimated_exact.strftime("%Y-%m-%d") if estimated_exact else None,
+        "exact_date": exact_datetime.strftime("%Y-%m-%d") if exact_datetime else None,
+        "exact_dates": [dt.strftime("%Y-%m-%d") for dt in exact_dates],
         "significance": transit_config["significance"],
         "keywords": transit_config["keywords"],
         "description": transit_config["description"],

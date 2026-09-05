@@ -16,8 +16,11 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 import logging
 
+from immanuel.const import calc as calc_const
 from immanuel.const import chart as chart_const
+from immanuel.tools import date as date_tools
 
+from ..utils.search import find_exact_aspect_dates
 from .constants import (
     ORBITAL_PERIODS,
     RETURN_SIGNIFICANCE,
@@ -102,6 +105,64 @@ def determine_movement(signed_orb: float, orb_rate: float, exact_threshold: floa
         return "stationary"
     # The absolute orb shrinks when the orb and its rate have opposite signs.
     return "applying" if signed_orb * orb_rate < 0 else "separating"
+
+
+def find_event_exact_dates(
+    planet_index: int,
+    natal_longitude: float,
+    aspect: float,
+    reference: datetime,
+    tolerance: float,
+    speed: float,
+) -> list:
+    """
+    Ephemeris-searched dates on which a lifecycle event perfects.
+
+    Replaces the linear speed estimate for anything with a real ephemeris.
+    A retrograde slow planet perfects the same aspect up to three times, so
+    this returns every perfection in the window the event is within orb for.
+
+    The reference datetime is treated as UTC for the search's starting Julian
+    date. That is only a starting point - the search converges on the true
+    perfection regardless - so the sub-day error from an unknown zone does not
+    affect the result.
+
+    Args:
+        planet_index: Immanuel chart constant for the transiting planet
+        natal_longitude: The natal point's ecliptic longitude in degrees
+        aspect: Aspect angle in degrees (0 for a return)
+        reference: Datetime the orb was measured at
+        tolerance: Orb tolerance in degrees for this event
+        speed: The transiting planet's daily motion in degrees
+
+    Returns:
+        Chronological list of datetimes, empty if the search finds none.
+    """
+    daily = max(abs(speed), 1e-4)
+    # Cover the whole in-orb span, tripled so retrograde loops that carry the
+    # planet back out of orb and in again are not cut off. Bounded so a
+    # near-stationary body cannot request a centuries-wide search.
+    half_window = min(max(tolerance / daily * 3, 30.0), 730.0)
+
+    reference_jd = date_tools.to_jd(reference, lat=0.0, lon=0.0, time_zone="UTC")
+    hits = find_exact_aspect_dates(
+        planet_index,
+        natal_longitude,
+        aspect,
+        reference_jd - half_window,
+        half_window * 2,
+    )
+    return [
+        date_tools.to_datetime(jd, lat=0.0, lon=0.0, time_zone="UTC").replace(tzinfo=None)
+        for jd in hits
+    ]
+
+
+def closest_exact_date(exact_dates: list, reference: datetime):
+    """The perfection nearest the reference datetime, or None if there are none."""
+    if not exact_dates:
+        return None
+    return min(exact_dates, key=lambda dt: abs((dt - reference).total_seconds()))
 
 
 def estimate_exact_datetime(signed_orb: float, orb_rate: float, reference: datetime):
@@ -274,15 +335,22 @@ def calculate_planetary_return(
     # Get significance
     significance = get_return_significance(planet_name, cycle_number)
 
-    # Applying/separating and estimated perfection date from the transiting
-    # planet's current speed. For a return, the signed orb closes at exactly
-    # the planet's own rate of motion.
+    # Applying/separating from the transiting planet's current speed; the
+    # perfection dates come from an ephemeris search, so a retrograde return
+    # reports all of its passes rather than one linear guess.
     speed = getattr(transit_planet, 'speed', None)
     movement = None
-    estimated_exact = None
+    exact_dates = []
+    exact_datetime = None
     if isinstance(speed, (int, float)):
         movement = determine_movement(orb, speed)
-        estimated_exact = estimate_exact_datetime(orb, speed, transit_datetime)
+        try:
+            exact_dates = find_event_exact_dates(
+                planet_const, natal_pos, calc_const.CONJUNCTION,
+                transit_datetime, tolerance, speed)
+        except Exception as e:
+            logger.warning(f"Exact-date search failed for {planet_name} return: {e}")
+        exact_datetime = closest_exact_date(exact_dates, transit_datetime)
 
     # Build return data
     return_data = {
@@ -294,7 +362,8 @@ def calculate_planetary_return(
         "orb": round(orb, 2),
         "orb_status": orb_status,
         "movement": movement,
-        "estimated_exact_date": estimated_exact.strftime("%Y-%m-%d") if estimated_exact else None,
+        "exact_date": exact_datetime.strftime("%Y-%m-%d") if exact_datetime else None,
+        "exact_dates": [dt.strftime("%Y-%m-%d") for dt in exact_dates],
         "natal_sign": natal_planet.sign.name,
         "transit_sign": transit_planet.sign.name,
         "significance": significance,

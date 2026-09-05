@@ -84,6 +84,9 @@ def detect_progressed_moon_return(
         "orb_status": orb_status,
         "movement": movement,
         "exact_date": exact_center.strftime("%Y-%m-%d"),
+        "exact_dates": [],
+        # The progressed Moon moves at a symbolic rate, not an ephemeris one,
+        # so there is nothing to search - this stays a linear estimate.
         "exact_date_estimated": True,
         "date_range": date_range,
         "age_at_event": round(age, 1),
