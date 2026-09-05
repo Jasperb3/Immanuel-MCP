@@ -36,7 +36,6 @@ new_codex/
 
 # Local-only docs and scripts (not published to the public repo)
 docs/
-scripts/
 
 # IDE
 .vscode/

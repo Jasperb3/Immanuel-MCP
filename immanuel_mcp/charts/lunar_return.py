@@ -21,7 +21,7 @@ from immanuel.classes.serialize import ToJSON
 from immanuel.const import chart as chart_const
 from immanuel.tools import date as date_tools
 from immanuel.tools import ephemeris
-from scripts.compact_serializer import CompactJSONSerializer
+from ..serializers import CompactJSONSerializer
 
 from ..app import mcp
 from ..lifecycle.attach import attach_lifecycle_section

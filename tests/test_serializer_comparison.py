@@ -3,7 +3,7 @@
 
 from immanuel import charts
 from immanuel.classes.serialize import ToJSON
-from scripts.compact_serializer import CompactJSONSerializer
+from immanuel_mcp.serializers import CompactJSONSerializer
 import json
 
 

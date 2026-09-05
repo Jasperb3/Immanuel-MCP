@@ -40,5 +40,5 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 include = [
     "immanuel_server.py",
-    "compact_serializer.py",
+    "immanuel_mcp/",
 ]
