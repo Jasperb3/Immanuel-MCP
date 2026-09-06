@@ -54,6 +54,10 @@ response shapes, hence the minor rather than patch bump.
   banner.
 
 ### Changed
+- `immanuel_mcp.__version__` is single-sourced: it reads package metadata via
+  `importlib.metadata`, falling back to parsing `pyproject.toml` when the
+  package is imported from a source checkout that was never installed. The
+  version is no longer a duplicated literal, so it cannot drift again.
 - `configure_immanuel_settings` reports `old_value` and `new_value` in one
   vocabulary; `old_value` used to be a raw numeric code against a name.
 - Restoring the locale now clears immanuel's `Localize` state, which otherwise

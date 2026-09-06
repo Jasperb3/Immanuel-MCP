@@ -175,8 +175,13 @@ def test_current_house_system_code_is_accepted_back(restore_settings):
 
 
 # ---------------------------------------------------------------------------
-# Release stamps: version and counts live in four places and have twice now
-# drifted apart. These fail loudly instead of shipping a stale banner.
+# Release stamps. The version is single-sourced from pyproject.toml
+# (immanuel_mcp.__version__ reads package metadata, falling back to
+# pyproject), so the first test guards the remaining gap: an installed
+# distribution whose metadata has gone stale against the source - exactly
+# what a `git pull` without `uv sync` produces on the Windows production
+# checkout. The banner is still a hand-written literal, and both it and the
+# counts have drifted before, so they are checked against reality.
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
