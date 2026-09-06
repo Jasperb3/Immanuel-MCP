@@ -5,6 +5,67 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-09-06
+
+Fixes four defects reported from live use against Claude Desktop. Two change
+response shapes, hence the minor rather than patch bump.
+
+### Fixed
+- **Compact charts now compact the `houses` block.** The compact serializer
+  flattened `objects` and `aspects` but copied `houses` verbatim from the full
+  chart, so every "compact" response carried immanuel's full nested wrapper for
+  all twelve cusps — direction, degrees/minutes/seconds, decan, speed,
+  declination, size. Houses are now flattened to `number`, `sign`,
+  `sign_longitude` and raw `longitude`, matching the shape `objects` already
+  used: **8550 → 1370 bytes on a natal chart (84% smaller, 7.2 KB saved)**.
+  Affects every compact tool, lunar returns included.
+- **Seconds in `generate_transit_to_natal` no longer carry a minutes mark.**
+  `format_position` trimmed seconds by splitting on the arcsecond mark — which
+  sits *after* the digits — then re-appended an apostrophe, turning immanuel's
+  correct `12°21'42"` into `12°21'42'`. The digits survived wearing the wrong
+  symbol, so the docstring's promised `28°51'` was never produced either.
+  `format_declination` had the identical defect. Both now pass immanuel's
+  already-correct string through untouched.
+- **`reset_immanuel_settings` no longer changes settings silently.** It rebuilt
+  a fresh `ImmanuelSettings` (library defaults: Placidus, no locale) and
+  reported only the restored values, so a session already reconfigured before
+  the caller inspected it was *changed* rather than reverted — and
+  `house_system` is global state affecting every subsequent chart's cusps.
+- **House-system numeric codes are accepted.** `list_available_settings`
+  displayed codes such as `108` that `configure_immanuel_settings` rejected.
+
+### Added
+- Settings are snapshotted at server import, so `reset_immanuel_settings`
+  restores the server's **startup configuration** rather than library defaults;
+  a server configured at launch now resets to its launch configuration.
+- `reset_immanuel_settings` returns `previous_settings`, `restored_settings`
+  and `changed`. `restored_defaults` is retained as an alias for one release.
+- `resolve_house_system` accepts numeric codes (`108`, `"108"`), constant names
+  (`PLACIDUS`) and display names (`"Placidus"`, `"Equal House"`). Display names
+  diverge from constant names for `EQUAL`, `VEHLOW_EQUAL` and `POLICH_PAGE`, so
+  the names the tool advertised were themselves being rejected.
+- `list_available_settings` reports `available_systems` as `{code, name,
+  accepts}`, so every displayed value is a valid input.
+- `tests/test_issue_followups.py` pins all four fixes (15 tests).
+
+### Changed
+- `configure_immanuel_settings` reports `old_value` and `new_value` in one
+  vocabulary; `old_value` used to be a raw numeric code against a name.
+- Restoring the locale now clears immanuel's `Localize` state, which otherwise
+  kept serving the previous language while `settings.locale` reported the
+  restored value.
+
+### Removed
+- Dead, byte-identical copy of `build_optimized_transit_positions` in
+  `optimizers/dignities.py`. It called `format_position`/`format_declination`
+  without importing them and would have raised `NameError`; leaving it would
+  have kept the seconds bug alive in a second copy.
+
+### Breaking
+- The compact `houses` block changed shape (nested wrapper → four flat keys).
+- `reset_immanuel_settings` returns new top-level keys; `restored_defaults`
+  still works but is deprecated.
+
 ## [0.7.0] - 2026-09-06
 
 Adopts the ephemeris search functions immanuel 1.5.4 added but this server

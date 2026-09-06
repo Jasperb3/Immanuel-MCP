@@ -201,6 +201,7 @@ San Diego, California (coordinates: 32n43, 117w09)"
 - Faster processing and reduced token usage
 - Focuses on major planets only (Sun through Pluto, Ascendant, Midheaven)
 - Includes only major aspects (Conjunction, Opposition, Square, Trine, Sextile)
+- Flattens house cusps to `number`, `sign`, `sign_longitude` and raw `longitude` (v0.8.0 — ~84% smaller houses block)
 - Excludes minor asteroids, detailed weightings, and chart shape analysis
 
 The server accepts coordinates in multiple formats:
@@ -493,7 +494,7 @@ Modifies global Immanuel library settings. **This changes global state for every
 - `setting_value`: Value to set (e.g., "WHOLE_SIGN", "4000001,4000002,Chiron")
 
 #### Common Settings:
-- **House Systems**: `PLACIDUS`, `KOCH`, `WHOLE_SIGN`, `EQUAL`, `CAMPANUS`, etc. (invalid names return an error listing all valid values)
+- **House Systems**: accepted as the numeric code (`108`, `"108"`), the constant name (`PLACIDUS`, `WHOLE_SIGN`, `EQUAL`) or the display name (`"Placidus"`, `"Equal House"`). Every value shown by `list_available_settings` is a valid input; invalid ones return an error listing all valid values as `CODE — CONSTANT_NAME — Display Name`
 - **Objects**: Comma-separated list of celestial bodies (e.g., "Sun,Moon,Mercury,Venus,Mars,Jupiter,Saturn,Uranus,Neptune,Pluto,Chiron")
 - **Orbs**: `conjunction_orb`, `opposition_orb`, `trine_orb`, etc. (numeric values)
 - **MC progression method**: `NAIBOD`, `SOLAR_ARC`, `DAILY_HOUSES`
@@ -502,14 +503,16 @@ Modifies global Immanuel library settings. **This changes global state for every
 Note (v0.6.0): the `lunar_phase_method` and `solar_arc_method` keys were removed — they do not exist in the immanuel library and configuring them was a silent no-op.
 
 ### `reset_immanuel_settings`
-Resets the global Immanuel settings to library defaults, undoing every `configure_immanuel_settings` change made in the session.
+Restores the global Immanuel settings to the server's **startup configuration** — immanuel's library defaults (Placidus, no locale) unless the server was configured at launch.
+
+⚠️ This is **not** an undo of your own changes. The server keeps no per-change history, so if the session had already been reconfigured before you inspected it, a reset *changes* the effective settings rather than preserving them. Since `house_system` is global state affecting every subsequent chart's cusps, check the returned `changed` list.
 
 **Parameters:** None
 
-**Returns:** Confirmation with a summary of the restored defaults
+**Returns:** `previous_settings` (in effect before the reset), `restored_settings` (in effect now), and `changed` (setting names that differ — empty when the reset was a no-op). `restored_defaults` is retained as an alias of `restored_settings` for one release.
 
 ### `list_available_settings`
-Lists all available Immanuel settings and their current values.
+Lists all available Immanuel settings and their current values. Each entry in `available_systems` is `{code, name, accepts}`, where every value in `accepts` is something `configure_immanuel_settings` will take.
 
 **Parameters:** None
 

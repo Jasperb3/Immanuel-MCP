@@ -323,9 +323,11 @@ result = generate_lunar_return_chart(
 - Compact version: ~18 KB (major objects and aspects only)
 
 ### Configuration Tools
-- `configure_immanuel_settings` - Modify global Immanuel library settings (house systems, orbs, celestial objects). Session-global; for one-off changes prefer the per-call `house_system` parameter on the chart tools
-- `reset_immanuel_settings` - Restore the global settings to library defaults
-- `list_available_settings` - View current Immanuel library settings
+- `configure_immanuel_settings` - Modify global Immanuel library settings (house systems, orbs, celestial objects). Session-global; for one-off changes prefer the per-call `house_system` parameter on the chart tools. **House systems accept either the numeric code (`108` or `"108"`), the constant name (`PLACIDUS`) or the display name (`"Placidus"`)** — every value `list_available_settings` shows is a valid input
+- `reset_immanuel_settings` - Restore the global settings to the server's **startup configuration** (immanuel's library defaults unless the server was configured at launch). This is **not** an undo of the caller's own changes: the server keeps no per-change history, so a session that was already reconfigured before you inspected it gets *changed* by a reset, not reverted. The response reports `previous_settings`, `restored_settings` and a `changed` list so this is never silent; `restored_defaults` remains as an alias for one release
+- `list_available_settings` - View current Immanuel library settings. `available_systems` entries are `{code, name, accepts}`
+
+**Do not treat a house-system display name as its constant name.** They diverge: `EQUAL` displays as "Equal House", `VEHLOW_EQUAL` as "Vehlow Equal House", `POLICH_PAGE` as "Polich Page". `resolve_house_system` in `immanuel_mcp/utils/settings.py` normalizes and accepts both, plus numeric codes; anything comparing the two forms directly will reject values the tools advertise.
 
 ## Coordinate System
 
@@ -437,6 +439,7 @@ The `CompactJSONSerializer` filters chart data to include:
 - **Major Objects Only**: Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto, Ascendant, Midheaven
 - **Major Aspects Only**: Conjunction, Opposition, Square, Trine, Sextile
 - **Essential Data**: Object positions, house placements, aspect orbs
+- **Flattened Houses (v0.8.0)**: house cusps are reduced to `number`, `sign`, `sign_longitude` and raw `longitude`. They were previously copied verbatim from the full chart, which left every "compact" response carrying immanuel's full nested wrapper for all twelve cusps — flattening them cuts the houses block by ~84% (8.5 KB → 1.4 KB on a natal chart)
 - **Excluded**: Minor asteroids, detailed weightings, chart shape analysis, moon phase details
 
 ### Modifying Settings Support
