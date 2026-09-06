@@ -5,42 +5,37 @@ from ..constants import CELESTIAL_BODIES
 
 def format_position(sign_longitude: Dict[str, Any], sign_name: str) -> str:
     """
-    Create a compact position string from sign longitude and sign name.
+    Create a position string from sign longitude and sign name.
+
+    Immanuel already formats these as D°M'S" (see immanuel.tools.convert),
+    so the string is used as-is. An earlier version tried to trim the seconds
+    by splitting on the seconds mark - which sits after the digits - and then
+    re-appending a minutes mark, turning 12°21'42" into 12°21'42'.
 
     Args:
         sign_longitude: Sign longitude dict with 'formatted' field
         sign_name: Name of the zodiac sign
 
     Returns:
-        Compact position string like "28°51' Sagittarius"
+        Position string like "12°21'42\" Scorpio"
     """
-    # Extract just degrees and minutes from formatted string (e.g., "28°51'07"" -> "28°51'")
-    formatted = sign_longitude.get('formatted', '')
-    # Remove seconds portion if present
-    if '"' in formatted:
-        parts = formatted.split('"')[0]  # Get everything before the seconds marker
-        # Reconstruct without seconds
-        formatted = parts.strip() + "'"
-
-    return f"{formatted} {sign_name}"
+    return f"{sign_longitude.get('formatted', '')} {sign_name}"
 
 
 def format_declination(declination: Dict[str, Any]) -> str:
     """
-    Create a compact declination string.
+    Create a declination string.
+
+    Passed through from immanuel unchanged, for the same reason as
+    format_position.
 
     Args:
         declination: Declination dict with 'formatted' field
 
     Returns:
-        Compact declination string like "-23°26'"
+        Declination string like "-23°26'19\""
     """
-    formatted = declination.get('formatted', '')
-    # Remove seconds if present
-    if '"' in formatted:
-        parts = formatted.split('"')[0]
-        formatted = parts.strip() + "'"
-    return formatted
+    return declination.get('formatted', '')
 
 
 def extract_primary_dignity(dignities: Dict[str, Any]) -> Optional[str]:
