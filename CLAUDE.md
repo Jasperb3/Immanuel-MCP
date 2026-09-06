@@ -17,8 +17,8 @@ This is an MCP (Model Context Protocol) server that exposes the Immanuel Python 
 - **Entry Points**:
   - `immanuel_server.py` - Original single-file server (maintained for compatibility)
   - `python -m immanuel_mcp` - New modular package entry point
-- **Architecture**: FastMCP-based server with 21 astrology tools (8 chart types in full/compact pairs, 2 summary tools, 3 configuration tools). A single shared FastMCP instance lives in `immanuel_mcp/app.py`; both entry points register the identical tool set against it.
-- **Per-call settings (v0.6.0)**: every chart tool accepts `house_system` for that call only (isolated `ImmanuelSettings`, session globals untouched; helper in `immanuel_mcp/utils/settings.py`), and chart responses echo `applied_settings` (`{house_system, source: "per-call" | "session-global"}`) plus `status: "success" | "error"`. Progressed/solar-return/lunar-return tools expose `include_natal_aspects` (cross aspects under `natal_cross_aspects` with `progressed_object`/`return_object`/`natal_object` keys; helper in `immanuel_mcp/optimizers/cross_aspects.py`), and the return tools accept `return_latitude`/`return_longitude` for relocation (return instant preserved). Requires `immanuel>=1.5.4`.
+- **Architecture**: FastMCP-based server with 23 astrology tools (8 chart types in full/compact pairs, 2 summary tools, 2 forecast-calendar tools, 3 configuration tools). A single shared FastMCP instance lives in `immanuel_mcp/app.py`; both entry points register the identical tool set against it.
+- **Per-call settings (v0.6.0)**: every chart tool accepts `house_system` for that call only (isolated `ImmanuelSettings`, session globals untouched; helper in `immanuel_mcp/utils/settings.py`), and chart responses echo `applied_settings` (`{house_system, source: "per-call" | "session-global"}`) plus `status: "success" | "error"`. Progressed/solar-return/lunar-return tools expose `include_natal_aspects` (cross aspects under `natal_cross_aspects` with `progressed_object`/`return_object`/`natal_object` keys; helper in `immanuel_mcp/optimizers/cross_aspects.py`), and the return tools accept `return_latitude`/`return_longitude` for relocation (return instant preserved). Requires `immanuel>=1.5.4,<1.6`.
 - **Package Structure**:
   ```
   immanuel_mcp/
@@ -31,6 +31,7 @@ This is an MCP (Model Context Protocol) server that exposes the Immanuel Python 
   │   ├── coordinates.py             # parse_coordinate
   │   ├── datetimes.py               # parse_datetime_value
   │   ├── subjects.py                # create_subject helper
+  │   ├── search.py                  # ephemeris search wrappers (v0.7.0)
   │   └── errors.py                  # validate_inputs, handle_chart_error
   ├── optimizers/                    # Response optimization
   │   ├── positions.py               # format_position, optimized transit positions
@@ -38,8 +39,11 @@ This is an MCP (Model Context Protocol) server that exposes the Immanuel Python 
   │   └── dignities.py               # extract_primary_dignity, build_dignities_section
   ├── pagination/                    # Aspect pagination
   │   └── helpers.py                 # get_actual_orb, classify_aspect_priority, build_pagination_object
+  ├── serializers.py                 # CompactJSONSerializer (runtime dependency)
   ├── charts/                        # Chart generation
-  │   └── lunar_return.py            # Lunar return charts (ephemeris-based search)
+  │   ├── lunar_return.py            # Lunar return charts (ephemeris-based search)
+  │   ├── lunations.py               # Lunation & eclipse calendar (v0.7.0)
+  │   └── ingresses.py               # Sign ingress calendar (v0.7.0)
   ├── lifecycle/                     # Lifecycle events detection (v0.4.0)
   │   ├── __init__.py                # Package exports
   │   ├── attach.py                  # attach_lifecycle_section (shared by all endpoints)
@@ -67,8 +71,9 @@ This is an MCP (Model Context Protocol) server that exposes the Immanuel Python 
 
 ### Dependencies
 - **Core**: `mcp[cli]` (MCP server framework), `immanuel` (astrology calculations)
-- **Custom**: `compact_serializer.py` (streamlined chart output for LLM optimization)
+- **Custom**: `immanuel_mcp/serializers.py` (streamlined chart output for LLM optimization). This is a runtime dependency of the package, not a script — it briefly lived in the gitignored `scripts/` directory, which made a clean checkout unimportable.
 - **Python**: Requires Python 3.10+
+- **Version pin**: `immanuel>=1.5.4,<1.6`. Upstream master already carries a breaking overhaul behind the next version — see local `docs/IMMANUEL_UPGRADE_NOTES.md` before lifting the bound.
 - **Package Manager**: Uses `uv` for dependency management
 
 ## Development Commands
@@ -115,6 +120,11 @@ mcp run immanuel_server.py
 - `generate_compact_transit_chart` - Streamlined transit charts
 - `generate_transit_to_natal` - Full transit-to-natal aspects with intelligent pagination
 - `generate_compact_transit_to_natal` - Streamlined transit-to-natal with interpretations
+
+### Forecast Calendar Tools (🆕 v0.7.0)
+These need no birth data — they read the ephemeris directly and build no chart.
+- `get_lunations_and_eclipses` - Upcoming new moons, full moons and solar/lunar eclipses, with the Moon's sign and degree and both UTC and local times. Eclipses carry their type.
+- `get_sign_ingresses` - Dates planets change zodiac sign. Takes the **earlier** of the forward and backward crossing at each step, so retrograde re-entries are included and the sequence stays in date order. Searching only forward would silently drop the middle crossing of a three-crossing ingress.
 
 ### Transit-to-Natal Pagination System
 
@@ -199,7 +209,7 @@ All chart types (Natal, Transit-to-Natal, Solar Return, Lunar Return, Progressed
 - `current_angular_separation`: Degrees (0-180°) between current and exact position. NOT traditional astrological orb, but actual angular distance remaining until the event becomes exact.
 - `orb_status`: Closeness relative to the event's orb tolerance: "exact" (< 0.5°), "tight", "moderate", "loose", or "inactive" (beyond tolerance; only on future-timeline entries)
 - `movement`: "applying" (moving toward exact), "exact", "separating" (past exact), or "stationary" - derived from the transiting planet's actual speed
-- `exact_date` / `exact_date_estimated`: Speed-based linear estimate of the perfection date. Always flagged as an estimate: retrograde passes can produce multiple exact hits for slow outer-planet events, which a single date cannot represent.
+- `exact_date` / `exact_dates` / `exact_date_estimated`: **v0.7.0** — the perfection dates come from an ephemeris search (`find_event_exact_dates` in `lifecycle/returns.py`, built on `utils/search.py`), so `exact_date_estimated` is now `false`. `exact_date` is the perfection nearest the transit moment; `exact_dates` lists every pass, since a retrograde outer planet perfects the same aspect up to three times. Multi-pass events also get their true `date_range` (first pass to last) rather than an orb-derived estimate. The **progressed Moon** is the exception: it moves at a symbolic rate, not an ephemeris one, so it keeps the linear estimate and `exact_date_estimated: true`.
 - `status`: "active" (happening now), "upcoming" (future), or "past" (historical)
 - `category`: "return" (planetary return) or "major_transit" (square/opposition)
 - Future-timeline entries also carry `prediction_basis` ("mean_orbital_period" or "typical_age"): these are age arithmetic, not ephemeris searches, and actual timing varies by birth cohort (Pluto's eccentric orbit especially).
@@ -261,7 +271,7 @@ Lunar return charts are a monthly predictive technique that calculates the chart
 - **Application**: Used for monthly forecasting, similar to how solar returns are used for annual forecasting
 
 **Implementation Details:**
-- Searches in Julian-day space against the ephemeris directly (one swisseph call per probe), then bisects the bracketed crossing to under a minute of clock time
+- Delegates to `immanuel.tools.transit.next_aspect_to()` (1.5.4+) via `immanuel_mcp/utils/search.py`, converging to within 1e-6° of the natal longitude
 - A 30/31-day month occasionally contains two lunar returns (~27.3-day cycle); the first is returned
 - Generates a standard natal chart for the return moment
 - Includes metadata: return_date, natal_moon_longitude, return_year, return_month

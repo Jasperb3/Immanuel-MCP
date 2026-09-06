@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-09-06
+
+Adopts the ephemeris search functions immanuel 1.5.4 added but this server
+never used, replacing two approximations with real searches and adding two
+forecasting tools. No library upgrade: 1.5.4 is the newest release.
+
+### Added
+- **`get_lunations_and_eclipses`**: upcoming new moons, full moons and solar
+  and lunar eclipses from a given moment, each with the Moon's sign and
+  degree and both UTC and local times. Eclipses carry their type (Total,
+  Annular, Partial, Annular total, Penumbral). Needs no birth data.
+- **`get_sign_ingresses`**: dates planets change zodiac sign, defaulting to
+  the slow bodies. Takes the earlier of the forward and backward crossing at
+  each step, so retrograde re-entries are included and the sequence stays in
+  date order — Saturn's 2025-26 move into Aries is three crossings, not one.
+  Needs no birth data.
+- **`exact_dates`** on lifecycle events: every perfection of a return or
+  major transit, not just one. A retrograde outer planet perfects the same
+  aspect up to three times.
+
+### Changed
+- **Lifecycle `exact_date` is now searched, not estimated.** It was a linear
+  extrapolation from the transiting planet's instantaneous speed, flagged
+  `exact_date_estimated: true`; it now comes from an ephemeris search and
+  `exact_date_estimated` is `false`. Multi-pass events also get their true
+  `date_range` (first perfection to last) in place of the orb-derived
+  estimate. The progressed Moon keeps the estimate and its flag — it moves at
+  a symbolic rate, not an ephemeris one, so there is nothing to search.
+- **Lunar return search** now delegates to the library's fixed-point aspect
+  search, converging to within 1e-6° instead of the previous under-a-minute
+  bisection. Returned instants are unchanged to within ~20 seconds.
+- **`immanuel` pinned to `>=1.5.4,<1.6`.** Upstream master already carries a
+  breaking overhaul behind the next version (`ImmanuelSettings` renamed to
+  `Config`, a module reshuffle, and a pyswisseph to pysweph migration) that
+  an open-ended constraint would pull in unreviewed.
+- Tool count 21 → 23; test count 112 → 124.
+
+### Fixed
+- **The package could not be imported from a clean checkout.** `03c1809`
+  removed `scripts/` from tracking and from disk, but
+  `scripts/compact_serializer.py` was a runtime import of `immanuel_server`
+  and of the lunar return module. It is restored byte-identical as
+  `immanuel_mcp/serializers.py`, a tracked module of the package. The wheel
+  `include` — which pointed at a root-level `compact_serializer.py` that has
+  never existed at that path — is fixed alongside it.
+
 ## [0.6.0] - 2026-07-06
 
 Interpretive-capability release: exposes per-call settings and the
