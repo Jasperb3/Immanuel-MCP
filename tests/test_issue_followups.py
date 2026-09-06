@@ -17,6 +17,7 @@ import json
 import pathlib
 import re
 import subprocess
+import sys
 
 import pytest
 from immanuel import charts, setup
@@ -215,10 +216,15 @@ def test_readme_banner_counts_match_reality():
     tools = asyncio.run(shared_mcp.list_tools())
     assert int(banner.group(2)) == len(tools)
 
+    # sys.executable, not a bare "python": on Windows the latter resolves to
+    # whatever is first on PATH rather than this venv, which collected a
+    # different (much smaller) set of tests and failed the assertion.
     collected = subprocess.run(
-        ["python", "-m", "pytest", "tests/", "--collect-only", "-q", "-p", "no:cacheprovider"],
+        [sys.executable, "-m", "pytest", "tests/", "--collect-only", "-q",
+         "-p", "no:cacheprovider"],
         cwd=REPO_ROOT, capture_output=True, text=True,
     )
-    count = re.search(r"^(\d+) tests collected", collected.stdout, re.MULTILINE)
-    assert count, collected.stdout[-500:]
+    assert collected.returncode == 0, collected.stdout[-800:]
+    count = re.search(r"^(\d+) tests? collected", collected.stdout, re.MULTILINE)
+    assert count, collected.stdout[-800:]
     assert int(banner.group(3)) == int(count.group(1))
