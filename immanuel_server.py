@@ -1768,6 +1768,7 @@ def configure_immanuel_settings(
 
         from immanuel import setup
         from immanuel_mcp.utils.settings import (
+            house_system_display_name,
             resolve_house_system,
             resolve_progression_method,
             resolve_orb_calculation,
@@ -1872,11 +1873,20 @@ def configure_immanuel_settings(
                 logger.warning(f"Error setting {setting_key}: {e}")
                 setattr(settings, setting_key, setting_value)
         
+        # Report both ends in the same vocabulary: old_value used to be the
+        # raw numeric code while new_value was the name the caller typed.
+        new_value = getattr(settings, setting_key, setting_value)
+        if setting_key == 'house_system':
+            old_display = house_system_display_name(old_value)
+            new_display = house_system_display_name(new_value)
+        else:
+            old_display, new_display = str(old_value), str(new_value)
+
         result = {
             "status": "success",
-            "message": f"Setting '{setting_key}' updated from '{old_value}' to '{setting_value}'.",
-            "old_value": str(old_value),
-            "new_value": setting_value,
+            "message": f"Setting '{setting_key}' updated from '{old_display}' to '{new_display}'.",
+            "old_value": old_display,
+            "new_value": new_display,
             "scope": "session-global"
         }
         logger.info("Setting configured successfully")
@@ -1890,22 +1900,41 @@ def configure_immanuel_settings(
 @mcp.tool()
 def reset_immanuel_settings() -> Dict[str, Any]:
     """
-    Reset the global Immanuel settings to library defaults, undoing every
-    change made via configure_immanuel_settings in this session.
+    Restore the global Immanuel settings to this server's STARTUP
+    configuration - immanuel's library defaults (Placidus, no locale) unless
+    the server was configured at launch.
+
+    This is not an undo of your own changes: it does not return the settings
+    to whatever they were immediately before you last called
+    configure_immanuel_settings. If the session had already been reconfigured
+    before you inspected it, resetting will change the effective values rather
+    than preserve them, so check the returned `changed` list.
 
     Returns:
-        Confirmation with a summary of the restored default values.
+        `previous_settings` (values in effect before the reset),
+        `restored_settings` (values now in effect), and `changed` (the setting
+        names that differ between the two - empty if the reset was a no-op).
     """
     try:
         from immanuel_mcp.utils.settings import reset_global_settings
 
-        logger.info("Resetting Immanuel settings to library defaults")
-        restored = reset_global_settings()
+        logger.info("Resetting Immanuel settings to startup configuration")
+        result = reset_global_settings()
+        changed = result["changed"]
+        message = (
+            "Immanuel settings restored to the server's startup configuration. "
+            + (f"Changed: {', '.join(changed)}." if changed
+               else "Nothing changed - settings already matched startup.")
+        )
         return {
             "status": "success",
-            "message": "Immanuel settings restored to library defaults.",
+            "message": message,
             "scope": "session-global",
-            "restored_defaults": restored
+            "previous_settings": result["previous_settings"],
+            "restored_settings": result["restored_settings"],
+            "changed": changed,
+            # Retained for one release for callers reading the old key.
+            "restored_defaults": result["restored_settings"],
         }
 
     except Exception as e:
@@ -1950,12 +1979,30 @@ def list_available_settings() -> Dict[str, Any]:
         current_aspects = getattr(settings, 'aspects', [])
         aspect_names = [ASPECT_ANGLES.get(angle, f"{angle}°") for angle in current_aspects]
 
+        # Every advertised system is listed with the exact values
+        # configure_immanuel_settings will accept, so a displayed value can
+        # always be fed straight back in - the numeric code included.
+        from immanuel_mcp.utils.settings import _house_system_constants
+        available_systems = [
+            {
+                'code': code,
+                'name': HOUSE_SYSTEMS.get(code, attr.title()),
+                'accepts': [code, attr, HOUSE_SYSTEMS.get(code, attr.title())]
+            }
+            for attr, code in sorted(
+                _house_system_constants().items(), key=lambda item: item[1])
+        ]
+
         setting_info = {
             'house_system': {
                 'current': house_system_code,
                 'name': house_system_name,
-                'description': 'House system used for chart calculations',
-                'available_systems': list(HOUSE_SYSTEMS.values())
+                'description': (
+                    'House system used for chart calculations. '
+                    'configure_immanuel_settings accepts either the numeric '
+                    'code or the name.'
+                ),
+                'available_systems': available_systems
             },
             'locale': {
                 'current': getattr(settings, 'locale', None),
