@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.6.0 · 21 tools · 112 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.7.0 · 23 tools · 127 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -11,12 +11,14 @@ A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python
 - **Chart Summaries**: Essential information (Sun/Moon/Rising signs, chart shape, moon phase)
 - **Planetary Positions**: Simplified planetary positions in signs and houses
 - **Solar Returns**: Annual solar return charts, with optional relocation (full and compact variants)
-- **Lunar Returns**: Monthly lunar return charts, found by ephemeris search to sub-minute precision, with optional relocation (full and compact variants)
+- **Lunar Returns**: Monthly lunar return charts, found by ephemeris search to within 1e-6°, with optional relocation (full and compact variants)
 - **Progressions**: Secondary progression charts (full and compact variants)
 - **Composite Charts**: Relationship midpoint charts (full and compact variants)
 - **Synastry Aspects**: Inter-chart aspects between two people (full and compact variants)
 - **Transit Charts**: Current planetary positions for any location (full and compact variants)
 - **Transit-to-Natal**: Transiting aspects to a natal chart, with intelligent orb-based pagination (full and compact variants)
+- **Lunations and Eclipses**: Upcoming new moons, full moons and solar/lunar eclipses, with the Moon's sign and degree
+- **Sign Ingresses**: Dates planets change sign, including retrograde re-entries
 
 Compact variants filter output to major objects (Sun through Pluto, Ascendant, Midheaven) and major aspects (Conjunction, Opposition, Square, Trine, Sextile) for reduced LLM token usage — see [Chart Output Options](#chart-output-options) below.
 
@@ -41,6 +43,7 @@ Every chart-generating tool accepts a per-call `house_system` override and retur
 - **Universal Integration**: Available in Natal, Transit-to-Natal, Solar Return, Lunar Return, and Progressed charts
 - **Size Efficient**: Adds only ~3-5 KB to responses while providing rich context
 - **Angular Separation**: Shows current distance (0-180°) from exact event occurrence
+- **Ephemeris-Searched Exact Dates**: `exact_date` and `exact_dates` come from an ephemeris search, not a linear speed estimate; a retrograde outer-planet transit reports all of its passes
 
 ### Configuration
 - Dynamically configure all Immanuel library settings (house systems, orbs, calculation methods, etc.)
@@ -458,6 +461,29 @@ Calculates compact transit-to-natal aspects with optional interpretations.
 - `include_interpretations`: Include aspect interpretation keywords (default: True)
 
 **Output:** Streamlined aspects between major objects only with context-aware interpretations
+
+### `get_lunations_and_eclipses`
+Lists upcoming new moons, full moons and eclipses from a given moment. Needs no birth data.
+
+**Parameters:**
+- `start_date_time` (required): Date and time to search forward from, ISO format
+- `count`: How many of each event type to return (1-24, default 6)
+- `include_eclipses`: Include solar and lunar eclipses (default `true`)
+- `latitude`, `longitude`: Optional, for the local-time column
+- `timezone`: Optional IANA timezone for the local-time column
+
+**Returns:** `new_moons`, `full_moons` and (when requested) `solar_eclipses`, `lunar_eclipses`. Each entry carries `date_time_utc`, `date_time_local`, the Moon's `sign` and `degree`, and for eclipses an `eclipse_type` ("Total", "Annular", "Partial", "Annular total", "Penumbral").
+
+### `get_sign_ingresses`
+Lists the dates planets change zodiac sign. Needs no birth data.
+
+**Parameters:**
+- `start_date_time` (required): Date and time to search forward from, ISO format
+- `planets`: Planet names to track, e.g. `["Saturn", "Pluto"]`. Defaults to Jupiter, Saturn, Uranus, Neptune, Pluto and Chiron
+- `count`: How many ingresses per planet (1-24, default 5)
+- `timezone`: Optional IANA timezone for the local-time column
+
+**Returns:** `ingresses`, keyed by planet name. Each entry carries `from_sign`, `into_sign`, `retrograde_re_entry`, `date_time_utc` and `date_time_local`. Retrograde re-entries are included, so a boundary a planet crosses three times appears three times, in date order.
 
 ### `configure_immanuel_settings`
 Modifies global Immanuel library settings. **This changes global state for every subsequent chart in the session** (the response carries `scope: "session-global"`); for a one-off setting, prefer the per-call parameters (e.g. `house_system`) on the chart tools.

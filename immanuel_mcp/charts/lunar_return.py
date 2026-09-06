@@ -7,7 +7,8 @@ technique showing themes and energies for the coming month.
 Since the Immanuel library doesn't have a built-in LunarReturn class,
 this module implements custom logic to:
 1. Calculate the natal Moon's position
-2. Find when the transiting Moon returns to that position
+2. Find when the transiting Moon returns to that position, via the library's
+   fixed-point aspect search (immanuel.tools.transit, 1.5.4+)
 3. Generate a chart for that moment
 """
 
@@ -20,8 +21,7 @@ from immanuel import charts
 from immanuel.classes.serialize import ToJSON
 from immanuel.const import chart as chart_const
 from immanuel.tools import date as date_tools
-from immanuel.tools import ephemeris
-from scripts.compact_serializer import CompactJSONSerializer
+from ..serializers import CompactJSONSerializer
 
 from ..app import mcp
 from ..lifecycle.attach import attach_lifecycle_section
@@ -29,29 +29,13 @@ from ..utils.coordinates import parse_coordinate
 from ..utils.subjects import create_subject
 from ..utils.errors import handle_chart_error, validate_inputs
 from ..utils.settings import build_call_settings, build_applied_settings
+from ..utils.search import find_return_jd
 from ..optimizers.cross_aspects import (
     build_full_cross_aspects,
     build_compact_cross_aspects,
 )
 
 logger = logging.getLogger(__name__)
-
-# Search parameters. The Moon moves ~13 degrees/day and never retrogrades,
-# so a 6-hour scan step (~3.3 degrees) safely brackets the crossing, and
-# bisection converges to well under a minute of clock time.
-_SCAN_STEP_JD = 0.25
-_ONE_MINUTE_JD = 1 / 1440
-
-
-def _moon_longitude(jd: float) -> float:
-    """Geocentric ecliptic longitude of the Moon at a Julian date."""
-    return ephemeris.get_planet(chart_const.MOON, jd)['lon']
-
-
-def _signed_delta(moon_lon: float, target_lon: float) -> float:
-    """Signed angular distance from target to Moon, normalized to (-180, 180]."""
-    diff = (moon_lon - target_lon) % 360
-    return diff - 360 if diff > 180 else diff
 
 
 def _find_lunar_return_jd(
@@ -71,42 +55,16 @@ def _find_lunar_return_jd(
     Raises:
         ValueError: If no lunar return is found in the specified month
     """
-    target = natal_moon_longitude % 360
-
     month_start = datetime(year, month, 1)
     month_end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
 
     start_jd = date_tools.to_jd(month_start, lat=lat, lon=lon, time_zone=timezone)
     end_jd = date_tools.to_jd(month_end, lat=lat, lon=lon, time_zone=timezone)
 
-    # Scan for a sign change in the signed delta. The Moon only moves
-    # forward, so the delta increases through 0 at the return; jumps of
-    # ~360 at the antipode are excluded by the wrap check.
-    prev_jd = start_jd
-    prev_delta = _signed_delta(_moon_longitude(start_jd), target)
-
-    jd = start_jd + _SCAN_STEP_JD
-    while jd < end_jd + _SCAN_STEP_JD:
-        probe_jd = min(jd, end_jd)
-        delta = _signed_delta(_moon_longitude(probe_jd), target)
-
-        if prev_delta < 0 <= delta and (delta - prev_delta) < 180:
-            # Bracketed: bisect to under a minute.
-            lo, hi = prev_jd, probe_jd
-            while (hi - lo) > _ONE_MINUTE_JD / 2:
-                mid = (lo + hi) / 2
-                if _signed_delta(_moon_longitude(mid), target) >= 0:
-                    hi = mid
-                else:
-                    lo = mid
-            return (lo + hi) / 2
-
-        if probe_jd >= end_jd:
-            break
-        prev_jd, prev_delta = probe_jd, delta
-        jd += _SCAN_STEP_JD
-
-    raise ValueError(f"No lunar return found in {year}-{month:02d}")
+    return_jd = find_return_jd(chart_const.MOON, natal_moon_longitude, start_jd)
+    if return_jd >= end_jd:
+        raise ValueError(f"No lunar return found in {year}-{month:02d}")
+    return return_jd
 
 
 def find_lunar_return_date(
@@ -120,10 +78,9 @@ def find_lunar_return_date(
     """
     Find the moment the Moon returns to its natal position within a given month.
 
-    The search runs in Julian-day space against the ephemeris directly (a
-    single swisseph call per probe) rather than constructing a full chart
-    per probe, and bisects the bracketed crossing to under one minute of
-    clock time.
+    The search delegates to the library's fixed-point aspect search, which
+    converges on the crossing to within 1e-6 degrees without constructing a
+    chart per probe.
 
     Note: the sidereal lunar month is ~27.3 days, so a 30/31-day calendar
     month occasionally contains two returns (one near the 1st and one near

@@ -112,9 +112,11 @@ def test_all_tools_registered_on_shared_instance():
     assert modular_server.mcp is shared
 
     tools = {t.name for t in asyncio.run(shared.list_tools())}
-    assert len(tools) == 21
+    assert len(tools) == 23
     assert "generate_lunar_return_chart" in tools
     assert "generate_compact_lunar_return_chart" in tools
+    assert "get_lunations_and_eclipses" in tools
+    assert "get_sign_ingresses" in tools
     assert "reset_immanuel_settings" in tools
 
 
@@ -173,10 +175,10 @@ def test_natal_chart_mirrored_duplicates_still_collapse():
 
 
 # ---------------------------------------------------------------------------
-# M3: lifecycle movement and estimated exact dates
+# M3: lifecycle movement and searched exact dates
 # ---------------------------------------------------------------------------
 
-def test_lifecycle_events_have_movement_and_estimated_dates():
+def test_lifecycle_events_have_movement_and_searched_dates():
     # 1985 birth at this transit date sits inside Pluto square / Neptune square
     result = immanuel_server.generate_compact_transit_to_natal(
         "1985-02-10 12:00:00", "51.5", "-0.17", TRANSIT_DATE)
@@ -185,8 +187,24 @@ def test_lifecycle_events_have_movement_and_estimated_dates():
     assert active, "expected active lifecycle events for a 41-year-old"
     for event in active:
         assert event.get("movement") in {"applying", "exact", "separating", "stationary"}
-        assert event.get("exact_date_estimated") is True
         assert event.get("current_angular_separation") is not None
+        # Perfection dates now come from an ephemeris search, not a linear
+        # estimate off the planet's instantaneous speed.
+        assert event.get("exact_date_estimated") is False
+        assert event.get("exact_date") in event.get("exact_dates")
+
+
+def test_retrograde_lifecycle_event_reports_every_pass():
+    """A slow outer-planet transit perfects three times across its retrograde
+    loop; the old single linear estimate could only ever name one of them."""
+    result = immanuel_server.generate_compact_transit_to_natal(
+        "1985-02-10 12:00:00", "51.5", "-0.17", TRANSIT_DATE)
+    events = result.get("lifecycle_events") or []
+    pluto = next(e for e in events if e.get("event_type") == "Pluto Square")
+    assert len(pluto["exact_dates"]) == 3
+    assert pluto["exact_dates"] == sorted(pluto["exact_dates"])
+    # Multi-pass events get their true span rather than an orb-derived guess.
+    assert pluto["date_range"] == f"{pluto['exact_dates'][0]} to {pluto['exact_dates'][-1]}"
 
 
 # ---------------------------------------------------------------------------

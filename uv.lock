@@ -168,7 +168,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "immanuel", specifier = ">=1.5.4" },
+    { name = "immanuel", specifier = ">=1.5.4,<1.6" },
     { name = "mcp", extras = ["cli"] },
     { name = "tzdata", specifier = ">=2025.2" },
 ]

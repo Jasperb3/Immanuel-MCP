@@ -21,7 +21,7 @@ from immanuel.const import chart as chart_const
 from immanuel.const import data as data_const
 from immanuel.classes.serialize import ToJSON
 from immanuel.tools import convert
-from scripts.compact_serializer import CompactJSONSerializer
+from immanuel_mcp.serializers import CompactJSONSerializer
 
 # Configure logging to file only (CRITICAL: logging to stdout/stderr breaks stdio transport)
 # Create logs directory if it doesn't exist
@@ -1982,11 +1982,14 @@ def list_available_settings() -> Dict[str, Any]:
         return handle_chart_error(e)
 
 
-# Register the lunar return tools on the shared MCP instance. This import
-# must come after the tool definitions above so a partially initialized
-# module is never observed, and must not be moved into a try/except: a
-# missing chart module is a startup error, not an optional feature.
+# Register the remaining tool modules on the shared MCP instance. These
+# imports must come after the tool definitions above so a partially
+# initialized module is never observed, and must not be moved into a
+# try/except: a missing chart module is a startup error, not an optional
+# feature.
 import immanuel_mcp.charts.lunar_return  # noqa: E402,F401
+import immanuel_mcp.charts.lunations  # noqa: E402,F401
+import immanuel_mcp.charts.ingresses  # noqa: E402,F401
 
 
 def main():

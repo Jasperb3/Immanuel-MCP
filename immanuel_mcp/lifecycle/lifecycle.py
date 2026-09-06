@@ -399,6 +399,29 @@ def _get_return_interpretation(planet: str, cycle: Optional[int]) -> str:
     return planet_data.get("default", f"{planet} return cycle of growth and integration.")
 
 
+def _parse_iso_date(value: Optional[str]) -> Optional[datetime]:
+    """Parse a YYYY-MM-DD string, or None if absent or malformed."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _span_date_range(exact_dates: Optional[list]) -> Optional[str]:
+    """
+    Date range spanned by a multi-pass event: first perfection to last.
+
+    Only applies to retrograde events with more than one pass, where the true
+    span is known exactly. A single-pass event still needs the orb-based
+    estimate, since one date says nothing about the width of the window.
+    """
+    if not exact_dates or len(exact_dates) < 2:
+        return None
+    return f"{exact_dates[0]} to {exact_dates[-1]}"
+
+
 def _estimate_date_range(planet: str, tolerance: float, center: Optional[datetime]) -> Optional[str]:
     if center is None:
         return None
@@ -472,7 +495,8 @@ def _build_return_event_entry(
     orb: Optional[float] = None,  # Now represents current_angular_separation
     orb_status: Optional[str] = None,
     movement: Optional[str] = None,
-    estimated_exact_date: Optional[str] = None,
+    exact_date_searched: Optional[str] = None,
+    exact_dates: Optional[list] = None,
     natal_position: Optional[float] = None,
     transit_position: Optional[float] = None
 ) -> Dict[str, Any]:
@@ -485,19 +509,18 @@ def _build_return_event_entry(
              until the planet returns to its natal position.
         movement: "applying", "exact", "separating", or "stationary" derived
              from the transiting planet's speed.
-        estimated_exact_date: Speed-based linear estimate of the perfection
-             date. Retrograde loops can produce multiple exact hits, so this
-             is always an estimate (exact_date_estimated is set on the entry).
+        exact_date_searched: Ephemeris-searched perfection date, nearest the
+             reference datetime. None when the search found nothing.
+        exact_dates: Every perfection of this return found by the search. A
+             retrograde return perfects up to three times.
     """
     tolerance = RETURN_ORB_TOLERANCE.get(planet, 2.0)
-    exact_center = None
-    if estimated_exact_date:
-        try:
-            exact_center = datetime.fromisoformat(estimated_exact_date)
-        except ValueError:
-            exact_center = None
-    date_range = _estimate_date_range(planet, tolerance, exact_center or reference_datetime)
-    exact_date = estimated_exact_date or (
+    exact_center = _parse_iso_date(exact_date_searched)
+    date_range = (
+        _span_date_range(exact_dates)
+        or _estimate_date_range(planet, tolerance, exact_center or reference_datetime)
+    )
+    exact_date = exact_date_searched or (
         reference_datetime.strftime("%Y-%m-%d") if reference_datetime else None
     )
     interpretation = _get_return_interpretation(planet, cycle)
@@ -513,7 +536,8 @@ def _build_return_event_entry(
         "orb_status": orb_status,
         "movement": movement,
         "exact_date": exact_date,
-        "exact_date_estimated": True,
+        "exact_dates": exact_dates or [],
+        "exact_date_estimated": exact_date_searched is None,
         "date_range": date_range,
         "age_at_event": round(age, 1) if age is not None else None,
         "years_until_event": round(max(years_until, 0.0), 1),
@@ -546,22 +570,18 @@ def _format_major_transit_event(
     traditional astrological orb, but the actual degrees remaining until the aspect
     becomes exact.
     """
-    # Prefer the speed-based perfection estimate over echoing the request
-    # date; both are estimates (retrograde passes can produce several exact
-    # hits) and are flagged as such.
-    estimated_exact_date = event.get("estimated_exact_date")
-    exact_center = None
-    if estimated_exact_date:
-        try:
-            exact_center = datetime.fromisoformat(estimated_exact_date)
-        except ValueError:
-            exact_center = None
-    exact_date = estimated_exact_date or (
+    # Prefer the ephemeris-searched perfection date over echoing the request
+    # date. Only when the search found nothing does this fall back to the
+    # reference date, which is flagged via exact_date_estimated.
+    searched_exact_date = event.get("exact_date")
+    exact_dates = event.get("exact_dates") or []
+    exact_center = _parse_iso_date(searched_exact_date)
+    exact_date = searched_exact_date or (
         reference_datetime.strftime("%Y-%m-%d") if reference_datetime else None
     )
 
     # Calculate date range for the transit window
-    date_range = _estimate_transit_date_range(
+    date_range = _span_date_range(exact_dates) or _estimate_transit_date_range(
         transit_object=event.get("transit_object"),
         aspect_type=event.get("aspect_type"),
         center=exact_center or reference_datetime
@@ -585,7 +605,8 @@ def _format_major_transit_event(
         "orb_status": orb_status_value,
         "movement": event.get("movement"),
         "exact_date": exact_date,
-        "exact_date_estimated": True,
+        "exact_dates": exact_dates,
+        "exact_date_estimated": searched_exact_date is None,
         "date_range": date_range,
         "age_at_event": round(event.get("age"), 1) if event.get("age") else event.get("typical_age"),
         "years_until_event": 0.0 if status == "active" else event.get("years_until"),
@@ -721,7 +742,8 @@ def format_lifecycle_event_feed(
                     orb=event.get("orb"),
                     orb_status=event.get("orb_status"),
                     movement=event.get("movement"),
-                    estimated_exact_date=event.get("estimated_exact_date"),
+                    exact_date_searched=event.get("exact_date"),
+                    exact_dates=event.get("exact_dates"),
                     natal_position=event.get("natal_position"),
                     transit_position=event.get("transit_position")
                 )
