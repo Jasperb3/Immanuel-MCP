@@ -60,7 +60,7 @@ from immanuel_mcp.app import mcp
 
 from immanuel_mcp.utils.coordinates import parse_coordinate
 from immanuel_mcp.utils.errors import validate_inputs, handle_chart_error
-from immanuel_mcp.utils.subjects import create_subject
+from immanuel_mcp.utils.subjects import create_subject, effective_timezone
 from immanuel_mcp.utils.datetimes import parse_datetime_value
 from immanuel_mcp.utils.settings import build_call_settings, build_applied_settings
 from immanuel_mcp.optimizers.positions import build_optimized_transit_positions
@@ -1562,7 +1562,7 @@ def generate_transit_to_natal(
             "transit_to_natal_aspects": optimized_aspects,
             "aspect_summary": aspect_summary,
             "pagination": pagination,
-            "timezone": timezone,
+            "timezone": effective_timezone(natal_subject),
             "applied_settings": build_applied_settings(house_system),
             "status": "success"
         }
@@ -1716,7 +1716,7 @@ def generate_compact_transit_to_natal(
             "transit_date": transit_date_time,
             "transit_positions": transit_data.get('objects', {}),
             "transit_to_natal_aspects": aspects,
-            "timezone": timezone,
+            "timezone": effective_timezone(natal_subject),
             "applied_settings": build_applied_settings(house_system),
             "status": "success"
         }

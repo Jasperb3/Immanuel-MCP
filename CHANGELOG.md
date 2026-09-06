@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.1] - 2026-09-06
+
+### Fixed
+- **`generate_transit_to_natal` no longer reports `timezone: null`.** Both the
+  full and compact tools echoed the raw `timezone` parameter, which is None
+  whenever the caller omits it - even though immanuel had already inferred a
+  zone from the coordinates and built the chart with it. The field now reports
+  the zone the chart was actually built in. An explicitly passed timezone is
+  echoed unchanged, as before.
+
+### Added
+- `effective_timezone(subject)` in `immanuel_mcp/utils/subjects.py`, which
+  reads the resolved zone from the parsed datetime's tzinfo. `Subject.timezone`
+  holds only what the caller passed and is not a reliable source for it.
+
 ## [0.8.0] - 2026-09-06
 
 Fixes four defects reported from live use against Claude Desktop. Two change

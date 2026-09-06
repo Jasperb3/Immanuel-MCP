@@ -128,6 +128,8 @@ These need no birth data — they read the ephemeris directly and build no chart
 
 **Do not replace either tool's search with `immanuel.tools.transit.next_sign_ingress()` / `next_aspect_to()` for slow bodies.** Those bracket by stepping `1/|speed|` days, so near a station the step grows without bound and skips the crossing — `next_sign_ingress(VENUS, ARIES, ...)` asked on 2025-03-28 answers 2026-03-06, missing the real 2025-04-30 re-entry. `immanuel_mcp/utils/search.py::find_state_changes` is the one scanner both use: it brackets by degrees travelled under a day cap, then bisects. Callers pass a state function (which sign, or which side of a longitude), so a tweak to the step budget applies to both. The Moon is fast enough to be safe, so `find_return_jd` (lunar return) still uses `next_aspect_to` and is bounded by its caller's month check.
 
+**Timezone echo (v0.8.1):** both transit-to-natal tools report the timezone the chart was actually built in, not the raw parameter. `Subject.timezone` holds only what the caller passed and stays `None` for an inferred zone, so use `effective_timezone()` in `immanuel_mcp/utils/subjects.py` (it reads the resolved `date_time.tzinfo`) rather than the attribute when echoing a timezone in any new tool.
+
 ### Transit-to-Natal Pagination System
 
 The `generate_transit_to_natal` endpoint includes intelligent pagination to comply with MCP transport limits (~50 KB) while organizing aspects by astrological significance.

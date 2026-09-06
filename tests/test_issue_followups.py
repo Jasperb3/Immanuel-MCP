@@ -8,6 +8,8 @@ Each test pins one fixed defect so it cannot silently return:
 - #3: reset_immanuel_settings restored library defaults with no diff reported
 - #4: list_available_settings displayed numeric house codes that configure
       rejected on input
+- #5: transit_to_natal reported timezone: null when the timezone was
+      inferred from coordinates rather than passed in
 
 Run from the repo root: python -m pytest tests/test_issue_followups.py
 """
@@ -31,7 +33,7 @@ from immanuel_mcp.utils.settings import (
     house_system_display_name,
     resolve_house_system,
 )
-from immanuel_mcp.utils.subjects import create_subject
+from immanuel_mcp.utils.subjects import create_subject, effective_timezone
 
 BIRTH = ("1990-01-15 14:30:00", "32.71", "-117.15")
 TIMEZONE = "America/Los_Angeles"
@@ -173,6 +175,45 @@ def test_current_house_system_code_is_accepted_back(restore_settings):
     current = immanuel_server.list_available_settings()["settings"]["house_system"]["current"]
     result = immanuel_server.configure_immanuel_settings("house_system", current)
     assert result["status"] == "success"
+
+
+# ---------------------------------------------------------------------------
+# #5: transit_to_natal echoed the raw timezone parameter, so an inferred
+# timezone came back as null even though the chart was built with it
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("tool", [
+    immanuel_server.generate_transit_to_natal,
+    immanuel_server.generate_compact_transit_to_natal,
+])
+def test_omitted_timezone_is_reported_as_inferred(tool):
+    result = tool(*BIRTH, TRANSIT_DATE)
+    assert result["timezone"] == "America/Los_Angeles"
+
+
+@pytest.mark.parametrize("tool", [
+    immanuel_server.generate_transit_to_natal,
+    immanuel_server.generate_compact_transit_to_natal,
+])
+def test_explicit_timezone_is_echoed_unchanged(tool):
+    result = tool(*BIRTH, TRANSIT_DATE, timezone=TIMEZONE)
+    assert result["timezone"] == TIMEZONE
+
+
+def test_inferred_timezone_follows_the_natal_coordinates():
+    # Not hardcoded to the birth location: a different natal place must
+    # report its own zone, proving the value is resolved rather than guessed.
+    result = immanuel_server.generate_transit_to_natal(
+        "1980-03-03 09:00:00", "51.5", "-0.12", TRANSIT_DATE)
+    assert result["timezone"] == "Europe/London"
+
+
+def test_effective_timezone_matches_the_chart_that_was_built():
+    subject = create_subject(BIRTH[0], 32.71, -117.15)
+    # Subject.timezone holds only what was passed in; the resolved zone that
+    # the chart actually used lives on the parsed datetime.
+    assert subject.timezone is None
+    assert effective_timezone(subject) == "America/Los_Angeles"
 
 
 # ---------------------------------------------------------------------------
