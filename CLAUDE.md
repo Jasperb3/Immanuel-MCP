@@ -124,7 +124,9 @@ mcp run immanuel_server.py
 ### Forecast Calendar Tools (🆕 v0.7.0)
 These need no birth data — they read the ephemeris directly and build no chart.
 - `get_lunations_and_eclipses` - Upcoming new moons, full moons and solar/lunar eclipses, with the Moon's sign and degree and both UTC and local times. Eclipses carry their type.
-- `get_sign_ingresses` - Dates planets change zodiac sign. Takes the **earlier** of the forward and backward crossing at each step, so retrograde re-entries are included and the sequence stays in date order. Searching only forward would silently drop the middle crossing of a three-crossing ingress.
+- `get_sign_ingresses` - Dates planets change zodiac sign, retrograde re-entries included (a boundary is often crossed three times).
+
+**Do not replace either tool's search with `immanuel.tools.transit.next_sign_ingress()` / `next_aspect_to()` for slow bodies.** Those bracket by stepping `1/|speed|` days, so near a station the step grows without bound and skips the crossing — `next_sign_ingress(VENUS, ARIES, ...)` asked on 2025-03-28 answers 2026-03-06, missing the real 2025-04-30 re-entry. `immanuel_mcp/utils/search.py` and `charts/ingresses.py` bracket by degrees travelled under a day cap instead. The Moon is fast enough to be safe, so `find_return_jd` (lunar return) still uses `next_aspect_to` and is bounded by its caller's month check.
 
 ### Transit-to-Natal Pagination System
 

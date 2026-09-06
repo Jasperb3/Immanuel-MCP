@@ -43,6 +43,14 @@ forecasting tools. No library upgrade: 1.5.4 is the newest release.
 - Tool count 21 → 23; test count 112 → 124.
 
 ### Fixed
+- **Sign ingresses and lifecycle perfections near a station.** immanuel's
+  own searches bracket by stepping `1/|speed|` days, so as a planet
+  approaches a station the step grows without bound and leaps over the
+  crossing. Asked for Venus's next Aries ingress on 2025-03-28,
+  `next_sign_ingress()` answers 2026-03-06, skipping the real re-entry on
+  2025-04-30; Pluto's first crossing out of Aquarius was dropped the same
+  way. Both searches here bracket by degrees travelled under a day cap
+  instead, which a station cannot inflate.
 - **The package could not be imported from a clean checkout.** `03c1809`
   removed `scripts/` from tracking and from disk, but
   `scripts/compact_serializer.py` was a runtime import of `immanuel_server`
