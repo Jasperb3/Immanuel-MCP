@@ -20,6 +20,7 @@ from immanuel.const import calc as calc_const
 from immanuel.const import chart as chart_const
 from immanuel.tools import date as date_tools
 
+from ..constants import PLANET_CONSTANTS
 from ..utils.search import find_exact_aspect_dates
 from .constants import (
     ORBITAL_PERIODS,
@@ -30,23 +31,6 @@ from .constants import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Map planet names to Immanuel chart constants
-PLANET_CONSTANTS = {
-    "Sun": chart_const.SUN,
-    "Moon": chart_const.MOON,
-    "Mercury": chart_const.MERCURY,
-    "Venus": chart_const.VENUS,
-    "Mars": chart_const.MARS,
-    "Jupiter": chart_const.JUPITER,
-    "Saturn": chart_const.SATURN,
-    "Uranus": chart_const.URANUS,
-    "Neptune": chart_const.NEPTUNE,
-    "Pluto": chart_const.PLUTO,
-    "Chiron": chart_const.CHIRON,
-    "North Node": chart_const.NORTH_NODE,
-    "South Node": chart_const.SOUTH_NODE,
-}
 
 
 def calculate_signed_orb(natal_pos: float, transit_pos: float) -> float:

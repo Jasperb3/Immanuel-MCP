@@ -26,6 +26,11 @@ forecasting tools. No library upgrade: 1.5.4 is the newest release.
   aspect up to three times.
 
 ### Changed
+- **Lifecycle response schema.** No field is removed or renamed: `exact_dates`
+  is added, and `exact_date_estimated` now reports `false` on return and
+  major-transit events (it stays `true` on the progressed Moon). Clients
+  reading `exact_date` keep working, but any that branch on
+  `exact_date_estimated` will now take the other branch.
 - **Lifecycle `exact_date` is now searched, not estimated.** It was a linear
   extrapolation from the transiting planet's instantaneous speed, flagged
   `exact_date_estimated: true`; it now comes from an ephemeris search and
@@ -40,7 +45,7 @@ forecasting tools. No library upgrade: 1.5.4 is the newest release.
   breaking overhaul behind the next version (`ImmanuelSettings` renamed to
   `Config`, a module reshuffle, and a pyswisseph to pysweph migration) that
   an open-ended constraint would pull in unreviewed.
-- Tool count 21 → 23; test count 112 → 124.
+- Tool count 21 → 23; test count 112 → 127.
 
 ### Fixed
 - **Sign ingresses and lifecycle perfections near a station.** immanuel's

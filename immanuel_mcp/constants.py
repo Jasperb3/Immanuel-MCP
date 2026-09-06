@@ -1,4 +1,6 @@
-"""CELESTIAL_BODIES mapping"""
+"""Shared constant mappings."""
+
+from immanuel.const import chart as chart_const
 
 CELESTIAL_BODIES = {
     # Angles
@@ -28,4 +30,23 @@ CELESTIAL_BODIES = {
     6000005: "Vertex",
     6000007: "Lilith",
     6000010: "Part of Fortune"
+}
+
+
+# Planet names to Immanuel chart constants. Shared by the lifecycle detector
+# and the forecast calendars, so it lives here rather than inside either.
+PLANET_CONSTANTS = {
+    "Sun": chart_const.SUN,
+    "Moon": chart_const.MOON,
+    "Mercury": chart_const.MERCURY,
+    "Venus": chart_const.VENUS,
+    "Mars": chart_const.MARS,
+    "Jupiter": chart_const.JUPITER,
+    "Saturn": chart_const.SATURN,
+    "Uranus": chart_const.URANUS,
+    "Neptune": chart_const.NEPTUNE,
+    "Pluto": chart_const.PLUTO,
+    "Chiron": chart_const.CHIRON,
+    "North Node": chart_const.NORTH_NODE,
+    "South Node": chart_const.SOUTH_NODE,
 }

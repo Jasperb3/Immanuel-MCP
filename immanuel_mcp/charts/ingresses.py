@@ -1,20 +1,13 @@
 """Planetary sign ingress calendar.
 
-Deliberately does not use immanuel 1.5.4's transit.next_sign_ingress(). That
-function brackets the crossing by stepping 1/|speed| days at a time, so as a
-planet approaches a station and its speed tends to zero, the step grows
-without bound and leaps clean over the crossing. Venus is the clearest case:
-asked on 2025-03-28 for its next Aries ingress it answers 2026-03-06, having
-skipped the real re-entry on 2025-04-30, because Venus stations in between.
-
-The bracketing here is bounded by degrees travelled instead, which cannot
-run away at a station, and the crossing is then bisected on the sign index.
+Deliberately does not use immanuel 1.5.4's transit.next_sign_ingress(), which
+skips crossings near a station - see utils.search for why, and for the
+station-safe scan used instead.
 """
 
 import logging
 from typing import Any, Dict, List
 
-from immanuel.const import calc as calc_const
 from immanuel.const import names as names_const
 from immanuel.tools import date as date_tools
 from immanuel.tools import ephemeris, position
@@ -22,7 +15,8 @@ from immanuel.tools import ephemeris, position
 from ..app import mcp
 from ..utils.datetimes import parse_datetime_value
 from ..utils.errors import handle_chart_error
-from ..lifecycle.returns import PLANET_CONSTANTS
+from ..utils.search import find_state_changes
+from ..constants import PLANET_CONSTANTS
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +30,6 @@ MAX_COUNT = 24
 
 # Nudge past a found ingress so the next search cannot re-converge on it.
 _STEP_PAST_JD = 0.5
-
-# Bracketing step: aim to advance this many degrees per probe, but never more
-# than this many days. The day cap is what makes a station safe - a body slow
-# enough for the cap to bind covers under a quarter degree across it, so it
-# cannot cross a sign boundary inside one step.
-_STEP_DEGREES = 0.25
-_MAX_STEP_DAYS = 5.0
 
 # Search ceiling. Pluto, the slowest tracked body, spends at most ~30 years in
 # a sign, so anything beyond this is a runaway rather than a real answer.
@@ -70,35 +57,12 @@ def _next_ingress_jd(planet_index: int, jd: float) -> float:
     Raises:
         ValueError: If no crossing is found within the search ceiling.
     """
-    start_sign = position.sign(ephemeris.get_planet(planet_index, jd))
-    limit_jd = jd + _MAX_SEARCH_DAYS
-
-    previous_jd = jd
-    while jd < limit_jd:
-        planet = ephemeris.get_planet(planet_index, jd)
-        if position.sign(planet) != start_sign:
-            return _bisect_ingress(planet_index, start_sign, previous_jd, jd)
-        previous_jd = jd
-        jd += min(_STEP_DEGREES / max(abs(planet["speed"]), 1e-9), _MAX_STEP_DAYS)
-
-    raise ValueError(
-        f"No sign change found within {_MAX_SEARCH_DAYS / 365.25:.0f} years")
-
-
-def _bisect_ingress(planet_index: int, start_sign: int, lo: float, hi: float) -> float:
-    """
-    Narrow a bracketed sign change to the moment of crossing.
-
-    lo is still in start_sign, hi is not; the returned Julian date is the
-    first instant that is not, to within the library's own MAX_ERROR.
-    """
-    while (hi - lo) > calc_const.MAX_ERROR:
-        mid = (lo + hi) / 2
-        if position.sign(ephemeris.get_planet(planet_index, mid)) == start_sign:
-            lo = mid
-        else:
-            hi = mid
-    return hi
+    hits = find_state_changes(
+        planet_index, jd, jd + _MAX_SEARCH_DAYS, position.sign, max_hits=1)
+    if not hits:
+        raise ValueError(
+            f"No sign change found within {_MAX_SEARCH_DAYS / 365.25:.0f} years")
+    return hits[0]
 
 
 @mcp.tool()

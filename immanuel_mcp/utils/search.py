@@ -1,10 +1,17 @@
-"""Ephemeris search helpers built on immanuel.tools.transit (1.5.4+).
+"""Station-safe ephemeris searches.
 
-The library's search functions are unbounded iterative step searches: they
-converge on the requested aspect but take no window argument and have no
-failure mode other than looping. Everything here bounds them by validating the
-returned Julian date against the window the caller expects, so a search that
-wanders is surfaced as a ValueError rather than a silently wrong date.
+immanuel's own search functions bracket a crossing by stepping 1/|speed| days
+at a time. As a body approaches a station its speed tends to zero, the step
+grows without bound, and the search leaps clean over the crossing it was
+looking for - transit.next_sign_ingress() asked for Venus's next Aries
+ingress on 2025-03-28 answers 2026-03-06, skipping the real re-entry on
+2025-04-30.
+
+find_state_changes() is the shared fix, and the only scanner in the codebase:
+it advances by a degree budget under a day cap, which a station cannot
+inflate, then bisects the bracket. Callers supply a state function, so the
+same machinery finds sign ingresses (state = which sign) and aspect
+perfections (state = which side of a longitude).
 """
 
 from datetime import datetime
@@ -14,14 +21,79 @@ from immanuel.const import calc as calc_const
 from immanuel.tools import date as date_tools
 from immanuel.tools import ephemeris, transit
 
-# Bracketing step for the aspect search: aim to advance this many degrees per
-# probe, but never more than this many days. The degree budget keeps a fast
-# body from stepping over a crossing; the day cap keeps a body approaching a
-# station, where speed tends to zero, from taking an unbounded step and
-# leaping over one. Both are needed - immanuel's own searches have only the
-# first kind of bound and do skip crossings near stations.
-_STEP_DEGREES = 0.5
-_MAX_STEP_DAYS = 10.0
+# Bracketing budget: aim to advance this many degrees per probe, but never
+# more than this many days. The degree budget keeps a fast body from stepping
+# over a crossing; the day cap keeps a body at a station from taking an
+# unbounded step. Both are needed - a body slow enough for the cap to bind
+# covers under half a degree across it.
+#
+# Like any sampling scheme this can still miss a pair of crossings that both
+# fall inside one step, which needs a station within a quarter degree of the
+# boundary being searched for. Tightening these numbers narrows that window
+# at a linear cost in ephemeris calls; it cannot close it.
+STEP_DEGREES = 0.5
+MAX_STEP_DAYS = 10.0
+
+
+def find_state_changes(
+    index: int,
+    from_jd: float,
+    to_jd: float,
+    state,
+    max_hits: int = None,
+) -> list:
+    """
+    Julian dates within a window at which some property of a moving body
+    changes value.
+
+    Args:
+        index: Immanuel chart constant for the moving object.
+        from_jd: Julian date to scan forward from.
+        to_jd: Julian date to scan up to.
+        state: Callable taking the ephemeris dict for the body and returning
+               a comparable value. A change in that value is a crossing; the
+               returned date is the first instant carrying the new value.
+        max_hits: Stop once this many crossings are found.
+
+    Returns:
+        Chronological list of Julian dates, empty if the property never
+        changes within the window.
+    """
+    hits = []
+    jd = from_jd
+    previous_jd = jd
+    previous_state = state(ephemeris.get_planet(index, jd))
+
+    while jd < to_jd:
+        planet = ephemeris.get_planet(index, jd)
+        current_state = state(planet)
+
+        if current_state != previous_state:
+            hits.append(
+                _bisect_state_change(index, previous_jd, jd, previous_state, state))
+            if max_hits is not None and len(hits) >= max_hits:
+                return hits
+
+        previous_jd, previous_state = jd, current_state
+        jd += min(STEP_DEGREES / max(abs(planet["speed"]), 1e-9), MAX_STEP_DAYS)
+
+    return hits
+
+
+def _bisect_state_change(index: int, lo: float, hi: float, lo_state, state) -> float:
+    """
+    Narrow a bracketed state change to the moment it happens.
+
+    lo still carries lo_state and hi does not; the returned Julian date is the
+    first instant that does not, to within the library's own MAX_ERROR.
+    """
+    while (hi - lo) > calc_const.MAX_ERROR:
+        mid = (lo + hi) / 2
+        if state(ephemeris.get_planet(index, mid)) == lo_state:
+            lo = mid
+        else:
+            hi = mid
+    return hi
 
 
 def _aspect_targets(point: float, aspect: float) -> list:
@@ -42,36 +114,18 @@ def _crossings(index: int, target: float, from_jd: float, to_jd: float) -> list:
     """
     Julian dates at which a body's longitude crosses a fixed longitude.
 
-    Brackets each crossing by a bounded scan, then bisects to the library's
-    own MAX_ERROR. Returns them in chronological order.
+    The state is which side of the target the body sits on. That flips at the
+    antipode as well as at the target, since the signed difference wraps
+    between -180 and 180, so each candidate is checked for actually being at
+    the target before it is kept.
     """
-    hits = []
-    jd = from_jd
-    previous_jd = jd
-    previous_delta = swe.difdeg2n(
-        ephemeris.get_planet(index, jd)["lon"], target)
+    def side(planet: dict) -> bool:
+        return swe.difdeg2n(planet["lon"], target) >= 0
 
-    while jd < to_jd:
-        planet = ephemeris.get_planet(index, jd)
-        delta = swe.difdeg2n(planet["lon"], target)
-        # A sign change is a crossing, unless the pair straddles the antipode,
-        # where the signed difference wraps between -180 and 180.
-        if delta * previous_delta < 0 and abs(delta - previous_delta) < 180:
-            lo, hi = previous_jd, jd
-            while (hi - lo) > calc_const.MAX_ERROR:
-                mid = (lo + hi) / 2
-                mid_delta = swe.difdeg2n(
-                    ephemeris.get_planet(index, mid)["lon"], target)
-                if mid_delta * previous_delta > 0:
-                    lo = mid
-                else:
-                    hi = mid
-            hits.append((lo + hi) / 2)
-
-        previous_jd, previous_delta = jd, delta
-        jd += min(_STEP_DEGREES / max(abs(planet["speed"]), 1e-9), _MAX_STEP_DAYS)
-
-    return hits
+    return [
+        jd for jd in find_state_changes(index, from_jd, to_jd, side)
+        if abs(swe.difdeg2n(ephemeris.get_planet(index, jd)["lon"], target)) < 1.0
+    ]
 
 
 def find_exact_aspect_dates(
