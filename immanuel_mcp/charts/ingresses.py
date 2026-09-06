@@ -1,15 +1,23 @@
 """Planetary sign ingress calendar.
 
-Built on immanuel 1.5.4's transit.next_sign_ingress(), which brackets the
-crossing and solves it with brentq rather than stepping the ephemeris.
+Deliberately does not use immanuel 1.5.4's transit.next_sign_ingress(). That
+function brackets the crossing by stepping 1/|speed| days at a time, so as a
+planet approaches a station and its speed tends to zero, the step grows
+without bound and leaps clean over the crossing. Venus is the clearest case:
+asked on 2025-03-28 for its next Aries ingress it answers 2026-03-06, having
+skipped the real re-entry on 2025-04-30, because Venus stations in between.
+
+The bracketing here is bounded by degrees travelled instead, which cannot
+run away at a station, and the crossing is then bisected on the sign index.
 """
 
 import logging
 from typing import Any, Dict, List
 
+from immanuel.const import calc as calc_const
 from immanuel.const import names as names_const
 from immanuel.tools import date as date_tools
-from immanuel.tools import ephemeris, position, transit
+from immanuel.tools import ephemeris, position
 
 from ..app import mcp
 from ..utils.datetimes import parse_datetime_value
@@ -29,6 +37,17 @@ MAX_COUNT = 24
 # Nudge past a found ingress so the next search cannot re-converge on it.
 _STEP_PAST_JD = 0.5
 
+# Bracketing step: aim to advance this many degrees per probe, but never more
+# than this many days. The day cap is what makes a station safe - a body slow
+# enough for the cap to bind covers under a quarter degree across it, so it
+# cannot cross a sign boundary inside one step.
+_STEP_DEGREES = 0.25
+_MAX_STEP_DAYS = 5.0
+
+# Search ceiling. Pluto, the slowest tracked body, spends at most ~30 years in
+# a sign, so anything beyond this is a runaway rather than a real answer.
+_MAX_SEARCH_DAYS = 40 * 365.25
+
 
 def _next_sign(sign: int) -> int:
     """The sign after this one, wrapping Pisces to Aries."""
@@ -44,15 +63,42 @@ def _next_ingress_jd(planet_index: int, jd: float) -> float:
     """
     Julian date of a planet's next sign change, in either direction.
 
-    A retrograde planet re-enters the sign it just left, so the next ingress
-    is whichever of the forward and backward crossings comes first. Searching
-    only forward would silently skip every retrograde re-entry and report the
-    sign changes out of order.
+    Searches for the next change of sign index rather than for entry into one
+    named sign, so a retrograde re-entry into the sign just left is found the
+    same way as an ordinary forward ingress - no direction needs guessing.
+
+    Raises:
+        ValueError: If no crossing is found within the search ceiling.
     """
-    current = position.sign(ephemeris.get_planet(planet_index, jd))
-    forward = transit.next_sign_ingress(planet_index, _next_sign(current), jd)
-    backward = transit.next_sign_ingress(planet_index, _previous_sign(current), jd)
-    return min(forward, backward)
+    start_sign = position.sign(ephemeris.get_planet(planet_index, jd))
+    limit_jd = jd + _MAX_SEARCH_DAYS
+
+    previous_jd = jd
+    while jd < limit_jd:
+        planet = ephemeris.get_planet(planet_index, jd)
+        if position.sign(planet) != start_sign:
+            return _bisect_ingress(planet_index, start_sign, previous_jd, jd)
+        previous_jd = jd
+        jd += min(_STEP_DEGREES / max(abs(planet["speed"]), 1e-9), _MAX_STEP_DAYS)
+
+    raise ValueError(
+        f"No sign change found within {_MAX_SEARCH_DAYS / 365.25:.0f} years")
+
+
+def _bisect_ingress(planet_index: int, start_sign: int, lo: float, hi: float) -> float:
+    """
+    Narrow a bracketed sign change to the moment of crossing.
+
+    lo is still in start_sign, hi is not; the returned Julian date is the
+    first instant that is not, to within the library's own MAX_ERROR.
+    """
+    while (hi - lo) > calc_const.MAX_ERROR:
+        mid = (lo + hi) / 2
+        if position.sign(ephemeris.get_planet(planet_index, mid)) == start_sign:
+            lo = mid
+        else:
+            hi = mid
+    return hi
 
 
 @mcp.tool()

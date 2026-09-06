@@ -84,6 +84,34 @@ def test_neptune_ingresses_match_ephemeris():
         "2025-03-30", "2025-10-22", "2026-01-26"]
 
 
+def test_venus_re_entry_after_a_station_is_not_skipped():
+    """Regression: immanuel's own next_sign_ingress() brackets by 1/|speed|
+    days, so as Venus approaches its April 2025 station the step grows without
+    bound and leaps over the 2025-04-30 Aries re-entry, answering 2026-03-06
+    instead. The bounded bracketing here must find it."""
+    result = get_sign_ingresses("2025-01-01 00:00:00", planets=["Venus"], count=5)
+    dates = _dates(result["ingresses"]["Venus"])
+    assert dates == [
+        "2025-01-03", "2025-02-04", "2025-03-27", "2025-04-30", "2025-06-06"]
+
+
+def test_slow_planet_crossings_are_not_skipped():
+    """Same station hazard on a slow body: Pluto's first crossing out of
+    Aquarius is 2043-03-09, not the 2044-01-19 final settling."""
+    result = get_sign_ingresses("2025-01-01 00:00:00", planets=["Pluto"], count=3)
+    assert _dates(result["ingresses"]["Pluto"]) == [
+        "2043-03-09", "2043-09-01", "2044-01-19"]
+
+
+def test_fast_planet_ingresses_are_sane():
+    """The Moon changes sign every ~2.3 days; the bracketing step must adapt
+    to speed rather than assume a slow body."""
+    result = get_sign_ingresses("2025-01-01 00:00:00", planets=["Moon"], count=5)
+    events = result["ingresses"]["Moon"]
+    assert _dates(events)[:3] == ["2025-01-01", "2025-01-03", "2025-01-05"]
+    assert [e["into_sign"] for e in events[:3]] == ["Aquarius", "Pisces", "Aries"]
+
+
 def test_ingresses_are_chronological():
     result = get_sign_ingresses("2025-01-01 00:00:00", count=4)
     for planet, events in result["ingresses"].items():
