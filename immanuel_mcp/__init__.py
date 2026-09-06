@@ -24,5 +24,5 @@ import subpackages like immanuel_mcp.lifecycle at load time, so an eager
 from .app import mcp
 from .constants import CELESTIAL_BODIES
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 __all__ = ["mcp", "CELESTIAL_BODIES"]

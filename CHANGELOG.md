@@ -47,6 +47,11 @@ response shapes, hence the minor rather than patch bump.
 - `list_available_settings` reports `available_systems` as `{code, name,
   accepts}`, so every displayed value is a valid input.
 - `tests/test_issue_followups.py` pins all four fixes (15 tests).
+- Release-stamp guards: tests asserting `immanuel_mcp.__version__` and the
+  README banner both match `pyproject.toml`, and that the banner's tool and
+  test counts match reality. The version and counts live in four places and
+  had twice drifted apart; these fail loudly rather than shipping a stale
+  banner.
 
 ### Changed
 - `configure_immanuel_settings` reports `old_value` and `new_value` in one

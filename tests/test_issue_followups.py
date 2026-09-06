@@ -12,14 +12,18 @@ Each test pins one fixed defect so it cannot silently return:
 Run from the repo root: python -m pytest tests/test_issue_followups.py
 """
 
+import asyncio
 import json
+import pathlib
 import re
+import subprocess
 
 import pytest
 from immanuel import charts, setup
 from immanuel.classes.serialize import ToJSON
 
 import immanuel_server
+from immanuel_mcp.app import mcp as shared_mcp
 from immanuel_mcp.optimizers.positions import format_declination, format_position
 from immanuel_mcp.utils.settings import (
     _house_system_constants,
@@ -168,3 +172,48 @@ def test_current_house_system_code_is_accepted_back(restore_settings):
     current = immanuel_server.list_available_settings()["settings"]["house_system"]["current"]
     result = immanuel_server.configure_immanuel_settings("house_system", current)
     assert result["status"] == "success"
+
+
+# ---------------------------------------------------------------------------
+# Release stamps: version and counts live in four places and have twice now
+# drifted apart. These fail loudly instead of shipping a stale banner.
+# ---------------------------------------------------------------------------
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
+
+def _pyproject_version() -> str:
+    text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    match = re.search(r'^version = "([^"]+)"', text, re.MULTILINE)
+    assert match, "no version in pyproject.toml"
+    return match.group(1)
+
+
+def _readme_banner() -> re.Match:
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    match = re.search(r"\*\*v(\S+) · (\d+) tools · (\d+) tests passing", text)
+    assert match, "README banner line not found or reshaped"
+    return match
+
+
+def test_package_version_matches_pyproject():
+    from immanuel_mcp import __version__
+    assert __version__ == _pyproject_version()
+
+
+def test_readme_banner_version_matches_pyproject():
+    assert _readme_banner().group(1) == _pyproject_version()
+
+
+def test_readme_banner_counts_match_reality():
+    banner = _readme_banner()
+    tools = asyncio.run(shared_mcp.list_tools())
+    assert int(banner.group(2)) == len(tools)
+
+    collected = subprocess.run(
+        ["python", "-m", "pytest", "tests/", "--collect-only", "-q", "-p", "no:cacheprovider"],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    count = re.search(r"^(\d+) tests collected", collected.stdout, re.MULTILINE)
+    assert count, collected.stdout[-500:]
+    assert int(banner.group(3)) == int(count.group(1))
