@@ -49,7 +49,7 @@ class CompactJSONSerializer(ToJSON):
         - Chart shape analysis
         - Moon phase details (beyond basic phase type)
         - Parallels and contra-parallels
-        - Minor house cusps details
+        - House cusp detail beyond number, sign, sign longitude and raw longitude
 
     Purpose:
         This compact format optimizes for LLM token usage while maintaining all critical astrological
@@ -60,7 +60,7 @@ class CompactJSONSerializer(ToJSON):
         A dictionary containing:
         - objects: Simplified planetary data with name, sign, degree, house, retrograde status, dignity,
                   declination, speed, and out-of-bounds status
-        - houses: House cusps and associated signs
+        - houses: House cusps flattened to number, sign, sign longitude and raw longitude
         - aspects: Filtered list of major aspects between major objects only
     """
 
@@ -190,6 +190,29 @@ class CompactJSONSerializer(ToJSON):
 
         return obj_data
 
+    def _extract_house_details(self, v: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Flatten a house cusp to the fields a reading actually needs.
+
+        Houses used to be copied verbatim from the full ToJSON output, which
+        left the compact charts carrying immanuel's whole nested wrapper for
+        all twelve cusps - direction, degrees/minutes/seconds, decan, speed,
+        declination, size - while objects and aspects beside them were
+        flattened. This mirrors _extract_position_details.
+
+        Args:
+            v: Full house dictionary from chart
+
+        Returns:
+            Flat house dict with number, sign, sign_longitude and longitude
+        """
+        return {
+            'number': v.get('number'),
+            'sign': v.get('sign', {}).get('name'),
+            'sign_longitude': v.get('sign_longitude', {}).get('formatted'),
+            'longitude': v.get('longitude', {}).get('raw'),
+        }
+
     def default(self, obj: Any) -> Dict[str, Any]:
         # Check if this is a chart object (Natal, SolarReturn, etc.)
         if self._is_chart_object(obj):
@@ -209,9 +232,12 @@ class CompactJSONSerializer(ToJSON):
                         simplified_objects[k] = obj_data
                 compact_chart['objects'] = simplified_objects
 
-            # Include houses
+            # Simplify houses
             if data_const.HOUSES in chart_dict:
-                compact_chart['houses'] = chart_dict[data_const.HOUSES]
+                compact_chart['houses'] = {
+                    k: self._extract_house_details(v)
+                    for k, v in chart_dict[data_const.HOUSES].items()
+                }
 
             # Simplify and filter aspects - always returns a list
             if data_const.ASPECTS in chart_dict:

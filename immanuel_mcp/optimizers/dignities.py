@@ -42,43 +42,6 @@ def extract_primary_dignity(dignities: Dict[str, Any]) -> Optional[str]:
     return ', '.join(parts) if parts else None
 
 
-def build_optimized_transit_positions(transit_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Build optimized transit positions using planet names as keys.
-
-    Args:
-        transit_data: Full transit chart data from ToJSON serializer
-
-    Returns:
-        Optimized dict with planet names as keys
-    """
-    optimized = {}
-
-    for obj_key, obj_data in transit_data.get('objects', {}).items():
-        if not isinstance(obj_data, dict):
-            continue
-
-        index = obj_data.get('index')
-        if index not in CELESTIAL_BODIES:
-            continue  # Skip objects not in our mapping
-
-        name = CELESTIAL_BODIES[index]
-
-        # Build optimized object
-        optimized[name] = {
-            'position': format_position(
-                obj_data.get('sign_longitude', {}),
-                obj_data.get('sign', {}).get('name', '')
-            ),
-            'declination': format_declination(obj_data.get('declination', {})),
-            'retrograde': obj_data.get('movement', {}).get('retrograde', False),
-            'out_of_bounds': obj_data.get('out_of_bounds', False),
-            'house': obj_data.get('house', {}).get('number')
-        }
-
-    return optimized
-
-
 def build_dignities_section(transit_data: Dict[str, Any]) -> Dict[str, str]:
     """
     Build a separate dignities section with planet names as keys.
