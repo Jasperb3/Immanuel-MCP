@@ -241,3 +241,50 @@ def test_fallback_major_transit_keeps_the_typical_age_and_says_so():
     assert uranus["exact_date_estimated"] is True
     assert uranus["prediction_basis"] == "typical_age"
     assert uranus["age_at_event"] == 41
+
+
+# --- current_stage (0.10.1) -------------------------------------------------
+# It came from a fixed age table: the 1984 chart at 42.9 read "Uranus
+# Opposition" (band 41-43) while next_major_event said that opposition is
+# 2028-29.
+
+def _stage(natal, query_date, tz):
+    return _compact(natal, query_date, tz)[1]["current_stage"]
+
+
+def test_stage_is_the_active_ephemeris_event_not_the_age_band():
+    stage = _stage(NATAL, "2026-11-08 12:00:00", TZ)
+    assert stage["stage_name"] == "Pluto Square"
+    assert stage["stage_basis"] == "ephemeris"
+    # Multi-pass: the span of the passes, 2025-01-24 to 2025-11-26
+    assert stage["age_range"] == [41.1, 41.9]
+
+
+def test_stage_during_the_saturn_return():
+    stage = _stage(LONDON_1990, "2020-02-02 12:00:00", LONDON_TZ)
+    assert stage["stage_name"] == "Saturn Return Cycle 1"
+    assert stage["stage_basis"] == "ephemeris"
+    # Single pass: the orb window (date_range 2019-12-19 to 2020-03-17),
+    # not [29.7, 29.7]
+    assert stage["age_range"][0] < stage["age_range"][1]
+    assert set(stage) == {"stage_name", "description", "age_range", "themes", "stage_basis"}
+
+
+def test_a_recent_past_event_is_the_stage_labelled_as_past():
+    # 2.3 years after the Saturn Return's last pass, nothing major active
+    stage = _stage(LONDON_1990, "2022-06-01 12:00:00", LONDON_TZ)
+    assert stage["stage_name"] == "After Saturn Return Cycle 1"
+    assert stage["stage_basis"] == "ephemeris_past"
+
+
+def test_a_past_event_older_than_three_years_falls_back_to_the_age_band():
+    stage = _stage(LONDON_1990, "2024-06-01 12:00:00", LONDON_TZ)
+    assert stage["stage_basis"] == "age_band"
+    assert stage["stage_name"] == "Post-Saturn Return"  # the age-34 band, not "After ..."
+    assert stage["age_range"] == [31, 36]
+
+
+def test_an_infant_has_only_the_age_band():
+    stage = _stage(("2020-01-01 12:00:00", "51n30", "0w07"), "2021-06-01 12:00:00", LONDON_TZ)
+    assert stage["stage_basis"] == "age_band"
+    assert stage["stage_name"] == "Childhood"

@@ -102,6 +102,30 @@ def find_next_pass(
     return [], None
 
 
+def find_last_pass(
+    planet_index: int,
+    natal_longitude: float,
+    aspect: float,
+    reference: datetime,
+    lookback_years: float,
+) -> List[datetime]:
+    """
+    The latest pass sequence of `aspect` to `natal_longitude` that finished
+    before `reference`, searched back `lookback_years`: its perfections, or
+    [] if none. A sequence with a pass still ahead is current, not last, so
+    the search runs PASS_GAP_DAYS beyond the reference to see it whole.
+    """
+    reference_jd = date_tools.to_jd(reference, lat=0.0, lon=0.0, time_zone="UTC")
+    lookback_days = lookback_years * 365.25
+    hits = find_exact_aspect_dates(
+        planet_index, natal_longitude, aspect,
+        reference_jd - lookback_days, lookback_days + PASS_GAP_DAYS,
+        max_hits=_MAX_HITS,
+    )
+    finished = [group for group in group_passes(hits) if group[-1] < reference_jd]
+    return [_jd_to_datetime(jd) for jd in finished[-1]] if finished else []
+
+
 def _natal_longitude(natal_chart, object_name: str) -> Optional[float]:
     index = PLANET_CONSTANTS.get(object_name)
     natal_object = natal_chart.objects.get(index) if index is not None else None
