@@ -586,7 +586,9 @@ This server is **tropical-zodiac only** (the underlying immanuel settings expose
 - **Eastern longitudes**: `2e20` or `2.33`
 
 #### Slow first call after restarting Claude Desktop
-Measured on Windows (v0.10.0): the server answers `initialize` in about 1.5 s (about 3 s right after a `git pull` that changes `pyproject.toml`, while `uv run` rebuilds the project), and the first natal chart takes 0.05 s. A longer wait right after a restart happens inside Claude Desktop while it launches all its configured servers, not in this server. Retry the call. If it is consistently slow, run `uv run python immanuel_server.py` by hand to check the startup time.
+Measured on Windows (v0.10.1) with Desktop's exact launch command (`uv.exe --directory … run python immanuel_server.py`) and a stdio client: the server answers `initialize` in 1.3–2.4 s, and the first `generate_compact_transit_to_natal` with lifecycle events takes 0.06–0.07 s. That holds with nothing changed and right after `uv sync --reinstall-package immanuel`. (`initialize` takes about 3 s right after a `git pull` that changes `pyproject.toml`, while `uv run` rebuilds the project.)
+
+So a first call that times out after a (re)connect is not this server. The 60 s timeouts seen on 2026-11-08 came from the remote bridge (cloud to device) or Desktop's reconnect, which also launches every configured server. Retry the call. If it's consistently slow, run `uv run python immanuel_server.py` by hand to check the startup time.
 
 #### Chart generation errors
 - **Date format**: Use "YYYY-MM-DD HH:MM:SS" (24-hour time)
