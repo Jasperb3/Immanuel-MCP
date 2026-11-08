@@ -24,7 +24,7 @@ from .constants import (
     MAJOR_LIFE_TRANSITS,
     TRACKED_RETURN_PLANETS
 )
-from .returns import get_return_significance
+from .returns import age_on, get_return_significance
 from .transits import ASPECT_ANGLES
 
 logger = logging.getLogger(__name__)
@@ -114,7 +114,7 @@ def _ephemeris_dates(passes: List[datetime], first: datetime, reference: datetim
     sequence's first pass on or after the reference."""
     return {
         "predicted_date": first.strftime("%Y-%m-%d"),
-        "predicted_age": round((first - birth_datetime).days / 365.25, 1),
+        "predicted_age": round(age_on(first, birth_datetime), 1),
         "years_until": round((first - reference).days / 365.25, 1),
         "exact_date": first.strftime("%Y-%m-%d"),
         "exact_dates": [p.strftime("%Y-%m-%d") for p in passes],

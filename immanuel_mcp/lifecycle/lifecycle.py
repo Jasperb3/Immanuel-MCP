@@ -647,7 +647,7 @@ def _format_major_transit_event(
         "exact_dates": exact_dates,
         "exact_date_estimated": searched_exact_date is None,
         "date_range": date_range,
-        "age_at_event": round(event.get("age"), 1) if event.get("age") else event.get("typical_age"),
+        "age_at_event": _major_transit_age(event, status),
         "years_until_event": 0.0 if status == "active" else event.get("years_until"),
         "interpretation": event.get("description"),
         "significance_level": event.get("significance", "").lower(),
@@ -665,6 +665,20 @@ def _format_major_transit_event(
         entry["prediction_basis"] = event.get("prediction_basis")
 
     return entry
+
+
+def _major_transit_age(event: Dict[str, Any], status: str) -> Optional[float]:
+    """
+    The age when the transit perfects. An active event carries the age at
+    the first pass of its cluster; an upcoming ephemeris-dated one the age
+    at its exact_date (predicted_age). Only the arithmetic fallback, which
+    has no real date, reports the textbook typical_age.
+    """
+    if status == "active":
+        return event.get("age_at_event")
+    if event.get("prediction_basis") == "ephemeris":
+        return event.get("predicted_age")
+    return event.get("typical_age")
 
 
 def _format_future_event(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -800,7 +814,7 @@ def format_lifecycle_event_feed(
                     keywords=event.get("keywords", []),
                     significance=event.get("significance"),
                     reference_datetime=reference_datetime,
-                    age=event.get("age"),
+                    age=event.get("age_at_event"),
                     status="active",
                     years_until=0.0,
                     orb=event.get("orb"),

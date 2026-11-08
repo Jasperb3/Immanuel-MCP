@@ -33,6 +33,11 @@ from .constants import (
 logger = logging.getLogger(__name__)
 
 
+def age_on(when: datetime, birth_datetime: datetime) -> float:
+    """Age in years on `when`. The one formula behind every lifecycle age."""
+    return (when - birth_datetime).days / 365.25
+
+
 def calculate_signed_orb(natal_pos: float, transit_pos: float) -> float:
     """
     Calculate the signed orb between natal and transit positions.
@@ -312,7 +317,7 @@ def calculate_planetary_return(
         return None  # Not within orb
 
     # Calculate age and cycle number
-    age = (transit_datetime - birth_datetime).days / 365.25
+    age = age_on(transit_datetime, birth_datetime)
     orbital_period = ORBITAL_PERIODS.get(planet_name, 1.0)
     cycle_number = max(1, round(age / orbital_period))
 
@@ -353,6 +358,8 @@ def calculate_planetary_return(
         "significance": significance,
         "keywords": RETURN_KEYWORDS.get(planet_name, []),
         "age": round(age, 1),
+        # The age at the first pass of the current cluster, not today's age.
+        "age_at_event": round(age_on(exact_dates[0], birth_datetime) if exact_dates else age, 1),
         "status": "active"
     }
 
