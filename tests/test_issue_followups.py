@@ -22,15 +22,17 @@ import subprocess
 import sys
 
 import pytest
-from immanuel import charts, setup
-from immanuel.classes.serialize import ToJSON
+from immanuel import charts
+from immanuel.charts import ToJSON
 
 import immanuel_server
 from immanuel_mcp.app import mcp as shared_mcp
 from immanuel_mcp.optimizers.positions import format_declination, format_position
 from immanuel_mcp.utils.settings import (
     _house_system_constants,
+    get_session_config,
     house_system_display_name,
+    reset_global_settings,
     resolve_house_system,
 )
 from immanuel_mcp.utils.subjects import create_subject, effective_timezone
@@ -45,10 +47,10 @@ DMS = re.compile(r"^-?\d+°\d{2}'\d{2}\"$")
 
 @pytest.fixture
 def restore_settings():
-    """Settings are a process-global singleton; do not leak into other tests."""
-    before = setup.settings.house_system
+    """The session Config is process-wide; do not leak into other tests."""
+    reset_global_settings()
     yield
-    setup.settings.house_system = before
+    reset_global_settings()
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +115,7 @@ def test_transit_to_natal_positions_use_arcsecond_marks():
 # ---------------------------------------------------------------------------
 
 def test_reset_reports_the_diff(restore_settings):
-    startup = setup.settings.house_system
+    startup = get_session_config().house_system
     other = "WHOLE_SIGN" if startup != resolve_house_system("WHOLE_SIGN") else "PLACIDUS"
     immanuel_server.configure_immanuel_settings("house_system", other)
 
@@ -124,7 +126,7 @@ def test_reset_reports_the_diff(restore_settings):
     assert result["previous_settings"]["house_system"] == house_system_display_name(
         resolve_house_system(other))
     assert result["restored_settings"]["house_system"] == house_system_display_name(startup)
-    assert setup.settings.house_system == startup
+    assert get_session_config().house_system == startup
     # Retained alias for callers still reading the old key.
     assert result["restored_defaults"] == result["restored_settings"]
 
@@ -168,7 +170,7 @@ def test_configure_reports_one_vocabulary(restore_settings):
     assert result["new_value"] == "Whole Sign"
     # old_value used to be the raw numeric code while new_value was a name.
     assert not result["old_value"].isdigit()
-    assert setup.settings.house_system == code
+    assert get_session_config().house_system == code
 
 
 def test_current_house_system_code_is_accepted_back(restore_settings):

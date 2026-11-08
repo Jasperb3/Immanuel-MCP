@@ -19,7 +19,6 @@ import json
 from datetime import datetime
 from immanuel_mcp.lifecycle.lifecycle import detect_lifecycle_events
 from immanuel import charts
-from immanuel.setup import settings
 
 def test_lifecycle_fixes():
     """Test all lifecycle event fixes."""

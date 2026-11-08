@@ -2,7 +2,7 @@
 """Compare ToJSON vs CompactJSONSerializer output formats."""
 
 from immanuel import charts
-from immanuel.classes.serialize import ToJSON
+from immanuel.charts import ToJSON
 from immanuel_mcp.serializers import CompactJSONSerializer
 import json
 

@@ -14,10 +14,10 @@ Run from the repo root: python -m pytest tests/test_v060_features.py
 
 import pytest
 
-from immanuel import setup
 from immanuel.const import chart as chart_const
 
 import immanuel_server
+from immanuel_mcp.utils.settings import get_session_config, reset_global_settings
 from immanuel_mcp.charts import lunar_return as lunar_return_module
 
 BIRTH = ("1990-01-15 14:30:00", "32.71", "-117.15")
@@ -26,10 +26,10 @@ TZ = "America/Los_Angeles"
 
 @pytest.fixture(autouse=True)
 def _pristine_global_settings():
-    """Every test starts and ends with the library-default house system."""
-    setup.settings.house_system = chart_const.PLACIDUS
+    """Every test starts and ends with the startup (library-default) Config."""
+    reset_global_settings()
     yield
-    setup.settings.house_system = chart_const.PLACIDUS
+    reset_global_settings()
 
 
 # ---------------------------------------------------------------------------
@@ -57,9 +57,9 @@ def test_invalid_house_system_returns_structured_error_with_valid_values():
 
 
 def test_per_call_override_leaves_global_settings_untouched():
-    before = setup.settings.house_system
+    before = get_session_config().house_system
     immanuel_server.generate_natal_chart(*BIRTH, timezone=TZ, house_system="CAMPANUS")
-    assert setup.settings.house_system == before
+    assert get_session_config().house_system == before
 
 
 def test_applied_settings_echo_per_call_and_session_global():
@@ -289,7 +289,7 @@ def test_configure_invalid_house_system_lists_valid_values():
     assert "WHOLE_SIGN" in result["message"]
     assert "Whole Sign" in result["message"]
     # the failed call must not have mutated the global settings
-    assert setup.settings.house_system == chart_const.PLACIDUS
+    assert get_session_config().house_system == chart_const.PLACIDUS
 
 
 def test_configure_response_carries_session_scope():
