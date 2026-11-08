@@ -1,6 +1,8 @@
 """Aspect interpretations"""
 
 from typing import Any, Dict, List, Union
+
+from immanuel.const import names as names_const
 import logging
 
 logger = logging.getLogger(__name__)
@@ -380,6 +382,31 @@ PLANET_COMBINATION_INTERPRETATIONS = {
 }
 
 
+# English names for the interpretation lookup. Chart output is translated
+# under a locale ('Júpiter', 'Trígono'), while the tables here are keyed by
+# immanuel's English names, so the lookup resolves names from the locale-proof
+# object indices and aspect angle instead of the displayed strings.
+_ENGLISH_OBJECT_NAMES = {
+    **names_const.ANGLES, **names_const.PLANETS, **names_const.ASTEROIDS,
+    **names_const.POINTS, **names_const.ECLIPSES,
+}
+_ENGLISH_ASPECT_NAMES = dict(names_const.ASPECTS)
+
+
+def english_aspect_terms(aspect: Dict[str, Any]) -> tuple:
+    """
+    (object1, object2, aspect_type) in English for an aspect dict carrying
+    `active`/`passive` indices and an `angle`, whatever the session locale.
+
+    Falls back to the dict's displayed strings for anything without an
+    English name (a fixed star, a custom aspect angle).
+    """
+    obj1 = _ENGLISH_OBJECT_NAMES.get(aspect.get('active'), aspect.get('object1', ''))
+    obj2 = _ENGLISH_OBJECT_NAMES.get(aspect.get('passive'), aspect.get('object2', ''))
+    aspect_type = _ENGLISH_ASPECT_NAMES.get(aspect.get('angle'), aspect.get('type', ''))
+    return obj1, obj2, aspect_type
+
+
 def get_planet_pair_key(obj1: str, obj2: str, aspect_type: str) -> tuple:
     """Create normalized key for planet pair lookups (alphabetically sorted)."""
     planets = sorted([obj1, obj2])
@@ -507,9 +534,7 @@ def add_aspect_interpretations(aspects: Union[List[Dict[str, Any]], Dict[str, An
         if not isinstance(aspect, dict):
             continue
 
-        obj1 = aspect.get('object1', '')
-        obj2 = aspect.get('object2', '')
-        aspect_type = aspect.get('type', '')
+        obj1, obj2, aspect_type = english_aspect_terms(aspect)
 
         # Get context-aware interpretation
         interp = get_context_aware_interpretation(obj1, obj2, aspect_type)

@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.9.0 · 23 tools · 188 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.9.0 · 23 tools · 199 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 

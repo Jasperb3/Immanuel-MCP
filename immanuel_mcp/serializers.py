@@ -282,6 +282,9 @@ class CompactJSONSerializer(ToJSON):
                                             from_index = to_index = None
                                         simplified_aspects.append({
                                             'type': aspect.get('type'),
+                                            # The angle is locale-proof where 'type'
+                                            # is translated; interpretations key on it.
+                                            'angle': aspect.get('aspect'),
                                             'object1': active_name,
                                             'object2': passive_name,
                                             'orb': aspect.get('difference', {}).get('raw'),
