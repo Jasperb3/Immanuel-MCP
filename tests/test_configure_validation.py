@@ -187,3 +187,9 @@ def test_node_ingresses_are_not_flagged_as_re_entries_for_moving_backwards():
     events = get_sign_ingresses("2025-01-01 00:00:00", planets=["North Node"], count=3,
                                 timezone="UTC")["ingresses"]["North Node"]
     assert [e["retrograde_re_entry"] for e in events] == [False, False, False]
+
+
+def test_a_fixed_star_rejection_says_why():
+    from immanuel_mcp.utils.settings import resolve_objects
+    with pytest.raises(ValueError, match="sefstars.txt"):
+        resolve_objects("Antares")

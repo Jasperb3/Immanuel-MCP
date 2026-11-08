@@ -13,6 +13,7 @@ from .constants import (
     PROGRESSED_MOON_KEYWORDS,
 )
 from .returns import (
+    age_on,
     calculate_signed_orb,
     determine_orb_status,
     determine_movement,
@@ -52,7 +53,7 @@ def detect_progressed_moon_return(
     if orb_status == "inactive":
         return []
 
-    age = (progression_datetime - birth_datetime).days / 365.25
+    age = age_on(progression_datetime, birth_datetime)
     cycle_number = int(max(age, 0) / PROGRESSED_MOON_PERIOD_YEARS) + 1
 
     # The progressed Moon completes a cycle in ~27.3 years of real time and
@@ -89,7 +90,8 @@ def detect_progressed_moon_return(
         # so there is nothing to search - this stays a linear estimate.
         "exact_date_estimated": True,
         "date_range": date_range,
-        "age_at_event": round(age, 1),
+        # The age at the estimated perfection, like every other event.
+        "age_at_event": round(age_on(exact_center, birth_datetime), 1),
         "years_until_event": 0.0,
         "interpretation": PROGRESSED_MOON_INTERPRETATION,
         "significance_level": "high",

@@ -10,19 +10,30 @@ from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 import logging
 
+from immanuel.const import calc as calc_const
+
 from .returns import (
+    age_on,
     detect_all_returns,
+    get_return_significance,
     PLANET_CONSTANTS,
     calculate_signed_orb,
     determine_orb_status,
     determine_movement,
 )
-from .transits import detect_all_major_transits, calculate_aspect_orb, TRANSIT_ORB_TOLERANCE
-from .timeline import build_future_timeline, get_lifecycle_stage
+from .transits import (
+    ASPECT_ANGLES, detect_all_major_transits, calculate_aspect_orb, TRANSIT_ORB_TOLERANCE)
+from .timeline import (
+    _TRANSIT_LOOKBACK_YEARS, _natal_longitude, build_future_timeline, find_last_pass,
+    get_lifecycle_stage)
 from .constants import (
+    MAJOR_LIFE_TRANSITS,
     ORBITAL_PERIODS,
+    RETURN_KEYWORDS,
     RETURN_ORB_TOLERANCE,
-    RETURN_INTERPRETATIONS
+    RETURN_INTERPRETATIONS,
+    RETURN_SIGNIFICANCE,
+    TRACKED_RETURN_PLANETS,
 )
 
 logger = logging.getLogger(__name__)
@@ -317,7 +328,8 @@ def detect_lifecycle_events(
         )
 
     # Get current lifecycle stage
-    lifecycle_stage = get_lifecycle_stage(age)
+    lifecycle_stage = _lifecycle_stage(
+        current_events, future_timeline, natal_chart, birth_datetime, transit_datetime, age)
 
     # Determine highest significance level of current events
     highest_significance = "NONE"
@@ -647,7 +659,7 @@ def _format_major_transit_event(
         "exact_dates": exact_dates,
         "exact_date_estimated": searched_exact_date is None,
         "date_range": date_range,
-        "age_at_event": round(event.get("age"), 1) if event.get("age") else event.get("typical_age"),
+        "age_at_event": _major_transit_age(event, status),
         "years_until_event": 0.0 if status == "active" else event.get("years_until"),
         "interpretation": event.get("description"),
         "significance_level": event.get("significance", "").lower(),
@@ -665,6 +677,20 @@ def _format_major_transit_event(
         entry["prediction_basis"] = event.get("prediction_basis")
 
     return entry
+
+
+def _major_transit_age(event: Dict[str, Any], status: str) -> Optional[float]:
+    """
+    The age when the transit perfects. An active event carries the age at
+    the first pass of its cluster; an upcoming ephemeris-dated one the age
+    at its exact_date (predicted_age). Only the arithmetic fallback, which
+    has no real date, reports the textbook typical_age.
+    """
+    if status == "active":
+        return event.get("age_at_event")
+    if event.get("prediction_basis") == "ephemeris":
+        return event.get("predicted_age")
+    return event.get("typical_age")
 
 
 def _format_future_event(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -781,6 +807,148 @@ def _build_summary_enhancements(
     return enhancements
 
 
+# A past event stays the stage this long after its last pass. Beyond that it
+# says no more than the age band: a Jupiter or North Node Return would
+# otherwise name the stage for up to 12 or 18 years.
+STAGE_PAST_YEARS = 3.0
+_STAGE_ORDER = {"CRITICAL": 0, "HIGH": 1}
+
+
+def _event_name(event: Dict[str, Any]) -> Optional[str]:
+    if event.get("event_type") == "return":
+        return _return_event_name(event.get("planet"), event.get("cycle_number"))
+    return event.get("name")
+
+
+def _event_window(event: Dict[str, Any], reference: datetime) -> tuple:
+    """
+    The event's date_range, as the feed computes it, as datetimes: the span
+    of the passes when there are several, otherwise the orb window around
+    the pass (or around the reference, when the search found none).
+    """
+    center = (_parse_iso_date(event.get("exact_date") or event.get("predicted_date"))
+              or reference)
+    exact_dates = event.get("exact_dates")
+    if event.get("event_type") == "return":
+        planet = event.get("planet")
+        date_range = _span_date_range(exact_dates) or _estimate_date_range(
+            planet, RETURN_ORB_TOLERANCE.get(planet, 2.0), center)
+    else:
+        date_range = _span_date_range(exact_dates) or _estimate_transit_date_range(
+            event.get("transit_object"), event.get("aspect_type"), center)
+    start, end = date_range.split(" to ")
+    return _parse_iso_date(start), _parse_iso_date(end)
+
+
+def _separation(event: Dict[str, Any]) -> float:
+    for key in ("orb", "current_angular_separation"):
+        if event.get(key) is not None:
+            return abs(event[key])
+    return 999.0
+
+
+def _stage_from_event(event: Dict[str, Any], birth_datetime: datetime,
+                      reference: datetime, basis: str) -> Dict[str, Any]:
+    start, end = _event_window(event, reference)
+    name = _event_name(event)
+    if event.get("event_type") == "return":
+        description = _get_return_interpretation(event.get("planet"), event.get("cycle_number"))
+    else:
+        description = event.get("description")
+    return {
+        "stage_name": name if basis == "ephemeris" else f"After {name}",
+        "description": description,
+        "age_range": [round(age_on(start, birth_datetime), 1),
+                      round(age_on(end, birth_datetime), 1)],
+        "themes": event.get("keywords", []),
+        "stage_basis": basis,
+    }
+
+
+def _recent_past_major_events(natal_chart, birth_datetime: datetime,
+                              reference: datetime) -> list:
+    """
+    HIGH/CRITICAL returns and major transits whose last pass lies at most
+    STAGE_PAST_YEARS behind the reference, in the raw event shape.
+    """
+    lookback = STAGE_PAST_YEARS + _TRANSIT_LOOKBACK_YEARS  # whole sequences
+    found = []
+    for config in MAJOR_LIFE_TRANSITS:
+        natal_longitude = _natal_longitude(natal_chart, config["natal_object"])
+        index = PLANET_CONSTANTS.get(config["transit_object"])
+        aspect = ASPECT_ANGLES.get(config["aspect_type"])
+        if (config["significance"] not in MAJOR_SIGNIFICANCE
+                or natal_longitude is None or index is None or aspect is None):
+            continue
+        passes = find_last_pass(index, natal_longitude, aspect, reference, lookback)
+        if passes:
+            found.append({
+                "event_type": "major_transit",
+                **{key: config[key] for key in (
+                    "name", "natal_object", "transit_object", "aspect_type",
+                    "significance", "keywords", "description")},
+                "exact_dates": [p.strftime("%Y-%m-%d") for p in passes],
+                "exact_date": passes[-1].strftime("%Y-%m-%d"),
+            })
+    for planet in TRACKED_RETURN_PLANETS:
+        natal_longitude = _natal_longitude(natal_chart, planet)
+        # A body none of whose returns is HIGH/CRITICAL (Mars) is not searched.
+        if (natal_longitude is None
+                or not MAJOR_SIGNIFICANCE & set(RETURN_SIGNIFICANCE.get(planet, {}).values())):
+            continue
+        passes = find_last_pass(PLANET_CONSTANTS[planet], natal_longitude,
+                                calc_const.CONJUNCTION, reference, lookback)
+        if not passes:
+            continue
+        cycle = round(age_on(passes[-1], birth_datetime) / ORBITAL_PERIODS[planet])
+        significance = get_return_significance(planet, cycle)
+        if cycle < 1 or significance not in MAJOR_SIGNIFICANCE:
+            continue
+        found.append({
+            "event_type": "return",
+            "planet": planet,
+            "cycle_number": cycle,
+            "significance": significance,
+            "keywords": RETURN_KEYWORDS.get(planet, []),
+            "exact_dates": [p.strftime("%Y-%m-%d") for p in passes],
+            "exact_date": passes[-1].strftime("%Y-%m-%d"),
+        })
+    cutoff = (reference - timedelta(days=STAGE_PAST_YEARS * 365.25)).strftime("%Y-%m-%d")
+    return [event for event in found if event["exact_dates"][-1] >= cutoff]
+
+
+def _lifecycle_stage(current_events: list, future_timeline: list, natal_chart,
+                     birth_datetime: datetime, reference: datetime,
+                     age: float) -> Dict[str, Any]:
+    """
+    The current stage from the ephemeris-dated events, not the age table:
+
+    1. the most significant HIGH/CRITICAL event under way - active (in orb),
+       or with the reference inside its date_range (between passes)
+       -> stage_basis "ephemeris";
+    2. else the HIGH/CRITICAL event whose last pass is the most recent,
+       within STAGE_PAST_YEARS -> "ephemeris_past", named "After ...";
+    3. else the generic age band -> "age_band".
+    """
+    under_way = [event for event in current_events
+                 if event.get("significance") in MAJOR_SIGNIFICANCE]
+    for event in future_timeline:
+        if event.get("significance") in MAJOR_SIGNIFICANCE:
+            start, end = _event_window(event, reference)
+            if start <= reference <= end:
+                under_way.append(event)
+    if under_way:
+        event = min(under_way, key=lambda e: (_STAGE_ORDER[e["significance"]], _separation(e)))
+        return _stage_from_event(event, birth_datetime, reference, "ephemeris")
+
+    past = _recent_past_major_events(natal_chart, birth_datetime, reference)
+    if past:
+        event = max(past, key=lambda e: (e["exact_dates"][-1], -_STAGE_ORDER[e["significance"]]))
+        return _stage_from_event(event, birth_datetime, reference, "ephemeris_past")
+
+    return {**get_lifecycle_stage(age), "stage_basis": "age_band"}
+
+
 def format_lifecycle_event_feed(
     lifecycle_data: Dict[str, Any],
     reference_datetime: datetime,
@@ -800,7 +968,7 @@ def format_lifecycle_event_feed(
                     keywords=event.get("keywords", []),
                     significance=event.get("significance"),
                     reference_datetime=reference_datetime,
-                    age=event.get("age"),
+                    age=event.get("age_at_event"),
                     status="active",
                     years_until=0.0,
                     orb=event.get("orb"),

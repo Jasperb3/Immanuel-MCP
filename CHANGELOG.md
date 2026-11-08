@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.1] - 2026-11-08
+
+Follow-ups from the 0.10.0 smoke test. Two lifecycle fields now come from
+the ephemeris-dated events instead of textbook ages.
+
+### Fixed
+- **`age_at_event` is the age on the event's date.** Future major transits
+  reported the textbook `typical_age`, because the formatter read an `age`
+  field only active events carry. Active events reported today's age.
+  Examples: a 1990-05-15 London chart's Neptune Square (2031-05-09), Pluto
+  Square (2033-03-25) and Uranus Opposition (2034-08-19) read 39 / 36 / 41
+  and now read 41.0 / 42.9 / 44.3. A 1984-01-01 San Diego chart's Uranus
+  Opposition (2028-06-19) read 41 and now reads 44.5. Its active Pluto
+  Square, queried 2026-11-08, read 42.9 (the current age) and now reads
+  41.1, the first pass of its sequence (2025-01-24). Upcoming events use
+  their `exact_date`, the progressed Moon its estimated perfection (it
+  showed the current age), and only the arithmetic fallback
+  (`exact_date_estimated: true`) keeps `typical_age`.
+- **`lifecycle_summary.current_stage` follows the chart.** It came from a
+  fixed age table, so the 1984 chart at 42.9 read "Uranus Opposition"
+  (band 41–43) while `next_major_event` dated that opposition 2028–29. The
+  stage is now the most significant HIGH/CRITICAL event under way, else one
+  that ended within three years, else the age band. A new `stage_basis` field
+  says which: `"ephemeris"` ("Pluto Square", `age_range` [41.1, 41.9]),
+  `"ephemeris_past"` ("After Saturn Return Cycle 1", for the 1990 chart in
+  mid-2022) or `"age_band"` ("Post-Saturn Return", [31, 36]). `age_range` is
+  the event's `date_range` in years of age. The response shape is otherwise
+  unchanged.
+- `configure_immanuel_settings` lists `en_US` among the locales, and a
+  fixed-star rejection explains that the star catalogue (`sefstars.txt`) is
+  not shipped.
+
+### Investigated
+- **Cold start.** Desktop's launch command, timed with a stdio client on
+  Windows: `initialize` in 1.3–2.4 s, first lifecycle call in 0.06–0.07 s,
+  warm or right after a reinstall, on 0.10.0 and 0.10.1 alike. The 60 s
+  first-call timeouts came from the remote bridge or Desktop's reconnect. No
+  server change; see the README's troubleshooting section.
+
 ## [0.10.0] - 2026-11-08
 
 Follow-ups from the 0.9.0 Claude Desktop smoke test. Lifecycle date fields

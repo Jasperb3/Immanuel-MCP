@@ -22,6 +22,7 @@ from immanuel.const import chart as chart_const
 from .constants import MAJOR_LIFE_TRANSITS
 from .returns import (
     PLANET_CONSTANTS,
+    age_on,
     calculate_signed_orb,
     closest_exact_date,
     determine_movement,
@@ -174,7 +175,7 @@ def check_major_transit(
         orb_status = "loose"
 
     # Calculate age
-    age = (transit_datetime - birth_datetime).days / 365.25
+    age = age_on(transit_datetime, birth_datetime)
 
     # Applying/separating from the transiting planet's speed. The signed
     # aspect orb is (separation - target); separation = |signed distance|,
@@ -215,6 +216,8 @@ def check_major_transit(
         "keywords": transit_config["keywords"],
         "description": transit_config["description"],
         "age": round(age, 1),
+        # The age at the first pass of the current cluster, not today's age.
+        "age_at_event": round(age_on(exact_dates[0], birth_datetime) if exact_dates else age, 1),
         "typical_age": transit_config["typical_age"],
         "age_range": list(transit_config["age_range"]),
         "status": "active"

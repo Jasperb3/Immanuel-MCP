@@ -184,3 +184,107 @@ def test_a_reference_on_the_last_pass_does_not_drop_the_event():
 def test_interpretation_terms_require_the_angle():
     with pytest.raises(KeyError):
         english_aspect_terms({"active": 4000001, "passive": 4000002, "type": "Trígono"})
+
+
+# --- age_at_event (0.10.1) --------------------------------------------------
+# It used to read the textbook typical_age on every future major transit, and
+# the current age on every active event.
+
+from immanuel_mcp.lifecycle.lifecycle import format_lifecycle_event_feed
+
+LONDON_1990 = ("1990-05-15 12:00:00", "51n30", "0w07")
+LONDON_TZ = "Europe/London"
+
+
+def _compact(natal, query_date, tz):
+    result = immanuel_server.generate_compact_transit_to_natal(*natal, query_date, timezone=tz)
+    assert result["status"] == "success", result.get("message")
+    return result["lifecycle_events"], result["lifecycle_summary"]
+
+
+@pytest.mark.parametrize("name, exact_date, age", [
+    ("Neptune Square", "2031-05-09", 41.0),
+    ("Pluto Square", "2033-03-25", 42.9),
+    ("Uranus Opposition", "2034-08-19", 44.3),
+])
+def test_upcoming_major_transit_age_is_the_age_at_its_exact_date(name, exact_date, age):
+    events, _ = _compact(LONDON_1990, "2019-12-01 12:00:00", LONDON_TZ)
+    event = _event(events, name)
+    assert event["exact_date"] == exact_date
+    assert event["exact_date_estimated"] is False
+    assert event["age_at_event"] == pytest.approx(age, abs=0.1)
+
+
+def test_1984_uranus_opposition_age_is_not_the_textbook_41():
+    events, _ = _lifecycle("2026-11-08 12:00:00")
+    assert _event(events, "Uranus Opposition")["age_at_event"] == pytest.approx(44.5, abs=0.1)
+
+
+def test_active_event_age_is_the_age_at_the_first_pass_of_its_cluster():
+    events, summary = _lifecycle("2026-11-08 12:00:00")
+    pluto = _event(events, "Pluto Square")
+    assert pluto["status"] == "active"
+    assert pluto["exact_dates"][0] == "2025-01-24"
+    assert pluto["age_at_event"] == pytest.approx(41.1, abs=0.1)
+    assert summary["current_age"] == pytest.approx(42.9, abs=0.1)  # not the current age
+
+
+def test_fallback_major_transit_keeps_the_typical_age_and_says_so():
+    config = charts.Config()
+    config.objects = [o for o in config.objects if o != chart_const.URANUS]
+    natal = charts.Natal(create_subject(*LONDON_1990, LONDON_TZ), config=config)
+    transit = charts.Natal(create_subject("2019-12-01 12:00:00", "51n30", "0w07", LONDON_TZ))
+    birth, reference = datetime(1990, 5, 15, 11, 0), datetime(2019, 12, 1, 12, 0)
+    data = detect_lifecycle_events(natal, transit, birth, reference, future_years=20)
+    events = format_lifecycle_event_feed(data, reference)["events"]
+    uranus = _event(events, "Uranus Opposition")
+    assert uranus["exact_date_estimated"] is True
+    assert uranus["prediction_basis"] == "typical_age"
+    assert uranus["age_at_event"] == 41
+
+
+# --- current_stage (0.10.1) -------------------------------------------------
+# It came from a fixed age table: the 1984 chart at 42.9 read "Uranus
+# Opposition" (band 41-43) while next_major_event said that opposition is
+# 2028-29.
+
+def _stage(natal, query_date, tz):
+    return _compact(natal, query_date, tz)[1]["current_stage"]
+
+
+def test_stage_is_the_active_ephemeris_event_not_the_age_band():
+    stage = _stage(NATAL, "2026-11-08 12:00:00", TZ)
+    assert stage["stage_name"] == "Pluto Square"
+    assert stage["stage_basis"] == "ephemeris"
+    # Multi-pass: the span of the passes, 2025-01-24 to 2025-11-26
+    assert stage["age_range"] == [41.1, 41.9]
+
+
+def test_stage_during_the_saturn_return():
+    stage = _stage(LONDON_1990, "2020-02-02 12:00:00", LONDON_TZ)
+    assert stage["stage_name"] == "Saturn Return Cycle 1"
+    assert stage["stage_basis"] == "ephemeris"
+    # Single pass: the orb window (date_range 2019-12-19 to 2020-03-17),
+    # not [29.7, 29.7]
+    assert stage["age_range"][0] < stage["age_range"][1]
+    assert set(stage) == {"stage_name", "description", "age_range", "themes", "stage_basis"}
+
+
+def test_a_recent_past_event_is_the_stage_labelled_as_past():
+    # 2.3 years after the Saturn Return's last pass, nothing major active
+    stage = _stage(LONDON_1990, "2022-06-01 12:00:00", LONDON_TZ)
+    assert stage["stage_name"] == "After Saturn Return Cycle 1"
+    assert stage["stage_basis"] == "ephemeris_past"
+
+
+def test_a_past_event_older_than_three_years_falls_back_to_the_age_band():
+    stage = _stage(LONDON_1990, "2024-06-01 12:00:00", LONDON_TZ)
+    assert stage["stage_basis"] == "age_band"
+    assert stage["stage_name"] == "Post-Saturn Return"  # the age-34 band, not "After ..."
+    assert stage["age_range"] == [31, 36]
+
+
+def test_an_infant_has_only_the_age_band():
+    stage = _stage(("2020-01-01 12:00:00", "51n30", "0w07"), "2021-06-01 12:00:00", LONDON_TZ)
+    assert stage["stage_basis"] == "age_band"
+    assert stage["stage_name"] == "Childhood"
