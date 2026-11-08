@@ -18,7 +18,6 @@ from typing import Any, Dict, List, Optional, Union
 import immanuel
 from immanuel import charts
 from immanuel.const import chart as chart_const
-from immanuel.const import data as data_const
 from immanuel.charts import ToJSON
 from immanuel.tools import convert
 from immanuel_mcp.serializers import CompactJSONSerializer
@@ -1767,9 +1766,12 @@ def configure_immanuel_settings(
         logger.info(f"Configuring setting: {setting_key} = {setting_value}")
 
         from immanuel_mcp.utils.settings import (
+            ORB_SETTINGS,
             get_session_config,
             house_system_display_name,
+            resolve_aspects,
             resolve_house_system,
+            resolve_objects,
             resolve_progression_method,
             resolve_orb_calculation,
         )
@@ -1780,14 +1782,14 @@ def configure_immanuel_settings(
             setting_key = 'orb_calculation'
 
         # Validate setting key. (lunar_phase_method and solar_arc_method were
-        # dropped in v0.6.0: they do not exist in the immanuel library and
-        # configuring them was a silent no-op.)
+        # dropped in v0.6.0, and 'angles' in v0.9.0: none exist in the
+        # immanuel library and configuring them was a silent no-op.)
         valid_settings = [
-            'house_system', 'objects', 'angles', 'aspects', 'locale',
-            'mc_progression_method', 'orb_calculation'
+            'house_system', 'objects', 'aspects', 'locale',
+            'mc_progression_method', 'orb_calculation', *ORB_SETTINGS
         ]
 
-        if setting_key not in valid_settings and not setting_key.endswith('_orb'):
+        if setting_key not in valid_settings:
             return {
                 "status": "warning",
                 "message": f"Unknown setting '{setting_key}'. Valid options: {', '.join(valid_settings)}",
@@ -1797,6 +1799,10 @@ def configure_immanuel_settings(
         # The session Config every chart without a per-call override uses
         settings = get_session_config()
         old_value = getattr(settings, setting_key, None)
+        if isinstance(old_value, list):
+            # Config.aspects is assigned in place (its setter does
+            # _aspects[:] = value), so keep a copy for the report.
+            old_value = list(old_value)
 
         # Special handling for different setting types
         if setting_key == 'house_system':
@@ -1805,35 +1811,13 @@ def configure_immanuel_settings(
             setattr(settings, setting_key, const_value)
 
         elif setting_key == 'objects':
-            # Parse comma-separated list of objects
-            object_list = []
-            for item in setting_value.split(','):
-                item = item.strip()
-                # Try as integer first
-                try:
-                    object_list.append(int(item))
-                except ValueError:
-                    # Try as constant name
-                    if hasattr(data_const, item.upper()):
-                        object_list.append(getattr(data_const, item.upper()))
-                    else:
-                        # Keep as string (for named objects like stars)
-                        object_list.append(item)
-            
-            setattr(settings, setting_key, object_list)
-            
-        elif setting_key in ['angles', 'aspects']:
-            # Parse comma-separated list of aspect/angle constants
-            const_list = []
-            for item in setting_value.split(','):
-                item = item.strip()
-                if hasattr(chart_const, item.upper()):
-                    const_list.append(getattr(chart_const, item.upper()))
-                else:
-                    const_list.append(int(item))
-            
-            setattr(settings, setting_key, const_list)
-            
+            # Names, codes, or resolvable fixed stars; validated before assignment
+            setattr(settings, setting_key, resolve_objects(setting_value))
+
+        elif setting_key == 'aspects':
+            # Aspect names or angles; validated before assignment
+            setattr(settings, setting_key, resolve_aspects(setting_value))
+
         elif setting_key == 'locale':
             # Direct string assignment
             setattr(settings, setting_key, setting_value)
@@ -1848,31 +1832,10 @@ def configure_immanuel_settings(
             const_value = resolve_orb_calculation(setting_value)
             setattr(settings, setting_key, const_value)
 
-        elif setting_key.endswith('_orb'):
+        elif setting_key in ORB_SETTINGS:
             # Numeric orb values
             setattr(settings, setting_key, float(setting_value))
-            
-        else:
-            # Try direct assignment for other types
-            # Attempt to convert to appropriate type
-            try:
-                # Try as boolean
-                if setting_value.lower() in ['true', 'false']:
-                    setattr(settings, setting_key, setting_value.lower() == 'true')
-                else:
-                    # Try as number
-                    try:
-                        if '.' in setting_value:
-                            setattr(settings, setting_key, float(setting_value))
-                        else:
-                            setattr(settings, setting_key, int(setting_value))
-                    except ValueError:
-                        # Keep as string
-                        setattr(settings, setting_key, setting_value)
-            except Exception as e:
-                logger.warning(f"Error setting {setting_key}: {e}")
-                setattr(settings, setting_key, setting_value)
-        
+
         # Report both ends in the same vocabulary: old_value used to be the
         # raw numeric code while new_value was the name the caller typed.
         new_value = getattr(settings, setting_key, setting_value)

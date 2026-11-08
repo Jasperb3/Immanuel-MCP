@@ -170,6 +170,109 @@ def resolve_orb_calculation(name: str) -> int:
         name, ORB_CALCULATION_CONSTANTS, {}, "orb calculation method")
 
 
+def _aspect_constants() -> dict:
+    """Map calc-const aspect names (e.g. 'TRINE') to their angles."""
+    known_angles = dict(names_const.ASPECTS)
+    return {
+        attr: getattr(calc_const, attr)
+        for attr in dir(calc_const)
+        if attr.isupper() and isinstance(getattr(calc_const, attr), float)
+        and getattr(calc_const, attr) in known_angles
+    }
+
+
+def resolve_aspects(value: str) -> list:
+    """
+    Resolve a comma-separated aspect list to immanuel's aspect angles.
+
+    Each item is an aspect name from immanuel.const.calc ('TRINE', any case)
+    or a numeric angle in [0, 180] ('120', '54.3'). Raises ValueError listing
+    the valid names on anything else.
+    """
+    constants = _aspect_constants()
+    angles = []
+    for raw in value.split(","):
+        item = raw.strip()
+        key = _normalize_house_system(item)
+        if key in constants:
+            angles.append(constants[key])
+            continue
+        try:
+            angle = float(item)
+        except ValueError:
+            angle = None
+        if angle is None or not 0 <= angle <= 180:
+            valid = ", ".join(
+                f"{attr} ({angle:g}°)"
+                for attr, angle in sorted(constants.items(), key=lambda kv: kv[1]))
+            raise ValueError(
+                f"Unknown aspect '{item}'. Use a name or an angle from 0 to 180. "
+                f"Valid names: {valid}")
+        angles.append(angle)
+    return angles
+
+
+def _object_constants() -> dict:
+    """Map chart-const object names (e.g. 'TRUE_NORTH_NODE') to their indices."""
+    indices = {}
+    for table in (names_const.ANGLES, names_const.PLANETS, names_const.ASTEROIDS,
+                  names_const.POINTS, names_const.ECLIPSES):
+        indices.update(table)
+    return {
+        attr: getattr(chart_const, attr)
+        for attr in dir(chart_const)
+        if attr.isupper() and isinstance(getattr(chart_const, attr), int)
+        and getattr(chart_const, attr) in indices
+    }
+
+
+def _is_resolvable_fixed_star(name: str) -> str:
+    """Return '' if the Swiss Ephemeris resolves `name` as a fixed star, else
+    the reason it does not. Uses immanuel's own lookup, so the same ephemeris
+    path a chart would search is the one checked."""
+    from immanuel.tools import ephemeris
+    try:
+        ephemeris.get_fixed_star(name, 2451545.0)  # J2000; any date resolves the name
+    except Exception as e:  # swisseph.Error, raised for unknown names and a missing catalogue
+        return str(e)
+    return ""
+
+
+def resolve_objects(value: str) -> list:
+    """
+    Resolve a comma-separated object list to immanuel object indices.
+
+    Each item is a chart-const name ('SUN', 'TRUE_NORTH_NODE', any case), a
+    numeric object code ('4000001'), or a fixed-star name the Swiss Ephemeris
+    can actually resolve. Anything else raises ValueError: storing an
+    unresolvable name makes every later chart fail with 'Invalid object index'.
+    """
+    constants = _object_constants()
+    valid_codes = set(constants.values())
+    objects = []
+    for raw in value.split(","):
+        item = raw.strip()
+        if item.isdigit() and int(item) in valid_codes:
+            objects.append(int(item))
+            continue
+        key = _normalize_house_system(item)
+        if key in constants:
+            objects.append(constants[key])
+            continue
+        reason = "not a fixed star name" if item.isdigit() else _is_resolvable_fixed_star(item)
+        if reason:
+            valid = ", ".join(sorted(constants))
+            raise ValueError(
+                f"Unknown object '{item}': not an object name or code, and not a fixed "
+                f"star the Swiss Ephemeris can resolve ({reason}). Valid names: {valid}")
+        objects.append(item)
+    return objects
+
+
+# Numeric orb settings that exist on charts.Config.
+ORB_SETTINGS = ("default_orb", "exact_orb", "chart_shape_orb")
+
+
 def _settings_summary() -> dict:
     """Human-readable snapshot of the settings a caller is likely to care about."""
     config = get_session_config()
