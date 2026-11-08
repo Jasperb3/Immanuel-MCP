@@ -5,6 +5,89 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-11-08
+
+Moves to immanuel 1.6. Response content changes (more aspects, a new key,
+arcsecond drift), so this is a minor bump.
+
+### Changed
+- **Requires `immanuel>=1.6.0,<1.7`.** immanuel 1.6 replaces `pyswisseph` with
+  `pysweph`. Both install the same `swisseph` module, so **run this server in
+  its own environment and never co-install it with kerykeion <6** (or
+  `kerykeion[swiss]`): with `pysweph` present, kerykeion silently returns
+  `house = None` for some planets.
+- **Settings are a per-session `charts.Config`, not immanuel's global
+  singleton** (1.6 removes `immanuel.setup`). `configure_immanuel_settings`
+  edits one session Config, `reset_immanuel_settings` replaces it with a copy
+  of the startup Config, and every chart takes `config=` and freezes it at
+  construction. Tool names, parameters and response shapes are unchanged.
+  `build_call_settings` is kept as an alias of `build_call_config` for one
+  release.
+- **More aspects: Chiron (and Ceres, if configured) now gets planet-sized
+  orbs**, e.g. 5.5° → 10° and 3.5° → 6°. On the four reference charts this
+  added 104 aspects and removed none; every added one involves Chiron. These
+  are upstream's defaults, accepted unchanged.
+- **Positions drift by about ±1 arcsecond** (new ephemeris build). The
+  `formatted`/`seconds` fields of longitudes, declinations and aspect
+  distances can change by a second. Ingress times move by that drift divided
+  by the planet's speed: seconds for Jupiter and Saturn, minutes for Uranus
+  and Neptune, up to ~3 hours for Pluto. Lunation times move by under 0.1 s.
+- Full charts carry a new top-level `aspect_patterns` key (T-square, grand
+  trine, yod, grand cross, kite, mystic rectangle, cradle, grand sextile,
+  grand quintile).
+- In single-chart compact aspects (natal, returns, progressed, composite)
+  `from_object`/`to_object` can be swapped relative to 0.8.x: 1.6 orders the
+  active/passive pair consistently. The direction-carrying cross-chart tools
+  (synastry, transit-to-natal, `natal_cross_aspects`) are unaffected.
+- The configure tool's `angles` key is removed: it is not an immanuel setting
+  and configuring it was a silent no-op.
+
+### Fixed
+- **Compact charts no longer come back empty under 1.6.** immanuel 1.6 turned
+  `immanuel.const.data.OBJECTS/HOUSES/ASPECTS` into ints while serialized
+  charts kept the string keys, so the compact serializer missed every lookup:
+  `objects`, `houses` and `aspects` (and transit-to-natal's
+  `transit_positions`/`transit_to_natal_aspects`) were empty with
+  `status: success`. Keys are now the string constants in `constants.py`.
+- **`locale` works without an OS locale and no longer breaks the session.**
+  On 1.5.4, `configure_immanuel_settings("locale", "pt_BR")` failed on a host
+  without that OS locale, and every later chart call failed with it. 1.6
+  translates per chart from its own files; the locale/cache workaround is
+  deleted and reset restores English.
+- **`configure_immanuel_settings("aspects", ...)` accepts names.**
+  `"CONJUNCTION,TRINE"` failed with `invalid literal for int()`; names now
+  resolve via `immanuel.const.calc`, angles from 0 to 180 (`"120"`, `"54.3"`)
+  are accepted, and anything else is rejected with the valid names.
+- **`configure_immanuel_settings("objects", ...)` resolves names.** `"SUN,MOON"`
+  was stored as fixed-star strings, so the next chart failed with
+  `Invalid object index`. Names and codes now resolve via
+  `immanuel.const.chart`. Any other string is accepted only if the Swiss
+  Ephemeris can resolve it as a fixed star; otherwise the call is rejected
+  and the session left unchanged.
+- **`*_orb` keys are limited to the real orbs** (`default_orb`, `exact_orb`,
+  `chart_shape_orb`). Any key ending `_orb` used to be set on the config,
+  real or not.
+- **North Node returns work.** Lifecycle looked up the mean node, which charts
+  do not contain, and raised `'NoneType' object has no attribute 'longitude'`
+  on every call. The ephemeris scanner also could not search the nodes at all
+  (`ephemeris.get_planet` knows only planets), which broke the nodal return's
+  exact dates and `get_sign_ingresses(planets=["North Node"])`.
+  **Visible output change:** nodal returns now appear in lifecycle output, and
+  future-timeline "North Node Return" entries carry `current_angular_separation`,
+  `orb_status` and `movement` where they used to be null. "North Node" /
+  "South Node" now mean the true nodes everywhere (they already did in chart
+  output), so explicitly requested node ingresses report the true node.
+
+### Tests
+- `test_immanuel_server.py` recorded failures instead of raising, so it always
+  passed. It now re-raises. The 9 tests that were already failing on 0.8.1
+  (checked against a clean `main`) are strict `xfail`s with the reason.
+- New regression tests: every compact tool returns populated blocks; reset
+  changes the next chart's actual cusps; `_session_config` is referenced only
+  inside `utils/settings.py`; locale round-trip; per-call isolation;
+  configure validation; node returns and ingresses.
+- Suite runs in ~5 s instead of ~21 s.
+
 ## [0.8.1] - 2026-09-06
 
 ### Fixed

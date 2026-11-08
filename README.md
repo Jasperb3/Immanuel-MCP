@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.8.1 · 23 tools · 180 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.9.0 · 23 tools · 180 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -56,6 +56,14 @@ Every chart-generating tool accepts a per-call `house_system` override and retur
 #### All Platforms
 - Python 3.10 or higher
 - [uv](https://docs.astral.sh/uv/) package manager
+
+> **Run this server in its own environment.** Since v0.9.0 it requires
+> immanuel 1.6, which depends on `pysweph`. `pysweph` and `pyswisseph`
+> (required by kerykeion below 6, and by `kerykeion[swiss]`) install the same
+> `swisseph` module, so only one can be present, and with `pysweph` installed
+> kerykeion silently returns `house = None` for some planets. Never co-install
+> this server with kerykeion <6; keep the kerykeion MCP server in a separate
+> project directory and venv.
 
 ### Platform-Specific Installation
 
@@ -233,7 +241,7 @@ Person 2: Born November 22, 1990 at 9:45 AM in Paris (48n52, 2e20)"
 
 ```
 "Change the house system to Whole Sign houses"
-"Set the orb for conjunctions to 8 degrees"
+"Only calculate conjunctions, oppositions, squares and trines"
 "Include Chiron and Lilith in all charts"
 ```
 
@@ -487,7 +495,7 @@ Lists the dates planets change zodiac sign. Needs no birth data.
 **Returns:** `ingresses`, keyed by planet name. Each entry carries `from_sign`, `into_sign`, `retrograde_re_entry`, `date_time_utc` and `date_time_local`. Retrograde re-entries are included, so a boundary a planet crosses three times appears three times, in date order.
 
 ### `configure_immanuel_settings`
-Modifies global Immanuel library settings. **This changes global state for every subsequent chart in the session** (the response carries `scope: "session-global"`); for a one-off setting, prefer the per-call parameters (e.g. `house_system`) on the chart tools.
+Modifies the session-level chart configuration. **This changes the settings for every subsequent chart in the session** (the response carries `scope: "session-global"`); for a one-off setting, prefer the per-call parameters (e.g. `house_system`) on the chart tools.
 
 **Parameters:**
 - `setting_key`: Name of the setting (e.g., "house_system", "objects")
@@ -495,15 +503,17 @@ Modifies global Immanuel library settings. **This changes global state for every
 
 #### Common Settings:
 - **House Systems**: accepted as the numeric code (`108`, `"108"`), the constant name (`PLACIDUS`, `WHOLE_SIGN`, `EQUAL`) or the display name (`"Placidus"`, `"Equal House"`). Every value shown by `list_available_settings` is a valid input; invalid ones return an error listing all valid values as `CODE — CONSTANT_NAME — Display Name`
-- **Objects**: Comma-separated list of celestial bodies (e.g., "Sun,Moon,Mercury,Venus,Mars,Jupiter,Saturn,Uranus,Neptune,Pluto,Chiron")
-- **Orbs**: `conjunction_orb`, `opposition_orb`, `trine_orb`, etc. (numeric values)
+- **Objects**: comma-separated object names or codes, replacing the whole list (e.g., "SUN,MOON,MERCURY,VENUS,MARS,JUPITER,SATURN,URANUS,NEPTUNE,PLUTO,CHIRON,TRUE_NORTH_NODE" or "4000001,4000002"). Names are immanuel's constant names in any case. A name that is neither is accepted only if the Swiss Ephemeris resolves it as a fixed star; the bundled ephemeris has no star catalogue (`sefstars.txt`), so in practice star names are rejected. Unknown values return an error listing the valid names and leave the session unchanged
+- **Aspects**: comma-separated aspect names or angles from 0 to 180 (e.g., "CONJUNCTION,OPPOSITION,SQUARE,TRINE" or "0,180,90,120")
+- **Orbs**: `default_orb`, `exact_orb`, `chart_shape_orb` (numeric values)
+- **Locale**: `pt_BR`, `es_ES` or `de_DE` translate sign, object and aspect names; unset means English. No OS locale is needed
 - **MC progression method**: `NAIBOD`, `SOLAR_ARC`, `DAILY_HOUSES`
 - **Orb calculation**: `MEAN`, `MAX` (key: `orb_calculation`)
 
-Note (v0.6.0): the `lunar_phase_method` and `solar_arc_method` keys were removed — they do not exist in the immanuel library and configuring them was a silent no-op.
+Note (v0.6.0): the `lunar_phase_method` and `solar_arc_method` keys were removed — they do not exist in the immanuel library and configuring them was a silent no-op. v0.9.0 removed `angles` for the same reason, and limits `*_orb` keys to the three real ones above.
 
 ### `reset_immanuel_settings`
-Restores the global Immanuel settings to the server's **startup configuration** — immanuel's library defaults (Placidus, no locale) unless the server was configured at launch.
+Restores the session chart configuration to the server's **startup configuration** — immanuel's library defaults (Placidus, no locale) unless the server was configured at launch.
 
 ⚠️ This is **not** an undo of your own changes. The server keeps no per-change history, so if the session had already been reconfigured before you inspected it, a reset *changes* the effective settings rather than preserving them. Since `house_system` is global state affecting every subsequent chart's cusps, check the returned `changed` list.
 

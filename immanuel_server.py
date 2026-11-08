@@ -1746,18 +1746,24 @@ def configure_immanuel_settings(
     setting_value: str
 ) -> Dict[str, Any]:
     """
-    Configures the global settings for the Immanuel library, affecting all subsequent chart calculations.
-    See the Immanuel documentation for available keys and values.
+    Configures the session-level chart settings, affecting all subsequent chart calculations.
 
-    This changes global state for every subsequent chart in the session. For
-    a one-off setting, prefer the per-call parameters (e.g. `house_system`)
-    on the chart tools. Use `reset_immanuel_settings` to restore defaults.
+    This changes the session Config used by every subsequent chart in the
+    session. For a one-off setting, prefer the per-call parameters (e.g.
+    `house_system`) on the chart tools. Use `reset_immanuel_settings` to
+    restore the startup configuration.
 
     Args:
-        setting_key: The name of the setting to change, e.g., 'house_system' or 'locale'.
-        setting_value: The value to set. For lists like 'objects', provide a comma-separated string of
-                      integer constants or names, e.g., '4000001,4000002,Antares'. For constants,
-                      provide the string name, e.g., 'CAMPANUS'.
+        setting_key: One of 'house_system', 'objects', 'aspects', 'locale'
+                     ('pt_BR', 'es_ES', 'de_DE'; unset means English),
+                     'mc_progression_method', 'orb_calculation', 'default_orb',
+                     'exact_orb', 'chart_shape_orb'.
+        setting_value: The value to set. 'objects' takes a comma-separated list of
+                      object names or codes, e.g. 'SUN,MOON,CERES' or
+                      '4000001,4000002'; this replaces the whole list. 'aspects' takes
+                      names or angles, e.g. 'CONJUNCTION,TRINE' or '0,120'. Unknown
+                      values are rejected with the valid options and nothing changes.
+                      For constants, provide the name, e.g. 'CAMPANUS'.
 
     Returns:
         A confirmation message with old and new values.
