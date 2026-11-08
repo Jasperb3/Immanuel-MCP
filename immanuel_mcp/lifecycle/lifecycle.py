@@ -134,6 +134,38 @@ def _enrich_future_events_with_orbs(
             continue
 
 
+def _dates(values: Optional[list]) -> set:
+    """The parseable YYYY-MM-DD strings in `values`, as dates."""
+    return {d.date() for d in map(_parse_iso_date, values or []) if d is not None}
+
+
+def _event_identity(event: Dict[str, Any]) -> tuple:
+    """What makes two lifecycle entries the same event: the return's planet,
+    or the major transit's name."""
+    if event.get("event_type") == "return":
+        return ("return", event.get("planet"))
+    return ("major_transit", event.get("name"))
+
+
+def _drop_events_already_active(future_events: list, current_events: list) -> list:
+    """
+    Remove future entries that describe a pass sequence already reported as
+    active. A transit in orb between two passes is both "active" and has a
+    perfection still ahead; it belongs in the feed once, as active.
+    """
+    active = {}
+    for event in current_events:
+        active.setdefault(_event_identity(event), set()).update(_dates(event.get("exact_dates")))
+    kept = []
+    for event in future_events:
+        active_dates = active.get(_event_identity(event))
+        future_dates = _dates(event.get("exact_dates"))
+        if active_dates and any(abs((a - f).days) <= 3 for a in active_dates for f in future_dates):
+            continue
+        kept.append(event)
+    return kept
+
+
 def detect_lifecycle_events(
     natal_chart,
     transit_chart,
@@ -270,8 +302,11 @@ def detect_lifecycle_events(
             age,
             birth_datetime,
             years_ahead=future_years,
-            max_events=max_future_events
+            max_events=max_future_events,
+            natal_chart=natal_chart,
+            reference_datetime=transit_datetime,
         )
+        future_timeline = _drop_events_already_active(future_timeline, current_events)
 
         # Calculate current orbs for future events to show how close they are
         _enrich_future_events_with_orbs(
@@ -498,7 +533,8 @@ def _build_return_event_entry(
     exact_date_searched: Optional[str] = None,
     exact_dates: Optional[list] = None,
     natal_position: Optional[float] = None,
-    transit_position: Optional[float] = None
+    transit_position: Optional[float] = None,
+    prediction_basis: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Build a return event entry for the lifecycle feed.
@@ -553,6 +589,8 @@ def _build_return_event_entry(
         entry["natal_position"] = natal_position
     if transit_position is not None:
         entry["transit_position"] = transit_position
+    if prediction_basis is not None:
+        entry["prediction_basis"] = prediction_basis
 
     return entry
 
@@ -622,6 +660,8 @@ def _format_major_transit_event(
         entry["natal_position"] = event.get("natal_position")
     if event.get("transit_position") is not None:
         entry["transit_position"] = event.get("transit_position")
+    if event.get("prediction_basis") is not None:
+        entry["prediction_basis"] = event.get("prediction_basis")
 
     return entry
 
@@ -649,7 +689,10 @@ def _format_future_event(event: Dict[str, Any]) -> Dict[str, Any]:
             years_until=event.get("years_until", 0.0),
             orb=current_angular_separation,
             orb_status=orb_status,
-            movement=event.get("movement")
+            movement=event.get("movement"),
+            exact_date_searched=event.get("exact_date"),
+            exact_dates=event.get("exact_dates"),
+            prediction_basis=event.get("prediction_basis"),
         )
 
     predicted_dt = None
@@ -672,6 +715,9 @@ def _format_future_event(event: Dict[str, Any]) -> Dict[str, Any]:
     return future_event
 
 
+MAJOR_SIGNIFICANCE = {"HIGH", "CRITICAL"}
+
+
 def _build_summary_enhancements(
     current_events: list[Dict[str, Any]],
     future_timeline: list[Dict[str, Any]],
@@ -687,7 +733,27 @@ def _build_summary_enhancements(
     next_event_years = None
     next_event_date = None
 
-    if current_events:
+    # The next major event is the earliest real perfection still ahead among
+    # HIGH/CRITICAL events, active or upcoming. An active event whose passes
+    # are all behind the reference date (in orb, separating) is not "next",
+    # and a MODERATE Mars Return perfecting sooner is not "major".
+    upcoming_perfections = []
+    if reference_datetime is not None:
+        reference_date = reference_datetime.date()
+        for event in [*current_events, *future_timeline]:
+            if event.get("significance") not in MAJOR_SIGNIFICANCE:
+                continue
+            ahead = sorted(d for d in _dates(event.get("exact_dates")) if d >= reference_date)
+            if ahead:
+                upcoming_perfections.append((ahead[0], event))
+    if upcoming_perfections:
+        when, event = min(upcoming_perfections, key=lambda item: item[0])
+        next_event_name = (
+            _return_event_name(event.get("planet"), event.get("cycle_number"))
+            if event.get("event_type") == "return" else event.get("name"))
+        next_event_date = when.isoformat()
+        next_event_years = round((when - reference_date).days / 365.25, 1)
+    elif current_events:
         next_event_name = _return_event_name(
             current_events[0].get("planet"),
             current_events[0].get("cycle_number")
