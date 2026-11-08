@@ -7,7 +7,7 @@ unimportable from a clean checkout; it belongs inside the package.
 
 import json
 from typing import Any, Dict, List, Optional
-from immanuel.classes.serialize import ToJSON
+from immanuel.charts import ToJSON
 from immanuel.const import chart as chart_const, data as data_const
 
 

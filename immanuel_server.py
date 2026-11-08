@@ -19,7 +19,7 @@ import immanuel
 from immanuel import charts
 from immanuel.const import chart as chart_const
 from immanuel.const import data as data_const
-from immanuel.classes.serialize import ToJSON
+from immanuel.charts import ToJSON
 from immanuel.tools import convert
 from immanuel_mcp.serializers import CompactJSONSerializer
 
@@ -62,7 +62,7 @@ from immanuel_mcp.utils.coordinates import parse_coordinate
 from immanuel_mcp.utils.errors import validate_inputs, handle_chart_error
 from immanuel_mcp.utils.subjects import create_subject, effective_timezone
 from immanuel_mcp.utils.datetimes import parse_datetime_value
-from immanuel_mcp.utils.settings import build_call_settings, build_applied_settings
+from immanuel_mcp.utils.settings import build_call_config, build_applied_settings
 from immanuel_mcp.optimizers.positions import build_optimized_transit_positions
 from immanuel_mcp.optimizers.dignities import build_dignities_section
 from immanuel_mcp.optimizers.aspects import build_optimized_aspects
@@ -120,13 +120,13 @@ def generate_compact_natal_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate natal chart
-        natal = charts.Natal(subject, settings=call_settings)
+        natal = charts.Natal(subject, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(natal, cls=CompactJSONSerializer))
@@ -140,7 +140,7 @@ def generate_compact_natal_chart(
             transit_subject = create_subject(
                 now_dt.strftime("%Y-%m-%d %H:%M:%S"), lat, lon, 'UTC'
             )
-            transit_chart = charts.Natal(transit_subject, settings=call_settings)
+            transit_chart = charts.Natal(transit_subject, config=call_config)
             attach_lifecycle_section(
                 result,
                 natal_chart=natal,
@@ -195,13 +195,13 @@ def generate_natal_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate natal chart
-        natal = charts.Natal(subject, settings=call_settings)
+        natal = charts.Natal(subject, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(natal, cls=ToJSON))
@@ -215,7 +215,7 @@ def generate_natal_chart(
             transit_subject = create_subject(
                 now_dt.strftime("%Y-%m-%d %H:%M:%S"), lat, lon, 'UTC'
             )
-            transit_chart = charts.Natal(transit_subject, settings=call_settings)
+            transit_chart = charts.Natal(transit_subject, config=call_config)
             attach_lifecycle_section(
                 result,
                 natal_chart=natal,
@@ -268,10 +268,10 @@ def get_chart_summary(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         subject = create_subject(date_time, lat, lon, timezone)
-        natal = charts.Natal(subject, settings=call_settings)
+        natal = charts.Natal(subject, config=call_config)
 
         # Extract key information with defensive error handling
         logger.debug(f"Natal chart created successfully. Objects type: {type(natal.objects)}")
@@ -367,10 +367,10 @@ def get_planetary_positions(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         subject = create_subject(date_time, lat, lon, timezone)
-        natal = charts.Natal(subject, settings=call_settings)
+        natal = charts.Natal(subject, config=call_config)
         
         planets = {}
         planet_names = {
@@ -459,7 +459,7 @@ def generate_solar_return_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         relocated = return_latitude is not None or return_longitude is not None
         return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
@@ -469,7 +469,7 @@ def generate_solar_return_chart(
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate charts
-        natal_chart = charts.Natal(subject, settings=call_settings)
+        natal_chart = charts.Natal(subject, config=call_config)
 
         if relocated:
             # The return moment depends only on the Sun's geocentric longitude
@@ -482,7 +482,7 @@ def generate_solar_return_chart(
             return_subject = create_subject(date_time, return_lat, return_lon, birth_tz)
         else:
             return_subject = subject
-        solar_return = charts.SolarReturn(return_subject, return_year, settings=call_settings)
+        solar_return = charts.SolarReturn(return_subject, return_year, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(solar_return, cls=ToJSON))
@@ -492,7 +492,7 @@ def generate_solar_return_chart(
         if include_natal_aspects:
             cross_chart = charts.SolarReturn(
                 return_subject, return_year,
-                aspects_to=natal_chart, settings=call_settings
+                aspects_to=natal_chart, config=call_config
             )
             cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
             result["natal_cross_aspects"] = build_full_cross_aspects(
@@ -519,7 +519,7 @@ def generate_solar_return_chart(
                 latitude=lat,
                 longitude=lon
             )
-            transit_chart_for_lifecycle = charts.Natal(transit_subject, settings=call_settings)
+            transit_chart_for_lifecycle = charts.Natal(transit_subject, config=call_config)
 
             attach_lifecycle_section(
                 result,
@@ -611,7 +611,7 @@ def generate_compact_solar_return_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         relocated = return_latitude is not None or return_longitude is not None
         return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
@@ -621,7 +621,7 @@ def generate_compact_solar_return_chart(
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate charts
-        natal_chart = charts.Natal(subject, settings=call_settings)
+        natal_chart = charts.Natal(subject, config=call_config)
 
         if relocated:
             # The return moment depends only on the Sun's geocentric longitude
@@ -634,7 +634,7 @@ def generate_compact_solar_return_chart(
             return_subject = create_subject(date_time, return_lat, return_lon, birth_tz)
         else:
             return_subject = subject
-        solar_return = charts.SolarReturn(return_subject, return_year, settings=call_settings)
+        solar_return = charts.SolarReturn(return_subject, return_year, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(solar_return, cls=CompactJSONSerializer))
@@ -643,7 +643,7 @@ def generate_compact_solar_return_chart(
         if include_natal_aspects:
             cross_chart = charts.SolarReturn(
                 return_subject, return_year,
-                aspects_to=natal_chart, settings=call_settings
+                aspects_to=natal_chart, config=call_config
             )
             cross_data = json.loads(json.dumps(cross_chart, cls=CompactJSONSerializer))
             cross_aspects, cross_summary = build_compact_cross_aspects(
@@ -672,7 +672,7 @@ def generate_compact_solar_return_chart(
                 latitude=lat,
                 longitude=lon
             )
-            transit_chart_for_lifecycle = charts.Natal(transit_subject, settings=call_settings)
+            transit_chart_for_lifecycle = charts.Natal(transit_subject, config=call_config)
 
             attach_lifecycle_section(
                 result,
@@ -742,14 +742,14 @@ def generate_progressed_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate charts
-        natal_chart = charts.Natal(subject, settings=call_settings)
-        progressed = charts.Progressed(subject, progression_date_time, settings=call_settings)
+        natal_chart = charts.Natal(subject, config=call_config)
+        progressed = charts.Progressed(subject, progression_date_time, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(progressed, cls=ToJSON))
@@ -759,7 +759,7 @@ def generate_progressed_chart(
         if include_natal_aspects:
             cross_chart = charts.Progressed(
                 subject, progression_date_time,
-                aspects_to=natal_chart, settings=call_settings
+                aspects_to=natal_chart, config=call_config
             )
             cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
             result["natal_cross_aspects"] = build_full_cross_aspects(
@@ -784,7 +784,7 @@ def generate_progressed_chart(
             latitude=lat,
             longitude=lon
         )
-        reference_transits = charts.Natal(transit_subject, settings=call_settings)
+        reference_transits = charts.Natal(transit_subject, config=call_config)
 
         additional_events: List[Dict[str, Any]] = []
         try:
@@ -866,14 +866,14 @@ def generate_compact_progressed_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate charts
-        natal_chart = charts.Natal(subject, settings=call_settings)
-        progressed = charts.Progressed(subject, progression_date_time, settings=call_settings)
+        natal_chart = charts.Natal(subject, config=call_config)
+        progressed = charts.Progressed(subject, progression_date_time, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(progressed, cls=CompactJSONSerializer))
@@ -882,7 +882,7 @@ def generate_compact_progressed_chart(
         if include_natal_aspects:
             cross_chart = charts.Progressed(
                 subject, progression_date_time,
-                aspects_to=natal_chart, settings=call_settings
+                aspects_to=natal_chart, config=call_config
             )
             cross_data = json.loads(json.dumps(cross_chart, cls=CompactJSONSerializer))
             cross_aspects, cross_summary = build_compact_cross_aspects(
@@ -909,7 +909,7 @@ def generate_compact_progressed_chart(
             latitude=lat,
             longitude=lon
         )
-        reference_transits = charts.Natal(transit_subject, settings=call_settings)
+        reference_transits = charts.Natal(transit_subject, config=call_config)
 
         additional_events: List[Dict[str, Any]] = []
         try:
@@ -988,14 +988,14 @@ def generate_composite_chart(
         partner_lat = parse_coordinate(partner_latitude, is_latitude=True)
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
         
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subjects with optional timezones
         native = create_subject(native_date_time, native_lat, native_lon, native_timezone)
         partner = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
 
         # Generate composite chart
-        composite = charts.Composite(native, partner, settings=call_settings)
+        composite = charts.Composite(native, partner, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(composite, cls=ToJSON))
@@ -1058,14 +1058,14 @@ def generate_compact_composite_chart(
         partner_lat = parse_coordinate(partner_latitude, is_latitude=True)
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subjects with optional timezones
         native = create_subject(native_date_time, native_lat, native_lon, native_timezone)
         partner = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
 
         # Generate composite chart
-        composite = charts.Composite(native, partner, settings=call_settings)
+        composite = charts.Composite(native, partner, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(composite, cls=CompactJSONSerializer))
@@ -1126,16 +1126,16 @@ def generate_synastry_aspects(
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
 
         # Create subjects with optional timezones
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         native_subject = create_subject(native_date_time, native_lat, native_lon, native_timezone)
         partner_subject = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
 
         # Create partner chart first
-        partner_chart = charts.Natal(partner_subject, settings=call_settings)
+        partner_chart = charts.Natal(partner_subject, config=call_config)
 
         # Create native chart with aspects to partner
-        native_chart = charts.Natal(native_subject, aspects_to=partner_chart, settings=call_settings)
+        native_chart = charts.Natal(native_subject, aspects_to=partner_chart, config=call_config)
 
         # Extract and return aspects
         chart_data = json.loads(json.dumps(native_chart, cls=ToJSON))
@@ -1204,16 +1204,16 @@ def generate_compact_synastry_aspects(
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
 
         # Create subjects with optional timezones
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         native_subject = create_subject(native_date_time, native_lat, native_lon, native_timezone)
         partner_subject = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
 
         # Create partner chart first
-        partner_chart = charts.Natal(partner_subject, settings=call_settings)
+        partner_chart = charts.Natal(partner_subject, config=call_config)
 
         # Create native chart with aspects to partner
-        native_chart = charts.Natal(native_subject, aspects_to=partner_chart, settings=call_settings)
+        native_chart = charts.Natal(native_subject, aspects_to=partner_chart, config=call_config)
 
         # Serialize the entire chart using compact serializer to get filtered aspects
         compact_chart_data = json.loads(json.dumps(native_chart, cls=CompactJSONSerializer))
@@ -1268,10 +1268,10 @@ def generate_transit_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Generate transits chart
-        transits = charts.Transits(latitude=lat, longitude=lon, settings=call_settings)
+        transits = charts.Transits(latitude=lat, longitude=lon, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(transits, cls=ToJSON))
@@ -1314,10 +1314,10 @@ def generate_compact_transit_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Generate transits chart
-        transits = charts.Transits(latitude=lat, longitude=lon, settings=call_settings)
+        transits = charts.Transits(latitude=lat, longitude=lon, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(transits, cls=CompactJSONSerializer))
@@ -1399,7 +1399,7 @@ def generate_transit_to_natal(
         transit_lon = parse_coordinate(transit_longitude, is_latitude=False) if transit_longitude else natal_lon
         logger.debug(f"[TRANSIT-FULL] Transit coords: lat={transit_lat}, lon={transit_lon}")
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create natal and transit subjects. The optional timezone applies to
         # both datetimes; when omitted, immanuel infers it from coordinates.
@@ -1412,11 +1412,11 @@ def generate_transit_to_natal(
 
         # Generate natal chart
         logger.debug(f"[TRANSIT-FULL] Generating natal chart")
-        natal_chart = charts.Natal(natal_subject, settings=call_settings)
+        natal_chart = charts.Natal(natal_subject, config=call_config)
 
         # Generate transit chart with aspects to natal
         logger.debug(f"[TRANSIT-FULL] Generating transit chart with aspects to natal")
-        transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart, settings=call_settings)
+        transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart, config=call_config)
 
         # Serialize both charts
         logger.debug(f"[TRANSIT-FULL] Serializing natal chart with ToJSON")
@@ -1649,7 +1649,7 @@ def generate_compact_transit_to_natal(
         transit_lat = parse_coordinate(transit_latitude, is_latitude=True) if transit_latitude else natal_lat
         transit_lon = parse_coordinate(transit_longitude, is_latitude=False) if transit_longitude else natal_lon
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create natal and transit subjects. The optional timezone applies to
         # both datetimes; when omitted, immanuel infers it from coordinates.
@@ -1659,10 +1659,10 @@ def generate_compact_transit_to_natal(
         transit_subject = create_subject(transit_date_time, transit_lat, transit_lon, timezone)
 
         # Generate natal chart
-        natal_chart = charts.Natal(natal_subject, settings=call_settings)
+        natal_chart = charts.Natal(natal_subject, config=call_config)
 
         # Generate transit chart with aspects to natal
-        transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart, settings=call_settings)
+        transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart, config=call_config)
 
         # Serialize transit chart using compact serializer
         transit_data = json.loads(json.dumps(transit_chart, cls=CompactJSONSerializer))
@@ -1766,8 +1766,8 @@ def configure_immanuel_settings(
     try:
         logger.info(f"Configuring setting: {setting_key} = {setting_value}")
 
-        from immanuel import setup
         from immanuel_mcp.utils.settings import (
+            get_session_config,
             house_system_display_name,
             resolve_house_system,
             resolve_progression_method,
@@ -1794,8 +1794,8 @@ def configure_immanuel_settings(
                 "applied": False
             }
 
-        # Get the current settings object
-        settings = setup.settings
+        # The session Config every chart without a per-call override uses
+        settings = get_session_config()
         old_value = getattr(settings, setting_key, None)
 
         # Special handling for different setting types
@@ -1951,9 +1951,9 @@ def list_available_settings() -> Dict[str, Any]:
         Dictionary of available settings with both numeric codes and readable names.
     """
     try:
-        from immanuel import setup
         from immanuel.const import names as names_const
-        settings = setup.settings
+        from immanuel_mcp.utils.settings import get_session_config
+        settings = get_session_config()
 
         # House system mapping straight from the library so new systems
         # never show up as "Unknown"
