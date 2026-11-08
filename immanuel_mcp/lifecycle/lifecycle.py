@@ -302,11 +302,12 @@ def detect_lifecycle_events(
             age,
             birth_datetime,
             years_ahead=future_years,
-            max_events=max_future_events,
+            max_events=None,  # limit only after dropping events already active
             natal_chart=natal_chart,
             reference_datetime=transit_datetime,
         )
-        future_timeline = _drop_events_already_active(future_timeline, current_events)
+        future_timeline = _drop_events_already_active(
+            future_timeline, current_events)[:max_future_events]
 
         # Calculate current orbs for future events to show how close they are
         _enrich_future_events_with_orbs(
@@ -737,13 +738,16 @@ def _build_summary_enhancements(
     # HIGH/CRITICAL events, active or upcoming. An active event whose passes
     # are all behind the reference date (in orb, separating) is not "next",
     # and a MODERATE Mars Return perfecting sooner is not "major".
+    # A fallback (arithmetic) event has no exact_dates; its predicted_date is
+    # the best date it has, so it still competes.
     upcoming_perfections = []
     if reference_datetime is not None:
         reference_date = reference_datetime.date()
         for event in [*current_events, *future_timeline]:
             if event.get("significance") not in MAJOR_SIGNIFICANCE:
                 continue
-            ahead = sorted(d for d in _dates(event.get("exact_dates")) if d >= reference_date)
+            candidates = _dates(event.get("exact_dates")) or _dates([event.get("predicted_date")])
+            ahead = sorted(d for d in candidates if d >= reference_date)
             if ahead:
                 upcoming_perfections.append((ahead[0], event))
     if upcoming_perfections:
@@ -753,15 +757,9 @@ def _build_summary_enhancements(
             if event.get("event_type") == "return" else event.get("name"))
         next_event_date = when.isoformat()
         next_event_years = round((when - reference_date).days / 365.25, 1)
-    elif current_events:
-        next_event_name = _return_event_name(
-            current_events[0].get("planet"),
-            current_events[0].get("cycle_number")
-        ) if current_events[0].get("event_type") == "return" else current_events[0].get("name")
-        next_event_years = 0.0
-        if reference_datetime:
-            next_event_date = reference_datetime.strftime("%Y-%m-%d")
     elif future_timeline:
+        # No HIGH/CRITICAL event ahead: the soonest upcoming event of any
+        # significance. Never an active one - its passes may all be behind.
         top = future_timeline[0]
         if top.get("event_type") == "return":
             next_event_name = _return_event_name(top.get("planet"), top.get("cycle_number"))

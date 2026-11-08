@@ -398,12 +398,14 @@ def english_aspect_terms(aspect: Dict[str, Any]) -> tuple:
     (object1, object2, aspect_type) in English for an aspect dict carrying
     `active`/`passive` indices and an `angle`, whatever the session locale.
 
-    Falls back to the dict's displayed strings for anything without an
-    English name (a fixed star, a custom aspect angle).
+    `active`, `passive` and `angle` are required (KeyError otherwise): an
+    aspect without them would silently fall back to translated names. Only an
+    object or angle that has no English name at all - a fixed star, a custom
+    aspect angle - uses the displayed string, which is then the only name.
     """
-    obj1 = _ENGLISH_OBJECT_NAMES.get(aspect.get('active'), aspect.get('object1', ''))
-    obj2 = _ENGLISH_OBJECT_NAMES.get(aspect.get('passive'), aspect.get('object2', ''))
-    aspect_type = _ENGLISH_ASPECT_NAMES.get(aspect.get('angle'), aspect.get('type', ''))
+    obj1 = _ENGLISH_OBJECT_NAMES.get(aspect['active'], aspect.get('object1', ''))
+    obj2 = _ENGLISH_OBJECT_NAMES.get(aspect['passive'], aspect.get('object2', ''))
+    aspect_type = _ENGLISH_ASPECT_NAMES.get(aspect['angle'], aspect.get('type', ''))
     return obj1, obj2, aspect_type
 
 

@@ -75,12 +75,15 @@ def find_next_pass(
     reference: datetime,
     years_ahead: float,
     lookback_years: float = _TRANSIT_LOOKBACK_YEARS,
-) -> List[datetime]:
+) -> tuple:
     """
     The first pass sequence of `aspect` to `natal_longitude` that perfects on
     or after `reference`, within `years_ahead`. Every perfection of that
     sequence is returned, including ones up to `lookback_years` behind the
-    reference date. Empty if none falls inside the window.
+    reference date, with the first perfection on or after it:
+    (passes, next_pass), or ([], None) if none falls inside the window.
+    Both are chosen by Julian date, so a pass within rounding of the
+    reference cannot be selected as a sequence yet missing as the next pass.
 
     The reference is treated as UTC, as in find_event_exact_dates: a
     sub-day error cannot move a perfection the search converges on.
@@ -94,8 +97,9 @@ def find_next_pass(
     )
     for group in group_passes(hits):
         if group[-1] >= reference_jd:
-            return [_jd_to_datetime(jd) for jd in group]
-    return []
+            next_jd = next(jd for jd in group if jd >= reference_jd)
+            return [_jd_to_datetime(jd) for jd in group], _jd_to_datetime(next_jd)
+    return [], None
 
 
 def _natal_longitude(natal_chart, object_name: str) -> Optional[float]:
@@ -104,9 +108,10 @@ def _natal_longitude(natal_chart, object_name: str) -> Optional[float]:
     return natal_object.longitude.raw if natal_object is not None else None
 
 
-def _ephemeris_dates(passes: List[datetime], reference: datetime, birth_datetime: datetime) -> dict:
-    """Fields shared by ephemeris-dated returns and transits."""
-    first = min(p for p in passes if p >= reference)
+def _ephemeris_dates(passes: List[datetime], first: datetime, reference: datetime,
+                     birth_datetime: datetime) -> dict:
+    """Fields shared by ephemeris-dated returns and transits. `first` is the
+    sequence's first pass on or after the reference."""
     return {
         "predicted_date": first.strftime("%Y-%m-%d"),
         "predicted_age": round((first - birth_datetime).days / 365.25, 1),
@@ -135,12 +140,12 @@ def date_next_return(
         return predict_next_return(planet_name, current_age, birth_datetime)
 
     window = min(years_ahead, ORBITAL_PERIODS[planet_name] * _RETURN_WINDOW_PERIODS)
-    passes = find_next_pass(PLANET_CONSTANTS[planet_name], natal_longitude,
-                            calc_const.CONJUNCTION, reference, window,
-                            lookback_years=_RETURN_LOOKBACK_YEARS)
+    passes, first = find_next_pass(PLANET_CONSTANTS[planet_name], natal_longitude,
+                                   calc_const.CONJUNCTION, reference, window,
+                                   lookback_years=_RETURN_LOOKBACK_YEARS)
     if not passes:
         return None
-    dates = _ephemeris_dates(passes, reference, birth_datetime)
+    dates = _ephemeris_dates(passes, first, reference, birth_datetime)
     cycle = max(1, round(dates["predicted_age"] / ORBITAL_PERIODS[planet_name]))
     return {
         "planet": planet_name,
@@ -173,7 +178,7 @@ def date_next_major_transit(
         current_age = (reference - birth_datetime).days / 365.25
         return predict_major_transit(transit_config, current_age, birth_datetime)
 
-    passes = find_next_pass(transit_index, natal_longitude, aspect, reference, years_ahead)
+    passes, first = find_next_pass(transit_index, natal_longitude, aspect, reference, years_ahead)
     if not passes:
         return None
     return {
@@ -184,7 +189,7 @@ def date_next_major_transit(
         "aspect_type": transit_config["aspect_type"],
         "typical_age": transit_config["typical_age"],
         "age_range": list(transit_config["age_range"]),
-        **_ephemeris_dates(passes, reference, birth_datetime),
+        **_ephemeris_dates(passes, first, reference, birth_datetime),
         "significance": transit_config["significance"],
         "keywords": transit_config["keywords"],
         "description": transit_config["description"],
@@ -384,7 +389,7 @@ def build_future_timeline(
             except Exception as e:
                 logger.warning(f"Error dating {planet_name} return: {e}")
                 continue
-            if event and event["years_until"] >= 0:
+            if event and 0 <= event["years_until"] <= years_ahead:
                 event["event_type"] = "return"
                 future_events.append(event)
         for transit_config in MAJOR_LIFE_TRANSITS:
@@ -394,7 +399,9 @@ def build_future_timeline(
             except Exception as e:
                 logger.warning(f"Error dating {transit_config.get('name')}: {e}")
                 continue
-            if event:
+            # The horizon check matters for the arithmetic fallback, which
+            # is not bounded by a search window.
+            if event and 0 <= event["years_until"] <= years_ahead:
                 event["event_type"] = "major_transit"
                 future_events.append(event)
         return _sort_and_limit(future_events, max_events)
@@ -425,8 +432,8 @@ def build_future_timeline(
     return _sort_and_limit(future_events, max_events)
 
 
-def _sort_and_limit(future_events: List[Dict[str, Any]], max_events: int) -> List[Dict[str, Any]]:
-    """Soonest first, then by significance; at most max_events."""
+def _sort_and_limit(future_events: List[Dict[str, Any]], max_events: Optional[int]) -> List[Dict[str, Any]]:
+    """Soonest first, then by significance; at most max_events (None: all)."""
     significance_order = {"CRITICAL": 0, "HIGH": 1, "MODERATE": 2, "LOW": 3}
     future_events.sort(
         key=lambda e: (
