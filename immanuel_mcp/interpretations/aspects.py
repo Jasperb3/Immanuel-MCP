@@ -465,10 +465,9 @@ def get_context_aware_interpretation(obj1: str, obj2: str, aspect_type: str) -> 
     })
 
 
-def normalize_aspects_to_list(aspects: Union[List[Dict[str, Any]], Dict[str, Any]],
-                              filter_self_aspects: bool = True) -> List[Dict[str, Any]]:
+def normalize_aspects_to_list(aspects: Union[List[Dict[str, Any]], Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Normalize aspects data to a flat list format and optionally filter self-aspects.
+    Normalize aspects data to a flat list format.
 
     The compact serializer returns aspects as a list for regular charts,
     but synastry/transit charts with aspects_to may return nested dicts.
@@ -476,11 +475,12 @@ def normalize_aspects_to_list(aspects: Union[List[Dict[str, Any]], Dict[str, Any
     Args:
         aspects: Either a list of aspect dicts, or a nested dict structure
                  from synastry/transit charts
-        filter_self_aspects: If True, remove aspects where active == passive
-                           (default: True, as self-aspects are astrologically meaningless)
 
     Returns:
-        Flat list of aspect dictionaries with self-aspects removed
+        Flat list of aspect dictionaries. An entry with active == passive is
+        kept: in a chart built against another chart it is the same planet
+        in both charts (transit Saturn conjunct natal Saturn), not an object
+        aspecting itself, which a single chart never produces.
     """
     aspect_list = []
 
@@ -504,17 +504,6 @@ def normalize_aspects_to_list(aspects: Union[List[Dict[str, Any]], Dict[str, Any
                             pass
                         aspect_list.append(entry)
 
-    # Filter out self-aspects if requested
-    if filter_self_aspects:
-        original_count = len(aspect_list)
-        aspect_list = [
-            asp for asp in aspect_list
-            if isinstance(asp, dict) and asp.get('active') != asp.get('passive')
-        ]
-        filtered_count = original_count - len(aspect_list)
-        if filtered_count > 0:
-            logger.debug(f"Filtered {filtered_count} self-aspects, {len(aspect_list)} aspects remaining")
-
     return aspect_list
 
 
@@ -528,8 +517,7 @@ def add_aspect_interpretations(aspects: Union[List[Dict[str, Any]], Dict[str, An
     Returns:
         Enhanced aspect list with planet-pair specific interpretation keywords
     """
-    # Normalize to list and filter self-aspects
-    aspect_list = normalize_aspects_to_list(aspects, filter_self_aspects=True)
+    aspect_list = normalize_aspects_to_list(aspects)
 
     enhanced = []
     for aspect in aspect_list:

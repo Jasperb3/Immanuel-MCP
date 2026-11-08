@@ -43,6 +43,15 @@ field, hence the minor bump.
   identity of the aspect.
 
 ### Fixed
+- **Same-planet transits are back.** Transit-to-natal removed every aspect
+  between the same planet in both charts as a "self-aspect": transit Saturn
+  conjunct natal Saturn (the Saturn Return), the Uranus opposition, the Pluto
+  square, Sun–Sun synastry. The full tool always dropped them; compact
+  transit-to-natal and compact synastry dropped them only with
+  `include_interpretations=True`, the default, so results depended on that
+  flag. A single chart never aspects an object to itself, so the filter is
+  gone. On a 1990 chart queried at 2019-12-01, the 0.7° Saturn Return now
+  appears in every transit-to-natal output.
 - **Interpretations no longer go generic in a non-English session.** The
   lookup keyed on the translated aspect and planet names, so under `pt_BR`
   every aspect fell back to "energy, connection, influence". It now keys on

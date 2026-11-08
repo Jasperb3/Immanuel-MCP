@@ -1454,12 +1454,10 @@ def generate_transit_to_natal(
         # Build result with natal summary and transit aspects
         logger.debug(f"[TRANSIT-FULL] Building result dictionary")
 
-        # Filter self-aspects from the aspects dictionary
-        # normalize_aspects_to_list will flatten the nested dict and remove self-aspects
-        filtered_aspects = normalize_aspects_to_list(
-            transit_data.get('aspects', {}),
-            filter_self_aspects=True
-        )
+        # Flatten the nested aspects dict. Same-planet aspects (transit
+        # Saturn conjunct natal Saturn) are kept: they are the returns and
+        # major life transits, not "self-aspects".
+        filtered_aspects = normalize_aspects_to_list(transit_data.get('aspects', {}))
 
         # Add object names to aspects for readability (like compact serializer does)
         # Create lookup dict: {object_index: object_name}

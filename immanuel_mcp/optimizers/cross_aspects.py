@@ -56,7 +56,7 @@ def build_full_cross_aspects(
 
     entries = []
     for aspect in normalize_aspects_to_list(
-        cross_chart_data.get("aspects", {}), filter_self_aspects=False
+        cross_chart_data.get("aspects", {})
     ):
         from_name = object_names.get(aspect.get("from_index"))
         to_name = object_names.get(aspect.get("to_index"))
