@@ -18,7 +18,7 @@ from datetime import datetime
 from typing import Any, Dict
 
 from immanuel import charts
-from immanuel.classes.serialize import ToJSON
+from immanuel.charts import ToJSON
 from immanuel.const import chart as chart_const
 from immanuel.tools import date as date_tools
 from ..serializers import CompactJSONSerializer
@@ -28,7 +28,7 @@ from ..lifecycle.attach import attach_lifecycle_section
 from ..utils.coordinates import parse_coordinate
 from ..utils.subjects import create_subject
 from ..utils.errors import handle_chart_error, validate_inputs
-from ..utils.settings import build_call_settings, build_applied_settings
+from ..utils.settings import build_call_config, build_applied_settings
 from ..utils.search import find_return_jd
 from ..optimizers.cross_aspects import (
     build_full_cross_aspects,
@@ -170,7 +170,7 @@ def generate_lunar_return_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         relocated = return_latitude is not None or return_longitude is not None
         return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
@@ -178,7 +178,7 @@ def generate_lunar_return_chart(
 
         # Get natal Moon's position
         natal_subject = create_subject(date_time, lat, lon, timezone)
-        natal_chart = charts.Natal(natal_subject, settings=call_settings)
+        natal_chart = charts.Natal(natal_subject, config=call_config)
         natal_moon = natal_chart.objects.get(4000002)  # Moon's index
 
         if natal_moon is None:
@@ -220,7 +220,7 @@ def generate_lunar_return_chart(
                 timezone
             )
             return_date_value = lunar_return_dt.isoformat()
-        lunar_return_chart = charts.Natal(return_subject, settings=call_settings)
+        lunar_return_chart = charts.Natal(return_subject, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(lunar_return_chart, cls=ToJSON))
@@ -229,7 +229,7 @@ def generate_lunar_return_chart(
         # under 'aspects'; the two lists are never merged)
         if include_natal_aspects:
             cross_chart = charts.Natal(
-                return_subject, aspects_to=natal_chart, settings=call_settings)
+                return_subject, aspects_to=natal_chart, config=call_config)
             cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
             result["natal_cross_aspects"] = build_full_cross_aspects(
                 cross_data, "return_object")
@@ -337,7 +337,7 @@ def generate_compact_lunar_return_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         relocated = return_latitude is not None or return_longitude is not None
         return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
@@ -345,7 +345,7 @@ def generate_compact_lunar_return_chart(
 
         # Get natal Moon's position
         natal_subject = create_subject(date_time, lat, lon, timezone)
-        natal_chart = charts.Natal(natal_subject, settings=call_settings)
+        natal_chart = charts.Natal(natal_subject, config=call_config)
         natal_moon = natal_chart.objects.get(4000002)  # Moon's index
 
         if natal_moon is None:
@@ -387,7 +387,7 @@ def generate_compact_lunar_return_chart(
                 timezone
             )
             return_date_value = lunar_return_dt.isoformat()
-        lunar_return_chart = charts.Natal(return_subject, settings=call_settings)
+        lunar_return_chart = charts.Natal(return_subject, config=call_config)
 
         # Serialize to JSON using compact serializer
         result = json.loads(json.dumps(lunar_return_chart, cls=CompactJSONSerializer))
@@ -395,7 +395,7 @@ def generate_compact_lunar_return_chart(
         # Return-to-natal aspects (major objects/aspects, priority-filtered)
         if include_natal_aspects:
             cross_chart = charts.Natal(
-                return_subject, aspects_to=natal_chart, settings=call_settings)
+                return_subject, aspects_to=natal_chart, config=call_config)
             cross_data = json.loads(json.dumps(cross_chart, cls=CompactJSONSerializer))
             cross_aspects, cross_summary = build_compact_cross_aspects(
                 cross_data, "return_object", aspect_priority)

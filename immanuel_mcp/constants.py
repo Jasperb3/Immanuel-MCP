@@ -2,6 +2,13 @@
 
 from immanuel.const import chart as chart_const
 
+# Keys of a ToJSON-serialized chart. Do not use immanuel.const.data.OBJECTS
+# etc. for these: in 1.6 those became ints (12/14/13) while the serialized
+# keys stayed strings, so lookups with them silently miss.
+KEY_OBJECTS = "objects"
+KEY_HOUSES = "houses"
+KEY_ASPECTS = "aspects"
+
 CELESTIAL_BODIES = {
     # Angles
     3000001: "Asc",
@@ -47,6 +54,9 @@ PLANET_CONSTANTS = {
     "Neptune": chart_const.NEPTUNE,
     "Pluto": chart_const.PLUTO,
     "Chiron": chart_const.CHIRON,
-    "North Node": chart_const.NORTH_NODE,
-    "South Node": chart_const.SOUTH_NODE,
+    # The true nodes: they are what immanuel's default object list contains
+    # and what CELESTIAL_BODIES labels "North Node"/"South Node". The mean
+    # nodes are absent from charts, so looking them up returned None.
+    "North Node": chart_const.TRUE_NORTH_NODE,
+    "South Node": chart_const.TRUE_SOUTH_NODE,
 }

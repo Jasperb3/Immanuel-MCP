@@ -19,7 +19,6 @@ import json
 from datetime import datetime
 from immanuel_mcp.lifecycle.lifecycle import detect_lifecycle_events
 from immanuel import charts
-from immanuel.setup import settings
 
 def test_lifecycle_fixes():
     """Test all lifecycle event fixes."""
@@ -225,22 +224,18 @@ def test_lifecycle_fixes():
         print(f"{status}: {test_name}")
     print()
 
-    if all_passed:
-        print("=" * 80)
-        print("[OK] ALL TESTS PASSED!")
-        print("=" * 80)
-        return 0
-    else:
-        print("=" * 80)
-        print("[FAIL] SOME TESTS FAILED")
-        print("=" * 80)
-        return 1
+    # Assert rather than return a status: pytest ignores a test's return
+    # value (bar a warning), so `return 1` let every failure here pass.
+    failed = [name for name, passed in test_results if not passed]
+    assert not failed, f"lifecycle checks failed: {failed}"
+    print("=" * 80)
+    print("[OK] ALL TESTS PASSED!")
+    print("=" * 80)
 
 
 if __name__ == "__main__":
     try:
-        exit_code = test_lifecycle_fixes()
-        sys.exit(exit_code)
+        test_lifecycle_fixes()
     except Exception as e:
         print(f"\n[FAIL] TEST ERROR: {e}")
         import traceback

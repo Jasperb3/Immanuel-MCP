@@ -18,8 +18,7 @@ from typing import Any, Dict, List, Optional, Union
 import immanuel
 from immanuel import charts
 from immanuel.const import chart as chart_const
-from immanuel.const import data as data_const
-from immanuel.classes.serialize import ToJSON
+from immanuel.charts import ToJSON
 from immanuel.tools import convert
 from immanuel_mcp.serializers import CompactJSONSerializer
 
@@ -62,7 +61,7 @@ from immanuel_mcp.utils.coordinates import parse_coordinate
 from immanuel_mcp.utils.errors import validate_inputs, handle_chart_error
 from immanuel_mcp.utils.subjects import create_subject, effective_timezone
 from immanuel_mcp.utils.datetimes import parse_datetime_value
-from immanuel_mcp.utils.settings import build_call_settings, build_applied_settings
+from immanuel_mcp.utils.settings import build_call_config, build_applied_settings
 from immanuel_mcp.optimizers.positions import build_optimized_transit_positions
 from immanuel_mcp.optimizers.dignities import build_dignities_section
 from immanuel_mcp.optimizers.aspects import build_optimized_aspects
@@ -120,13 +119,13 @@ def generate_compact_natal_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate natal chart
-        natal = charts.Natal(subject, settings=call_settings)
+        natal = charts.Natal(subject, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(natal, cls=CompactJSONSerializer))
@@ -140,7 +139,7 @@ def generate_compact_natal_chart(
             transit_subject = create_subject(
                 now_dt.strftime("%Y-%m-%d %H:%M:%S"), lat, lon, 'UTC'
             )
-            transit_chart = charts.Natal(transit_subject, settings=call_settings)
+            transit_chart = charts.Natal(transit_subject, config=call_config)
             attach_lifecycle_section(
                 result,
                 natal_chart=natal,
@@ -195,13 +194,13 @@ def generate_natal_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate natal chart
-        natal = charts.Natal(subject, settings=call_settings)
+        natal = charts.Natal(subject, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(natal, cls=ToJSON))
@@ -215,7 +214,7 @@ def generate_natal_chart(
             transit_subject = create_subject(
                 now_dt.strftime("%Y-%m-%d %H:%M:%S"), lat, lon, 'UTC'
             )
-            transit_chart = charts.Natal(transit_subject, settings=call_settings)
+            transit_chart = charts.Natal(transit_subject, config=call_config)
             attach_lifecycle_section(
                 result,
                 natal_chart=natal,
@@ -268,10 +267,10 @@ def get_chart_summary(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         subject = create_subject(date_time, lat, lon, timezone)
-        natal = charts.Natal(subject, settings=call_settings)
+        natal = charts.Natal(subject, config=call_config)
 
         # Extract key information with defensive error handling
         logger.debug(f"Natal chart created successfully. Objects type: {type(natal.objects)}")
@@ -367,10 +366,10 @@ def get_planetary_positions(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         subject = create_subject(date_time, lat, lon, timezone)
-        natal = charts.Natal(subject, settings=call_settings)
+        natal = charts.Natal(subject, config=call_config)
         
         planets = {}
         planet_names = {
@@ -459,7 +458,7 @@ def generate_solar_return_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         relocated = return_latitude is not None or return_longitude is not None
         return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
@@ -469,7 +468,7 @@ def generate_solar_return_chart(
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate charts
-        natal_chart = charts.Natal(subject, settings=call_settings)
+        natal_chart = charts.Natal(subject, config=call_config)
 
         if relocated:
             # The return moment depends only on the Sun's geocentric longitude
@@ -482,7 +481,7 @@ def generate_solar_return_chart(
             return_subject = create_subject(date_time, return_lat, return_lon, birth_tz)
         else:
             return_subject = subject
-        solar_return = charts.SolarReturn(return_subject, return_year, settings=call_settings)
+        solar_return = charts.SolarReturn(return_subject, return_year, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(solar_return, cls=ToJSON))
@@ -492,7 +491,7 @@ def generate_solar_return_chart(
         if include_natal_aspects:
             cross_chart = charts.SolarReturn(
                 return_subject, return_year,
-                aspects_to=natal_chart, settings=call_settings
+                aspects_to=natal_chart, config=call_config
             )
             cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
             result["natal_cross_aspects"] = build_full_cross_aspects(
@@ -519,7 +518,7 @@ def generate_solar_return_chart(
                 latitude=lat,
                 longitude=lon
             )
-            transit_chart_for_lifecycle = charts.Natal(transit_subject, settings=call_settings)
+            transit_chart_for_lifecycle = charts.Natal(transit_subject, config=call_config)
 
             attach_lifecycle_section(
                 result,
@@ -611,7 +610,7 @@ def generate_compact_solar_return_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         relocated = return_latitude is not None or return_longitude is not None
         return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
@@ -621,7 +620,7 @@ def generate_compact_solar_return_chart(
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate charts
-        natal_chart = charts.Natal(subject, settings=call_settings)
+        natal_chart = charts.Natal(subject, config=call_config)
 
         if relocated:
             # The return moment depends only on the Sun's geocentric longitude
@@ -634,7 +633,7 @@ def generate_compact_solar_return_chart(
             return_subject = create_subject(date_time, return_lat, return_lon, birth_tz)
         else:
             return_subject = subject
-        solar_return = charts.SolarReturn(return_subject, return_year, settings=call_settings)
+        solar_return = charts.SolarReturn(return_subject, return_year, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(solar_return, cls=CompactJSONSerializer))
@@ -643,7 +642,7 @@ def generate_compact_solar_return_chart(
         if include_natal_aspects:
             cross_chart = charts.SolarReturn(
                 return_subject, return_year,
-                aspects_to=natal_chart, settings=call_settings
+                aspects_to=natal_chart, config=call_config
             )
             cross_data = json.loads(json.dumps(cross_chart, cls=CompactJSONSerializer))
             cross_aspects, cross_summary = build_compact_cross_aspects(
@@ -672,7 +671,7 @@ def generate_compact_solar_return_chart(
                 latitude=lat,
                 longitude=lon
             )
-            transit_chart_for_lifecycle = charts.Natal(transit_subject, settings=call_settings)
+            transit_chart_for_lifecycle = charts.Natal(transit_subject, config=call_config)
 
             attach_lifecycle_section(
                 result,
@@ -742,14 +741,14 @@ def generate_progressed_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate charts
-        natal_chart = charts.Natal(subject, settings=call_settings)
-        progressed = charts.Progressed(subject, progression_date_time, settings=call_settings)
+        natal_chart = charts.Natal(subject, config=call_config)
+        progressed = charts.Progressed(subject, progression_date_time, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(progressed, cls=ToJSON))
@@ -759,7 +758,7 @@ def generate_progressed_chart(
         if include_natal_aspects:
             cross_chart = charts.Progressed(
                 subject, progression_date_time,
-                aspects_to=natal_chart, settings=call_settings
+                aspects_to=natal_chart, config=call_config
             )
             cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
             result["natal_cross_aspects"] = build_full_cross_aspects(
@@ -784,7 +783,7 @@ def generate_progressed_chart(
             latitude=lat,
             longitude=lon
         )
-        reference_transits = charts.Natal(transit_subject, settings=call_settings)
+        reference_transits = charts.Natal(transit_subject, config=call_config)
 
         additional_events: List[Dict[str, Any]] = []
         try:
@@ -866,14 +865,14 @@ def generate_compact_progressed_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
         subject = create_subject(date_time, lat, lon, timezone)
 
         # Generate charts
-        natal_chart = charts.Natal(subject, settings=call_settings)
-        progressed = charts.Progressed(subject, progression_date_time, settings=call_settings)
+        natal_chart = charts.Natal(subject, config=call_config)
+        progressed = charts.Progressed(subject, progression_date_time, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(progressed, cls=CompactJSONSerializer))
@@ -882,7 +881,7 @@ def generate_compact_progressed_chart(
         if include_natal_aspects:
             cross_chart = charts.Progressed(
                 subject, progression_date_time,
-                aspects_to=natal_chart, settings=call_settings
+                aspects_to=natal_chart, config=call_config
             )
             cross_data = json.loads(json.dumps(cross_chart, cls=CompactJSONSerializer))
             cross_aspects, cross_summary = build_compact_cross_aspects(
@@ -909,7 +908,7 @@ def generate_compact_progressed_chart(
             latitude=lat,
             longitude=lon
         )
-        reference_transits = charts.Natal(transit_subject, settings=call_settings)
+        reference_transits = charts.Natal(transit_subject, config=call_config)
 
         additional_events: List[Dict[str, Any]] = []
         try:
@@ -988,14 +987,14 @@ def generate_composite_chart(
         partner_lat = parse_coordinate(partner_latitude, is_latitude=True)
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
         
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subjects with optional timezones
         native = create_subject(native_date_time, native_lat, native_lon, native_timezone)
         partner = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
 
         # Generate composite chart
-        composite = charts.Composite(native, partner, settings=call_settings)
+        composite = charts.Composite(native, partner, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(composite, cls=ToJSON))
@@ -1058,14 +1057,14 @@ def generate_compact_composite_chart(
         partner_lat = parse_coordinate(partner_latitude, is_latitude=True)
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create subjects with optional timezones
         native = create_subject(native_date_time, native_lat, native_lon, native_timezone)
         partner = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
 
         # Generate composite chart
-        composite = charts.Composite(native, partner, settings=call_settings)
+        composite = charts.Composite(native, partner, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(composite, cls=CompactJSONSerializer))
@@ -1126,16 +1125,16 @@ def generate_synastry_aspects(
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
 
         # Create subjects with optional timezones
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         native_subject = create_subject(native_date_time, native_lat, native_lon, native_timezone)
         partner_subject = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
 
         # Create partner chart first
-        partner_chart = charts.Natal(partner_subject, settings=call_settings)
+        partner_chart = charts.Natal(partner_subject, config=call_config)
 
         # Create native chart with aspects to partner
-        native_chart = charts.Natal(native_subject, aspects_to=partner_chart, settings=call_settings)
+        native_chart = charts.Natal(native_subject, aspects_to=partner_chart, config=call_config)
 
         # Extract and return aspects
         chart_data = json.loads(json.dumps(native_chart, cls=ToJSON))
@@ -1204,16 +1203,16 @@ def generate_compact_synastry_aspects(
         partner_lon = parse_coordinate(partner_longitude, is_latitude=False)
 
         # Create subjects with optional timezones
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         native_subject = create_subject(native_date_time, native_lat, native_lon, native_timezone)
         partner_subject = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
 
         # Create partner chart first
-        partner_chart = charts.Natal(partner_subject, settings=call_settings)
+        partner_chart = charts.Natal(partner_subject, config=call_config)
 
         # Create native chart with aspects to partner
-        native_chart = charts.Natal(native_subject, aspects_to=partner_chart, settings=call_settings)
+        native_chart = charts.Natal(native_subject, aspects_to=partner_chart, config=call_config)
 
         # Serialize the entire chart using compact serializer to get filtered aspects
         compact_chart_data = json.loads(json.dumps(native_chart, cls=CompactJSONSerializer))
@@ -1268,10 +1267,10 @@ def generate_transit_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Generate transits chart
-        transits = charts.Transits(latitude=lat, longitude=lon, settings=call_settings)
+        transits = charts.Transits(latitude=lat, longitude=lon, config=call_config)
 
         # Serialize to JSON
         result = json.loads(json.dumps(transits, cls=ToJSON))
@@ -1314,10 +1313,10 @@ def generate_compact_transit_chart(
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Generate transits chart
-        transits = charts.Transits(latitude=lat, longitude=lon, settings=call_settings)
+        transits = charts.Transits(latitude=lat, longitude=lon, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(transits, cls=CompactJSONSerializer))
@@ -1399,7 +1398,7 @@ def generate_transit_to_natal(
         transit_lon = parse_coordinate(transit_longitude, is_latitude=False) if transit_longitude else natal_lon
         logger.debug(f"[TRANSIT-FULL] Transit coords: lat={transit_lat}, lon={transit_lon}")
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create natal and transit subjects. The optional timezone applies to
         # both datetimes; when omitted, immanuel infers it from coordinates.
@@ -1412,11 +1411,11 @@ def generate_transit_to_natal(
 
         # Generate natal chart
         logger.debug(f"[TRANSIT-FULL] Generating natal chart")
-        natal_chart = charts.Natal(natal_subject, settings=call_settings)
+        natal_chart = charts.Natal(natal_subject, config=call_config)
 
         # Generate transit chart with aspects to natal
         logger.debug(f"[TRANSIT-FULL] Generating transit chart with aspects to natal")
-        transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart, settings=call_settings)
+        transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart, config=call_config)
 
         # Serialize both charts
         logger.debug(f"[TRANSIT-FULL] Serializing natal chart with ToJSON")
@@ -1649,7 +1648,7 @@ def generate_compact_transit_to_natal(
         transit_lat = parse_coordinate(transit_latitude, is_latitude=True) if transit_latitude else natal_lat
         transit_lon = parse_coordinate(transit_longitude, is_latitude=False) if transit_longitude else natal_lon
 
-        call_settings = build_call_settings(house_system)
+        call_config = build_call_config(house_system)
 
         # Create natal and transit subjects. The optional timezone applies to
         # both datetimes; when omitted, immanuel infers it from coordinates.
@@ -1659,10 +1658,10 @@ def generate_compact_transit_to_natal(
         transit_subject = create_subject(transit_date_time, transit_lat, transit_lon, timezone)
 
         # Generate natal chart
-        natal_chart = charts.Natal(natal_subject, settings=call_settings)
+        natal_chart = charts.Natal(natal_subject, config=call_config)
 
         # Generate transit chart with aspects to natal
-        transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart, settings=call_settings)
+        transit_chart = charts.Natal(transit_subject, aspects_to=natal_chart, config=call_config)
 
         # Serialize transit chart using compact serializer
         transit_data = json.loads(json.dumps(transit_chart, cls=CompactJSONSerializer))
@@ -1747,18 +1746,24 @@ def configure_immanuel_settings(
     setting_value: str
 ) -> Dict[str, Any]:
     """
-    Configures the global settings for the Immanuel library, affecting all subsequent chart calculations.
-    See the Immanuel documentation for available keys and values.
+    Configures the session-level chart settings, affecting all subsequent chart calculations.
 
-    This changes global state for every subsequent chart in the session. For
-    a one-off setting, prefer the per-call parameters (e.g. `house_system`)
-    on the chart tools. Use `reset_immanuel_settings` to restore defaults.
+    This changes the session Config used by every subsequent chart in the
+    session. For a one-off setting, prefer the per-call parameters (e.g.
+    `house_system`) on the chart tools. Use `reset_immanuel_settings` to
+    restore the startup configuration.
 
     Args:
-        setting_key: The name of the setting to change, e.g., 'house_system' or 'locale'.
-        setting_value: The value to set. For lists like 'objects', provide a comma-separated string of
-                      integer constants or names, e.g., '4000001,4000002,Antares'. For constants,
-                      provide the string name, e.g., 'CAMPANUS'.
+        setting_key: One of 'house_system', 'objects', 'aspects', 'locale'
+                     ('pt_BR', 'es_ES', 'de_DE'; unset means English),
+                     'mc_progression_method', 'orb_calculation', 'default_orb',
+                     'exact_orb', 'chart_shape_orb'.
+        setting_value: The value to set. 'objects' takes a comma-separated list of
+                      object names or codes, e.g. 'SUN,MOON,CERES' or
+                      '4000001,4000002'; this replaces the whole list. 'aspects' takes
+                      names or angles, e.g. 'CONJUNCTION,TRINE' or '0,120'. Unknown
+                      values are rejected with the valid options and nothing changes.
+                      For constants, provide the name, e.g. 'CAMPANUS'.
 
     Returns:
         A confirmation message with old and new values.
@@ -1766,10 +1771,14 @@ def configure_immanuel_settings(
     try:
         logger.info(f"Configuring setting: {setting_key} = {setting_value}")
 
-        from immanuel import setup
         from immanuel_mcp.utils.settings import (
+            ORB_SETTINGS,
+            get_session_config,
             house_system_display_name,
+            resolve_aspects,
             resolve_house_system,
+            resolve_locale,
+            resolve_objects,
             resolve_progression_method,
             resolve_orb_calculation,
         )
@@ -1780,23 +1789,27 @@ def configure_immanuel_settings(
             setting_key = 'orb_calculation'
 
         # Validate setting key. (lunar_phase_method and solar_arc_method were
-        # dropped in v0.6.0: they do not exist in the immanuel library and
-        # configuring them was a silent no-op.)
+        # dropped in v0.6.0, and 'angles' in v0.9.0: none exist in the
+        # immanuel library and configuring them was a silent no-op.)
         valid_settings = [
-            'house_system', 'objects', 'angles', 'aspects', 'locale',
-            'mc_progression_method', 'orb_calculation'
+            'house_system', 'objects', 'aspects', 'locale',
+            'mc_progression_method', 'orb_calculation', *ORB_SETTINGS
         ]
 
-        if setting_key not in valid_settings and not setting_key.endswith('_orb'):
+        if setting_key not in valid_settings:
             return {
                 "status": "warning",
                 "message": f"Unknown setting '{setting_key}'. Valid options: {', '.join(valid_settings)}",
                 "applied": False
             }
 
-        # Get the current settings object
-        settings = setup.settings
+        # The session Config every chart without a per-call override uses
+        settings = get_session_config()
         old_value = getattr(settings, setting_key, None)
+        if isinstance(old_value, list):
+            # Config.aspects is assigned in place (its setter does
+            # _aspects[:] = value), so keep a copy for the report.
+            old_value = list(old_value)
 
         # Special handling for different setting types
         if setting_key == 'house_system':
@@ -1805,38 +1818,16 @@ def configure_immanuel_settings(
             setattr(settings, setting_key, const_value)
 
         elif setting_key == 'objects':
-            # Parse comma-separated list of objects
-            object_list = []
-            for item in setting_value.split(','):
-                item = item.strip()
-                # Try as integer first
-                try:
-                    object_list.append(int(item))
-                except ValueError:
-                    # Try as constant name
-                    if hasattr(data_const, item.upper()):
-                        object_list.append(getattr(data_const, item.upper()))
-                    else:
-                        # Keep as string (for named objects like stars)
-                        object_list.append(item)
-            
-            setattr(settings, setting_key, object_list)
-            
-        elif setting_key in ['angles', 'aspects']:
-            # Parse comma-separated list of aspect/angle constants
-            const_list = []
-            for item in setting_value.split(','):
-                item = item.strip()
-                if hasattr(chart_const, item.upper()):
-                    const_list.append(getattr(chart_const, item.upper()))
-                else:
-                    const_list.append(int(item))
-            
-            setattr(settings, setting_key, const_list)
-            
+            # Names, codes, or resolvable fixed stars; validated before assignment
+            setattr(settings, setting_key, resolve_objects(setting_value))
+
+        elif setting_key == 'aspects':
+            # Aspect names or angles; validated before assignment
+            setattr(settings, setting_key, resolve_aspects(setting_value))
+
         elif setting_key == 'locale':
-            # Direct string assignment
-            setattr(settings, setting_key, setting_value)
+            # Validated against immanuel's shipped locales; 'en_US' clears it
+            setattr(settings, setting_key, resolve_locale(setting_value))
             
         elif setting_key == 'mc_progression_method':
             # Convert string to constant, with validation listing valid names
@@ -1848,31 +1839,10 @@ def configure_immanuel_settings(
             const_value = resolve_orb_calculation(setting_value)
             setattr(settings, setting_key, const_value)
 
-        elif setting_key.endswith('_orb'):
+        elif setting_key in ORB_SETTINGS:
             # Numeric orb values
             setattr(settings, setting_key, float(setting_value))
-            
-        else:
-            # Try direct assignment for other types
-            # Attempt to convert to appropriate type
-            try:
-                # Try as boolean
-                if setting_value.lower() in ['true', 'false']:
-                    setattr(settings, setting_key, setting_value.lower() == 'true')
-                else:
-                    # Try as number
-                    try:
-                        if '.' in setting_value:
-                            setattr(settings, setting_key, float(setting_value))
-                        else:
-                            setattr(settings, setting_key, int(setting_value))
-                    except ValueError:
-                        # Keep as string
-                        setattr(settings, setting_key, setting_value)
-            except Exception as e:
-                logger.warning(f"Error setting {setting_key}: {e}")
-                setattr(settings, setting_key, setting_value)
-        
+
         # Report both ends in the same vocabulary: old_value used to be the
         # raw numeric code while new_value was the name the caller typed.
         new_value = getattr(settings, setting_key, setting_value)
@@ -1951,25 +1921,20 @@ def list_available_settings() -> Dict[str, Any]:
         Dictionary of available settings with both numeric codes and readable names.
     """
     try:
-        from immanuel import setup
         from immanuel.const import names as names_const
-        settings = setup.settings
+        from immanuel_mcp.utils.settings import available_locales, get_session_config
+        settings = get_session_config()
 
         # House system mapping straight from the library so new systems
         # never show up as "Unknown"
         HOUSE_SYSTEMS = dict(names_const.HOUSE_SYSTEMS)
 
-        # Aspect angle mapping (degrees to aspect names)
+        # Aspect names straight from the library, so every name shown here is
+        # one configure_immanuel_settings accepts back (the hand-kept table
+        # this replaces spelled 'Semi-sextile' and 'Sesquiquadrate').
         ASPECT_ANGLES = {
-            0.0: "Conjunction (0°)",
-            180.0: "Opposition (180°)",
-            90.0: "Square (90°)",
-            120.0: "Trine (120°)",
-            60.0: "Sextile (60°)",
-            150.0: "Quincunx (150°)",
-            30.0: "Semi-sextile (30°)",
-            45.0: "Semi-square (45°)",
-            135.0: "Sesquiquadrate (135°)"
+            angle: f"{name} ({angle:g}°)"
+            for angle, name in names_const.ASPECTS.items()
         }
 
         # Get current values
@@ -2006,6 +1971,7 @@ def list_available_settings() -> Dict[str, Any]:
             },
             'locale': {
                 'current': getattr(settings, 'locale', None),
+                'available': available_locales(),
                 'description': 'Locale for formatting output (None = default)'
             },
             'objects': {
@@ -2015,6 +1981,7 @@ def list_available_settings() -> Dict[str, Any]:
             'aspects': {
                 'current': len(current_aspects),
                 'aspect_angles': aspect_names,
+                'available': list(names_const.ASPECTS.values()),
                 'description': 'Aspects calculated between objects'
             }
         }

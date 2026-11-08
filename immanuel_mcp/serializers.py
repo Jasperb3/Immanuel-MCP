@@ -7,8 +7,11 @@ unimportable from a clean checkout; it belongs inside the package.
 
 import json
 from typing import Any, Dict, List, Optional
-from immanuel.classes.serialize import ToJSON
-from immanuel.const import chart as chart_const, data as data_const
+from immanuel.charts import ToJSON
+from immanuel.const import calc as calc_const
+from immanuel.const import chart as chart_const
+
+from .constants import KEY_ASPECTS, KEY_HOUSES, KEY_OBJECTS
 
 
 class CompactJSONSerializer(ToJSON):
@@ -70,7 +73,13 @@ class CompactJSONSerializer(ToJSON):
         chart_const.MARS, chart_const.JUPITER, chart_const.SATURN, chart_const.URANUS,
         chart_const.NEPTUNE, chart_const.PLUTO, chart_const.ASC, chart_const.MC
     ]
-    INCLUDED_ASPECTS = ['conjunction', 'opposition', 'square', 'trine', 'sextile']
+    # Matched on the aspect angle, not its name: 'type' is translated when a
+    # locale is set ('Konjunktion', 'Trígono'), so a name match silently
+    # dropped most major aspects from every non-English compact chart.
+    INCLUDED_ASPECTS = {
+        calc_const.CONJUNCTION, calc_const.OPPOSITION, calc_const.SQUARE,
+        calc_const.TRINE, calc_const.SEXTILE,
+    }
 
     def _is_chart_object(self, obj: Any) -> bool:
         """Check if object is an Immanuel chart type."""
@@ -223,9 +232,9 @@ class CompactJSONSerializer(ToJSON):
             compact_chart = {}
 
             # Simplify and filter objects
-            if data_const.OBJECTS in chart_dict:
+            if KEY_OBJECTS in chart_dict:
                 simplified_objects = {}
-                for k, v in chart_dict[data_const.OBJECTS].items():
+                for k, v in chart_dict[KEY_OBJECTS].items():
                     if v.get('index') in self.INCLUDED_OBJECTS:
                         # Use consolidated position extraction method
                         obj_data = self._extract_position_details(v)
@@ -233,19 +242,19 @@ class CompactJSONSerializer(ToJSON):
                 compact_chart['objects'] = simplified_objects
 
             # Simplify houses
-            if data_const.HOUSES in chart_dict:
+            if KEY_HOUSES in chart_dict:
                 compact_chart['houses'] = {
                     k: self._extract_house_details(v)
-                    for k, v in chart_dict[data_const.HOUSES].items()
+                    for k, v in chart_dict[KEY_HOUSES].items()
                 }
 
             # Simplify and filter aspects - always returns a list
-            if data_const.ASPECTS in chart_dict:
+            if KEY_ASPECTS in chart_dict:
                 simplified_aspects = []
                 # Resolve object names for aspects
-                object_names = {obj['index']: obj['name'] for obj in chart_dict.get(data_const.OBJECTS, {}).values()}
+                object_names = {obj['index']: obj['name'] for obj in chart_dict.get(KEY_OBJECTS, {}).values()}
 
-                aspects_data = chart_dict[data_const.ASPECTS]
+                aspects_data = chart_dict[KEY_ASPECTS]
 
                 # Handle nested dict format: {from_object_id: {to_object_id: aspect_dict}}.
                 # The nesting keys carry direction: in an aspects_to chart
@@ -256,7 +265,7 @@ class CompactJSONSerializer(ToJSON):
                 for from_key, aspects_for_object in aspects_data.items():
                     if isinstance(aspects_for_object, dict):
                         for to_key, aspect in aspects_for_object.items():
-                            if isinstance(aspect, dict) and aspect.get('type', '').lower() in self.INCLUDED_ASPECTS:
+                            if isinstance(aspect, dict) and aspect.get('aspect') in self.INCLUDED_ASPECTS:
                                 # Only include aspects between major objects
                                 active_index = aspect.get('active')
                                 passive_index = aspect.get('passive')

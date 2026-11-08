@@ -10,12 +10,12 @@ from typing import Any, Dict, List
 
 from immanuel.const import names as names_const
 from immanuel.tools import date as date_tools
-from immanuel.tools import ephemeris, position
+from immanuel.tools import position
 
 from ..app import mcp
 from ..utils.datetimes import parse_datetime_value
 from ..utils.errors import handle_chart_error
-from ..utils.search import find_state_changes
+from ..utils.search import body_position, find_state_changes
 from ..constants import PLANET_CONSTANTS
 
 logger = logging.getLogger(__name__)
@@ -27,6 +27,11 @@ _SIGN_NAMES = dict(names_const.SIGNS)
 DEFAULT_PLANETS = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Chiron"]
 
 MAX_COUNT = 24
+
+# The lunar nodes' mean motion is backwards through the zodiac, so their
+# ordinary ingress is into the previous sign. For them a re-entry is the
+# reverse: the true node's brief direct spells carry it back forwards.
+_NORMALLY_RETROGRADE = {"North Node", "South Node"}
 
 # Nudge past a found ingress so the next search cannot re-converge on it.
 _STEP_PAST_JD = 0.5
@@ -115,14 +120,15 @@ def get_sign_ingresses(
             events = []
             jd = start_jd
             for _ in range(count):
-                from_sign = position.sign(ephemeris.get_planet(planet_index, jd))
+                from_sign = position.sign(body_position(planet_index, jd))
                 jd = _next_ingress_jd(planet_index, jd)
-                into_sign = position.sign(ephemeris.get_planet(planet_index, jd + _STEP_PAST_JD))
+                into_sign = position.sign(body_position(planet_index, jd + _STEP_PAST_JD))
                 events.append({
                     "planet": planet_name,
                     "from_sign": _SIGN_NAMES.get(from_sign),
                     "into_sign": _SIGN_NAMES.get(into_sign),
-                    "retrograde_re_entry": into_sign == _previous_sign(from_sign),
+                    "retrograde_re_entry": (into_sign == _previous_sign(from_sign))
+                    != (planet_name in _NORMALLY_RETROGRADE),
                     "date_time_utc": date_tools.to_datetime(
                         jd, lat=0.0, lon=0.0, time_zone="UTC").isoformat(),
                     "date_time_local": date_tools.to_datetime(

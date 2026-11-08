@@ -93,6 +93,7 @@ class TestParseCoordinate:
             recorder.record_test(function_name, 'decimal_positive_latitude', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'decimal_positive_latitude', 'FAILED', e)
+            raise
         
         # Test negative longitude
         try:
@@ -101,6 +102,7 @@ class TestParseCoordinate:
             recorder.record_test(function_name, 'decimal_negative_longitude', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'decimal_negative_longitude', 'FAILED', e)
+            raise
     
     def test_traditional_coordinates(self):
         """Test traditional coordinate parsing."""
@@ -113,6 +115,7 @@ class TestParseCoordinate:
             recorder.record_test(function_name, 'traditional_north_latitude', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'traditional_north_latitude', 'FAILED', e)
+            raise
         
         # Test west longitude
         try:
@@ -121,6 +124,7 @@ class TestParseCoordinate:
             recorder.record_test(function_name, 'traditional_west_longitude', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'traditional_west_longitude', 'FAILED', e)
+            raise
     
     def test_coordinate_validation(self):
         """Test coordinate range validation."""
@@ -134,6 +138,7 @@ class TestParseCoordinate:
             recorder.record_test(function_name, 'latitude_out_of_range', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'latitude_out_of_range', 'FAILED', e)
+            raise
         
         # Test longitude out of range
         try:
@@ -143,6 +148,7 @@ class TestParseCoordinate:
             recorder.record_test(function_name, 'longitude_out_of_range', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'longitude_out_of_range', 'FAILED', e)
+            raise
     
     def test_invalid_formats(self):
         """Test invalid coordinate formats."""
@@ -156,6 +162,7 @@ class TestParseCoordinate:
             recorder.record_test(function_name, 'invalid_format', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'invalid_format', 'FAILED', e)
+            raise
 
 
 class TestValidateInputs:
@@ -170,6 +177,7 @@ class TestValidateInputs:
             recorder.record_test(function_name, 'valid_inputs', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'valid_inputs', 'FAILED', e)
+            raise
     
     def test_invalid_datetime(self):
         """Test with invalid datetime format."""
@@ -182,6 +190,7 @@ class TestValidateInputs:
             recorder.record_test(function_name, 'invalid_datetime', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'invalid_datetime', 'FAILED', e)
+            raise
     
     def test_invalid_coordinates(self):
         """Test with invalid coordinates."""
@@ -194,11 +203,13 @@ class TestValidateInputs:
             recorder.record_test(function_name, 'invalid_coordinates', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'invalid_coordinates', 'FAILED', e)
+            raise
 
 
 class TestGetErrorSuggestion:
     """Test cases for get_error_suggestion function."""
     
+    @pytest.mark.xfail(strict=True, reason='pre-existing: get_error_suggestion was removed from immanuel_server; test targets a deleted API')
     def test_timezone_error(self):
         """Test timezone error suggestion."""
         function_name = 'get_error_suggestion'
@@ -209,7 +220,9 @@ class TestGetErrorSuggestion:
             recorder.record_test(function_name, 'timezone_error', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'timezone_error', 'FAILED', e)
+            raise
     
+    @pytest.mark.xfail(strict=True, reason='pre-existing: get_error_suggestion was removed from immanuel_server; test targets a deleted API')
     def test_coordinate_error(self):
         """Test coordinate error suggestion."""
         function_name = 'get_error_suggestion'
@@ -220,7 +233,9 @@ class TestGetErrorSuggestion:
             recorder.record_test(function_name, 'coordinate_error', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'coordinate_error', 'FAILED', e)
+            raise
     
+    @pytest.mark.xfail(strict=True, reason='pre-existing: get_error_suggestion was removed from immanuel_server; test targets a deleted API')
     def test_datetime_error(self):
         """Test datetime error suggestion."""
         function_name = 'get_error_suggestion'
@@ -231,6 +246,7 @@ class TestGetErrorSuggestion:
             recorder.record_test(function_name, 'datetime_error', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'datetime_error', 'FAILED', e)
+            raise
 
 
 class TestHandleChartError:
@@ -251,6 +267,7 @@ class TestHandleChartError:
             recorder.record_test(function_name, 'timezone_error_handling', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'timezone_error_handling', 'FAILED', e)
+            raise
     
     def test_general_error_handling(self):
         """Test handling of general errors."""
@@ -267,11 +284,13 @@ class TestHandleChartError:
             recorder.record_test(function_name, 'general_error_handling', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'general_error_handling', 'FAILED', e)
+            raise
 
 
 class TestCreateCacheKey:
     """Test cases for create_cache_key function."""
     
+    @pytest.mark.xfail(strict=True, reason='pre-existing: create_cache_key was removed from immanuel_server; test targets a deleted API')
     def test_cache_key_generation(self):
         """Test cache key generation."""
         function_name = 'create_cache_key'
@@ -287,6 +306,7 @@ class TestCreateCacheKey:
             recorder.record_test(function_name, 'cache_key_generation', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'cache_key_generation', 'FAILED', e)
+            raise
 
 
 class TestCompactChart:
@@ -322,6 +342,8 @@ class TestCompactChart:
 
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+
+            raise
 
     def test_compact_chart_structure(self):
         """Test the structure of the compact chart to ensure it is correct."""
@@ -409,7 +431,10 @@ class TestCompactChart:
 
         except Exception as e:
             recorder.record_test(function_name, 'structure_verification', 'FAILED', e)
+
+            raise
     
+    @pytest.mark.xfail(strict=True, reason='pre-existing: mocks charts.Subject but not charts.Natal, so a real chart is built from a MagicMock date outside the ephemeris range')
     def test_compact_solar_return_chart_success(self):
         """Test successful compact solar return chart generation."""
         function_name = 'generate_compact_solar_return_chart'
@@ -437,7 +462,9 @@ class TestCompactChart:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
+    @pytest.mark.xfail(strict=True, reason='pre-existing: mocks charts.Subject but not charts.Natal, so a real chart is built from a MagicMock date outside the ephemeris range')
     def test_compact_progressed_chart_success(self):
         """Test successful compact progressed chart generation."""
         function_name = 'generate_compact_progressed_chart'
@@ -465,6 +492,7 @@ class TestCompactChart:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
     def test_compact_composite_chart_success(self):
         """Test successful compact composite chart generation."""
@@ -492,6 +520,7 @@ class TestCompactChart:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
     def test_compact_synastry_aspects_success(self):
         """Test successful compact synastry aspects generation."""
@@ -522,6 +551,7 @@ class TestCompactChart:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
     def test_compact_transit_chart_success(self):
         """Test successful compact transit chart generation."""
@@ -545,6 +575,7 @@ class TestCompactChart:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
 
 
 class TestMCPTools:
@@ -578,6 +609,7 @@ class TestMCPTools:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
     def test_generate_natal_chart_error(self):
         """Test natal chart generation with invalid inputs."""
@@ -594,6 +626,7 @@ class TestMCPTools:
             recorder.record_test(function_name, 'error_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'error_case', 'FAILED', e)
+            raise
     
     def test_get_chart_summary_success(self):
         """Test successful chart summary generation."""
@@ -634,6 +667,7 @@ class TestMCPTools:
                 recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
     def test_get_planetary_positions_success(self):
         """Test successful planetary positions retrieval."""
@@ -663,7 +697,9 @@ class TestMCPTools:
                 recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
+    @pytest.mark.xfail(strict=True, reason='pre-existing: mocks charts.Subject but not charts.Natal, so a real chart is built from a MagicMock date outside the ephemeris range')
     def test_generate_solar_return_chart_success(self):
         """Test successful solar return chart generation."""
         function_name = 'generate_solar_return_chart'
@@ -691,6 +727,7 @@ class TestMCPTools:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
     def test_generate_solar_return_chart_invalid_year(self):
         """Test solar return chart with invalid year."""
@@ -706,7 +743,9 @@ class TestMCPTools:
             recorder.record_test(function_name, 'invalid_year', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'invalid_year', 'FAILED', e)
+            raise
     
+    @pytest.mark.xfail(strict=True, reason='pre-existing: mocks charts.Subject but not charts.Natal, so a real chart is built from a MagicMock date outside the ephemeris range')
     def test_generate_progressed_chart_success(self):
         """Test successful progressed chart generation."""
         function_name = 'generate_progressed_chart'
@@ -734,6 +773,7 @@ class TestMCPTools:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
     def test_generate_composite_chart_success(self):
         """Test successful composite chart generation."""
@@ -761,7 +801,9 @@ class TestMCPTools:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
+    @pytest.mark.xfail(strict=True, reason="pre-existing: asserts a top-level key from a superseded response shape (aspects are now nested under 'aspects')")
     def test_generate_synastry_aspects_success(self):
         """Test successful synastry aspects generation."""
         function_name = 'generate_synastry_aspects'
@@ -788,6 +830,7 @@ class TestMCPTools:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
     def test_generate_transit_chart_success(self):
         """Test successful transit chart generation."""
@@ -811,30 +854,30 @@ class TestMCPTools:
                     recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
     
     def test_configure_immanuel_settings_success(self):
-        """Test successful settings configuration."""
+        """Test successful settings configuration against the real session Config."""
+        from immanuel_mcp.utils.settings import get_session_config, reset_global_settings
+        from immanuel.const import chart as chart_const
+
         function_name = 'configure_immanuel_settings'
-        
+        reset_global_settings()
         try:
-            with patch('immanuel.setup') as mock_setup:
-                mock_settings = MagicMock()
-                mock_settings.house_system = "OLD_VALUE"
-                mock_setup.settings = mock_settings
-                
-                with patch('immanuel_server.chart_const') as mock_const:
-                    mock_const.CAMPANUS = "CAMPANUS_VALUE"
-                    
-                    result = immanuel_server.configure_immanuel_settings(
-                        "house_system", "CAMPANUS"
-                    )
-                    
-                    assert result["status"] == "success"
-                    assert "updated" in result["message"]
-                    recorder.record_test(function_name, 'success_case', 'PASSED')
+            result = immanuel_server.configure_immanuel_settings(
+                "house_system", "CAMPANUS"
+            )
+
+            assert result["status"] == "success"
+            assert "updated" in result["message"]
+            assert get_session_config().house_system == chart_const.CAMPANUS
+            recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
-    
+            raise
+        finally:
+            reset_global_settings()
+
     def test_configure_immanuel_settings_invalid_key(self):
         """Test settings configuration with invalid key."""
         function_name = 'configure_immanuel_settings'
@@ -850,28 +893,25 @@ class TestMCPTools:
             recorder.record_test(function_name, 'invalid_key', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'invalid_key', 'FAILED', e)
+            raise
     
     def test_list_available_settings_success(self):
-        """Test successful settings listing."""
+        """Test successful settings listing from the real session Config."""
+        from immanuel_mcp.utils.settings import get_session_config, reset_global_settings
+
         function_name = 'list_available_settings'
-        
+        reset_global_settings()
         try:
-            with patch('immanuel.setup') as mock_setup:
-                mock_settings = MagicMock()
-                mock_settings.house_system = "PLACIDUS"
-                mock_settings.locale = "en_US"
-                mock_settings.objects = [1, 2, 3]
-                mock_settings.aspects = [1, 2]
-                mock_setup.settings = mock_settings
-                
-                result = immanuel_server.list_available_settings()
-                
-                assert result["status"] == "success"
-                assert "settings" in result
-                assert "house_system" in result["settings"]
-                recorder.record_test(function_name, 'success_case', 'PASSED')
+            result = immanuel_server.list_available_settings()
+
+            assert result["status"] == "success"
+            assert "settings" in result
+            assert result["settings"]["house_system"]["current"] == get_session_config().house_system
+            assert result["settings"]["objects"]["current"] == len(get_session_config().objects)
+            recorder.record_test(function_name, 'success_case', 'PASSED')
         except Exception as e:
             recorder.record_test(function_name, 'success_case', 'FAILED', e)
+            raise
 
 
 def run_all_tests():
