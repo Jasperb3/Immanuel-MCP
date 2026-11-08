@@ -10,12 +10,12 @@ from typing import Any, Dict, List
 
 from immanuel.const import names as names_const
 from immanuel.tools import date as date_tools
-from immanuel.tools import ephemeris, position
+from immanuel.tools import position
 
 from ..app import mcp
 from ..utils.datetimes import parse_datetime_value
 from ..utils.errors import handle_chart_error
-from ..utils.search import find_state_changes
+from ..utils.search import body_position, find_state_changes
 from ..constants import PLANET_CONSTANTS
 
 logger = logging.getLogger(__name__)
@@ -115,9 +115,9 @@ def get_sign_ingresses(
             events = []
             jd = start_jd
             for _ in range(count):
-                from_sign = position.sign(ephemeris.get_planet(planet_index, jd))
+                from_sign = position.sign(body_position(planet_index, jd))
                 jd = _next_ingress_jd(planet_index, jd)
-                into_sign = position.sign(ephemeris.get_planet(planet_index, jd + _STEP_PAST_JD))
+                into_sign = position.sign(body_position(planet_index, jd + _STEP_PAST_JD))
                 events.append({
                     "planet": planet_name,
                     "from_sign": _SIGN_NAMES.get(from_sign),

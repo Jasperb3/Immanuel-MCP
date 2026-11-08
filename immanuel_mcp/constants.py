@@ -54,6 +54,9 @@ PLANET_CONSTANTS = {
     "Neptune": chart_const.NEPTUNE,
     "Pluto": chart_const.PLUTO,
     "Chiron": chart_const.CHIRON,
-    "North Node": chart_const.NORTH_NODE,
-    "South Node": chart_const.SOUTH_NODE,
+    # The true nodes: they are what immanuel's default object list contains
+    # and what CELESTIAL_BODIES labels "North Node"/"South Node". The mean
+    # nodes are absent from charts, so looking them up returned None.
+    "North Node": chart_const.TRUE_NORTH_NODE,
+    "South Node": chart_const.TRUE_SOUTH_NODE,
 }

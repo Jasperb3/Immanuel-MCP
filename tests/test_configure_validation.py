@@ -9,14 +9,21 @@ lifecycle North Node return. All of these reproduced on immanuel 1.5.4 too:
   stored as strings (fixed-star names) and the next chart call failed
 - 'angles' was accepted but is not an immanuel setting (a silent no-op)
 - any '*_orb' key was setattr'd onto the config, real attribute or not
+- the North Node return looked up the mean node, which charts don't contain
 """
 
+from datetime import datetime
+
 import pytest
+from immanuel import charts
 from immanuel.const import calc as calc_const
 from immanuel.const import chart as chart_const
 
 import immanuel_server
+from immanuel_mcp.charts.ingresses import get_sign_ingresses
+from immanuel_mcp.lifecycle.returns import calculate_planetary_return
 from immanuel_mcp.utils.settings import get_session_config, reset_global_settings
+from immanuel_mcp.utils.subjects import create_subject
 
 BIRTH = ("1990-01-15 14:30:00", "32.71", "-117.15")
 TZ = "America/Los_Angeles"
@@ -101,3 +108,26 @@ def test_unknown_orb_settings_are_rejected():
     assert result["status"] == "warning"
     assert result["applied"] is False
     assert not hasattr(get_session_config(), "made_up_orb")
+
+
+# --- lifecycle North Node ---------------------------------------------------
+
+def test_north_node_return_reads_the_node_the_chart_contains():
+    natal = charts.Natal(create_subject(*BIRTH, TZ))
+    # ~18.7 years on: the first nodal return for this chart
+    transit = charts.Natal(create_subject("2008-10-15 12:00:00", "32.71", "-117.15", TZ))
+    result = calculate_planetary_return(
+        "North Node", natal, transit,
+        datetime(1990, 1, 15, 14, 30), datetime(2008, 10, 15, 12))
+    assert result is not None
+    # The perfection date comes from the ephemeris search, which used to
+    # raise KeyError for the nodes (get_planet knows only planets).
+    assert result["exact_dates"], "nodal return has no ephemeris-searched dates"
+
+
+@pytest.mark.parametrize("node", ["North Node", "South Node"])
+def test_node_ingresses_are_searchable(node):
+    result = get_sign_ingresses("2026-11-08 00:00:00", planets=[node], count=2,
+                                timezone="UTC")
+    assert result["status"] == "success", result.get("message")
+    assert len(result["ingresses"][node]) == 2

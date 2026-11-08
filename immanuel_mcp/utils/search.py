@@ -35,6 +35,16 @@ STEP_DEGREES = 0.5
 MAX_STEP_DAYS = 10.0
 
 
+def body_position(index: int, jd: float) -> dict:
+    """Ephemeris position of a planet, asteroid or lunar node.
+
+    ephemeris.get_planet() only knows planets and the major asteroids, so the
+    nodes raised KeyError. The generic get() also serves points; it requires
+    a latitude, which is unused for the geocentric bodies scanned here.
+    """
+    return ephemeris.get(index, jd, lat=0.0, lon=0.0)
+
+
 def find_state_changes(
     index: int,
     from_jd: float,
@@ -62,10 +72,10 @@ def find_state_changes(
     hits = []
     jd = from_jd
     previous_jd = jd
-    previous_state = state(ephemeris.get_planet(index, jd))
+    previous_state = state(body_position(index, jd))
 
     while jd < to_jd:
-        planet = ephemeris.get_planet(index, jd)
+        planet = body_position(index, jd)
         current_state = state(planet)
 
         if current_state != previous_state:
@@ -89,7 +99,7 @@ def _bisect_state_change(index: int, lo: float, hi: float, lo_state, state) -> f
     """
     while (hi - lo) > calc_const.MAX_ERROR:
         mid = (lo + hi) / 2
-        if state(ephemeris.get_planet(index, mid)) == lo_state:
+        if state(body_position(index, mid)) == lo_state:
             lo = mid
         else:
             hi = mid
@@ -124,7 +134,7 @@ def _crossings(index: int, target: float, from_jd: float, to_jd: float) -> list:
 
     return [
         jd for jd in find_state_changes(index, from_jd, to_jd, side)
-        if abs(swe.difdeg2n(ephemeris.get_planet(index, jd)["lon"], target)) < 1.0
+        if abs(swe.difdeg2n(body_position(index, jd)["lon"], target)) < 1.0
     ]
 
 
