@@ -18,10 +18,9 @@ from datetime import datetime
 from typing import Any, Dict
 
 from immanuel import charts
-from immanuel.charts import ToJSON
 from immanuel.const import chart as chart_const
 from immanuel.tools import date as date_tools
-from ..serializers import CompactJSONSerializer
+from ..serializers import CompactJSONSerializer, serialize_full_chart
 
 from ..app import mcp
 from ..lifecycle.attach import attach_lifecycle_section
@@ -223,14 +222,14 @@ def generate_lunar_return_chart(
         lunar_return_chart = charts.Natal(return_subject, config=call_config)
 
         # Serialize to JSON
-        result = json.loads(json.dumps(lunar_return_chart, cls=ToJSON))
+        result = serialize_full_chart(lunar_return_chart)
 
         # Return-to-natal aspects (the chart's own internal aspects stay
         # under 'aspects'; the two lists are never merged)
         if include_natal_aspects:
             cross_chart = charts.Natal(
                 return_subject, aspects_to=natal_chart, config=call_config)
-            cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
+            cross_data = serialize_full_chart(cross_chart)
             result["natal_cross_aspects"] = build_full_cross_aspects(
                 cross_data, "return_object")
         else:

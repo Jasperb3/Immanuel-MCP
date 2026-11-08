@@ -18,9 +18,8 @@ from typing import Any, Dict, List, Optional, Union
 import immanuel
 from immanuel import charts
 from immanuel.const import chart as chart_const
-from immanuel.charts import ToJSON
 from immanuel.tools import convert
-from immanuel_mcp.serializers import CompactJSONSerializer
+from immanuel_mcp.serializers import CompactJSONSerializer, serialize_full_chart
 
 # Configure logging to file only (CRITICAL: logging to stdout/stderr breaks stdio transport)
 # Create logs directory if it doesn't exist
@@ -203,7 +202,7 @@ def generate_natal_chart(
         natal = charts.Natal(subject, config=call_config)
 
         # Serialize to JSON
-        result = json.loads(json.dumps(natal, cls=ToJSON))
+        result = serialize_full_chart(natal)
 
         # Lifecycle analysis uses current transits as reference. The UTC
         # timestamp is paired with an explicit UTC timezone on the Subject;
@@ -484,7 +483,7 @@ def generate_solar_return_chart(
         solar_return = charts.SolarReturn(return_subject, return_year, config=call_config)
 
         # Serialize to JSON
-        result = json.loads(json.dumps(solar_return, cls=ToJSON))
+        result = serialize_full_chart(solar_return)
 
         # Return-to-natal aspects (the chart's own internal aspects stay
         # under 'aspects'; the two lists are never merged)
@@ -493,7 +492,7 @@ def generate_solar_return_chart(
                 return_subject, return_year,
                 aspects_to=natal_chart, config=call_config
             )
-            cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
+            cross_data = serialize_full_chart(cross_chart)
             result["natal_cross_aspects"] = build_full_cross_aspects(
                 cross_data, "return_object")
         else:
@@ -751,7 +750,7 @@ def generate_progressed_chart(
         progressed = charts.Progressed(subject, progression_date_time, config=call_config)
 
         # Serialize to JSON
-        result = json.loads(json.dumps(progressed, cls=ToJSON))
+        result = serialize_full_chart(progressed)
 
         # Progressed-to-natal aspects (the chart's own internal aspects stay
         # under 'aspects'; the two lists are never merged)
@@ -760,7 +759,7 @@ def generate_progressed_chart(
                 subject, progression_date_time,
                 aspects_to=natal_chart, config=call_config
             )
-            cross_data = json.loads(json.dumps(cross_chart, cls=ToJSON))
+            cross_data = serialize_full_chart(cross_chart)
             result["natal_cross_aspects"] = build_full_cross_aspects(
                 cross_data, "progressed_object")
         else:
@@ -997,7 +996,7 @@ def generate_composite_chart(
         composite = charts.Composite(native, partner, config=call_config)
 
         # Serialize to JSON
-        result = json.loads(json.dumps(composite, cls=ToJSON))
+        result = serialize_full_chart(composite)
         result["applied_settings"] = build_applied_settings(house_system)
         result["status"] = "success"
         logger.info("Composite chart generated successfully")
@@ -1137,7 +1136,7 @@ def generate_synastry_aspects(
         native_chart = charts.Natal(native_subject, aspects_to=partner_chart, config=call_config)
 
         # Extract and return aspects
-        chart_data = json.loads(json.dumps(native_chart, cls=ToJSON))
+        chart_data = serialize_full_chart(native_chart)
         result = {
             "aspects": chart_data.get('aspects', {}),
             "applied_settings": build_applied_settings(house_system),
@@ -1273,7 +1272,7 @@ def generate_transit_chart(
         transits = charts.Transits(latitude=lat, longitude=lon, config=call_config)
 
         # Serialize to JSON
-        result = json.loads(json.dumps(transits, cls=ToJSON))
+        result = serialize_full_chart(transits)
         result["applied_settings"] = build_applied_settings(house_system)
         result["status"] = "success"
         logger.info("Transit chart generated successfully")
@@ -1419,9 +1418,9 @@ def generate_transit_to_natal(
 
         # Serialize both charts
         logger.debug(f"[TRANSIT-FULL] Serializing natal chart with ToJSON")
-        natal_data = json.loads(json.dumps(natal_chart, cls=ToJSON))
+        natal_data = serialize_full_chart(natal_chart)
         logger.debug(f"[TRANSIT-FULL] Serializing transit chart with ToJSON")
-        transit_data = json.loads(json.dumps(transit_chart, cls=ToJSON))
+        transit_data = serialize_full_chart(transit_chart)
         logger.debug(f"[TRANSIT-FULL] Serialization complete")
 
         # Extract natal summary using direct chart object access (not from JSON)
