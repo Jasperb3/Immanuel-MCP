@@ -1752,7 +1752,7 @@ def configure_immanuel_settings(
 
     Args:
         setting_key: One of 'house_system', 'objects', 'aspects', 'locale'
-                     ('pt_BR', 'es_ES', 'de_DE'; unset means English),
+                     ('pt_BR', 'es_ES', 'de_DE', or 'en_US' for English, the default),
                      'mc_progression_method', 'orb_calculation', 'default_orb',
                      'exact_orb', 'chart_shape_orb'.
         setting_value: The value to set. 'objects' takes a comma-separated list of

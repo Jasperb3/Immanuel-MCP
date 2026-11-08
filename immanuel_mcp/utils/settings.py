@@ -284,7 +284,9 @@ def resolve_objects(value: str) -> list:
             raise ValueError(
                 f"Unknown object '{item}': not an object name or code, and not an "
                 f"asteroid number or fixed star the Swiss Ephemeris can resolve "
-                f"({reason}). Valid names: {valid}")
+                f"({reason}). Fixed stars cannot resolve at all: they need the "
+                f"star catalogue sefstars.txt, which is not shipped with the "
+                f"ephemeris files. Valid names: {valid}")
         objects.append(candidate)
     return objects
 

@@ -201,7 +201,8 @@ All chart types (Natal, Transit-to-Natal, Solar Return, Lunar Return, Progressed
       "stage_name": "Saturn Return",
       "description": "Karmic maturation and life restructuring",
       "age_range": [29, 31],
-      "themes": ["responsibility", "maturity", "commitment"]
+      "themes": ["responsibility", "maturity", "commitment"],
+      "stage_basis": "ephemeris"
     },
     "active_event_count": 1,
     "next_major_event": "Jupiter Return Cycle 3",
@@ -220,6 +221,8 @@ All chart types (Natal, Transit-to-Natal, Solar Return, Lunar Return, Progressed
 - `category`: "return" (planetary return) or "major_transit" (square/opposition)
 - Future-timeline entries carry `prediction_basis`. **v0.10.0:** it is `"ephemeris"`. Given the natal chart, `build_future_timeline` (`lifecycle/timeline.py`) finds each event's next pass sequence with the same station-safe search, so `exact_date` (the first pass on or after the query date), `exact_dates` (the whole sequence) and `date_range` are real and don't move with the query date. Passes are grouped by the gap between consecutive hits (more than a year starts a new sequence). The old `"mean_orbital_period"` / `"typical_age"` arithmetic is only the fallback without a natal chart, and is flagged `exact_date_estimated: true`. There is no `age_range` gate any more: textbook ages are wrong for some cohorts (a 1984 Uranus Opposition perfects at 44.5). An event already reported as active is not repeated as upcoming.
 - `lifecycle_summary.next_major_event` (v0.10.0): the earliest pass still ahead among HIGH/CRITICAL events, active or upcoming, with `next_major_event_date` / `years_until_event` from that pass. A sooner MODERATE event (Mars Return) is skipped, and so is an active event whose passes are all behind the query date.
+- `age_at_event` (v0.10.1): the age on the event's date, from `age_on()` in `lifecycle/returns.py`, the one age formula. Active events use the first pass of their cluster (computed where the event is detected, in `returns.py`/`transits.py`), upcoming ones their `exact_date` (`predicted_age`), the progressed Moon its estimated perfection. `typical_age` appears only on the flagged arithmetic fallback. Don't read the raw `age` field for this: it is the current age.
+- `lifecycle_summary.current_stage` (v0.10.1): built by `_lifecycle_stage()` in `lifecycle.py`, not the age table. `stage_basis` is `"ephemeris"` (a HIGH/CRITICAL event under way: active, or the reference inside its `date_range`), `"ephemeris_past"` (the latest one whose last pass is at most `STAGE_PAST_YEARS` = 3 behind, found with `timeline.find_last_pass`, named "After ...") or `"age_band"` (`get_lifecycle_stage(age)`). The three-year cut-off matters: without it a Jupiter or North Node Return would name the stage for 12 or 18 years. `age_range` is the event's `date_range`, so a single-pass return keeps its orb-window width. The past search runs only when nothing is under way and costs a few ms.
 - The ephemeris crossing search (`utils/search._crossings`) skips ahead by distance ÷ (1.5 × the body's maximum speed) when a body is far from its target. Without it, ephemeris-dating the timeline made a lifecycle chart more than ten times slower (0.25 s against 0.02 s per transit-to-natal call in WSL). A test (`tests/test_search_skip.py`) holds it to the stepped scanner's results, except in the documented station blind spot.
 
 **Significance Levels:**

@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.10.0 · 23 tools · 234 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.10.1 · 23 tools · 246 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -44,6 +44,13 @@ Every chart-generating tool accepts a per-call `house_system` override and retur
 - **Size Efficient**: Adds only ~3-5 KB to responses while providing rich context
 - **Angular Separation**: Shows current distance (0-180°) from exact event occurrence
 - **Ephemeris-Searched Exact Dates**: `exact_date` and `exact_dates` come from an ephemeris search, not a linear speed estimate. A retrograde outer-planet transit reports all of its passes. Since v0.10.0 this includes the future timeline, so ages above are typical, not limits. A 1984 chart's Uranus Opposition perfects at 44.5, and the timeline reports when it actually happens. `lifecycle_summary.next_major_event` is the next HIGH/CRITICAL pass still ahead.
+- **Ages at the event (v0.10.1)**: `age_at_event` is the age on the event's own date: the first pass of the current pass sequence for an active event, the `exact_date` for an upcoming one, and the estimated perfection for the progressed Moon. The 1984 chart's Uranus Opposition reads 44.5, not the textbook 41. Only an arithmetic fallback (`exact_date_estimated: true`, no natal chart) reports the generic `typical_age`.
+- **Life stage (v0.10.1)**: `lifecycle_summary.current_stage` comes from the dated events, and `stage_basis` says how:
+  - `"ephemeris"`: a HIGH/CRITICAL event is under way (in orb, or between its passes). Example: "Pluto Square", `age_range` [41.1, 41.9].
+  - `"ephemeris_past"`: none is, but one ended within the last three years. Example: "After Saturn Return Cycle 1".
+  - `"age_band"`: neither, so the generic age table is used (e.g. "Post-Saturn Return", [31, 36]).
+
+  `age_range` is the event's `date_range` in years of age.
 - **Aspect Patterns**: full single-chart outputs carry `aspect_patterns` (T-square, grand trine, yod, grand cross, kite, mystic rectangle, cradle, grand sextile, grand quintile), built from the ten planets and Chiron only. Charts built against another chart (transit-to-natal, synastry) carry none: cross-chart patterns aren't supported.
 
 ### Configuration
