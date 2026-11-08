@@ -8,7 +8,9 @@ unimportable from a clean checkout; it belongs inside the package.
 import json
 from typing import Any, Dict, List, Optional
 from immanuel.charts import ToJSON
-from immanuel.const import chart as chart_const, data as data_const
+from immanuel.const import chart as chart_const
+
+from .constants import KEY_ASPECTS, KEY_HOUSES, KEY_OBJECTS
 
 
 class CompactJSONSerializer(ToJSON):
@@ -223,9 +225,9 @@ class CompactJSONSerializer(ToJSON):
             compact_chart = {}
 
             # Simplify and filter objects
-            if data_const.OBJECTS in chart_dict:
+            if KEY_OBJECTS in chart_dict:
                 simplified_objects = {}
-                for k, v in chart_dict[data_const.OBJECTS].items():
+                for k, v in chart_dict[KEY_OBJECTS].items():
                     if v.get('index') in self.INCLUDED_OBJECTS:
                         # Use consolidated position extraction method
                         obj_data = self._extract_position_details(v)
@@ -233,19 +235,19 @@ class CompactJSONSerializer(ToJSON):
                 compact_chart['objects'] = simplified_objects
 
             # Simplify houses
-            if data_const.HOUSES in chart_dict:
+            if KEY_HOUSES in chart_dict:
                 compact_chart['houses'] = {
                     k: self._extract_house_details(v)
-                    for k, v in chart_dict[data_const.HOUSES].items()
+                    for k, v in chart_dict[KEY_HOUSES].items()
                 }
 
             # Simplify and filter aspects - always returns a list
-            if data_const.ASPECTS in chart_dict:
+            if KEY_ASPECTS in chart_dict:
                 simplified_aspects = []
                 # Resolve object names for aspects
-                object_names = {obj['index']: obj['name'] for obj in chart_dict.get(data_const.OBJECTS, {}).values()}
+                object_names = {obj['index']: obj['name'] for obj in chart_dict.get(KEY_OBJECTS, {}).values()}
 
-                aspects_data = chart_dict[data_const.ASPECTS]
+                aspects_data = chart_dict[KEY_ASPECTS]
 
                 # Handle nested dict format: {from_object_id: {to_object_id: aspect_dict}}.
                 # The nesting keys carry direction: in an aspects_to chart
