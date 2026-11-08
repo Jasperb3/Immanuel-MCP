@@ -1777,6 +1777,7 @@ def configure_immanuel_settings(
             house_system_display_name,
             resolve_aspects,
             resolve_house_system,
+            resolve_locale,
             resolve_objects,
             resolve_progression_method,
             resolve_orb_calculation,
@@ -1825,8 +1826,8 @@ def configure_immanuel_settings(
             setattr(settings, setting_key, resolve_aspects(setting_value))
 
         elif setting_key == 'locale':
-            # Direct string assignment
-            setattr(settings, setting_key, setting_value)
+            # Validated against immanuel's shipped locales; 'en_US' clears it
+            setattr(settings, setting_key, resolve_locale(setting_value))
             
         elif setting_key == 'mc_progression_method':
             # Convert string to constant, with validation listing valid names
@@ -1921,24 +1922,19 @@ def list_available_settings() -> Dict[str, Any]:
     """
     try:
         from immanuel.const import names as names_const
-        from immanuel_mcp.utils.settings import get_session_config
+        from immanuel_mcp.utils.settings import available_locales, get_session_config
         settings = get_session_config()
 
         # House system mapping straight from the library so new systems
         # never show up as "Unknown"
         HOUSE_SYSTEMS = dict(names_const.HOUSE_SYSTEMS)
 
-        # Aspect angle mapping (degrees to aspect names)
+        # Aspect names straight from the library, so every name shown here is
+        # one configure_immanuel_settings accepts back (the hand-kept table
+        # this replaces spelled 'Semi-sextile' and 'Sesquiquadrate').
         ASPECT_ANGLES = {
-            0.0: "Conjunction (0°)",
-            180.0: "Opposition (180°)",
-            90.0: "Square (90°)",
-            120.0: "Trine (120°)",
-            60.0: "Sextile (60°)",
-            150.0: "Quincunx (150°)",
-            30.0: "Semi-sextile (30°)",
-            45.0: "Semi-square (45°)",
-            135.0: "Sesquiquadrate (135°)"
+            angle: f"{name} ({angle:g}°)"
+            for angle, name in names_const.ASPECTS.items()
         }
 
         # Get current values
@@ -1975,6 +1971,7 @@ def list_available_settings() -> Dict[str, Any]:
             },
             'locale': {
                 'current': getattr(settings, 'locale', None),
+                'available': available_locales(),
                 'description': 'Locale for formatting output (None = default)'
             },
             'objects': {
@@ -1984,6 +1981,7 @@ def list_available_settings() -> Dict[str, Any]:
             'aspects': {
                 'current': len(current_aspects),
                 'aspect_angles': aspect_names,
+                'available': list(names_const.ASPECTS.values()),
                 'description': 'Aspects calculated between objects'
             }
         }

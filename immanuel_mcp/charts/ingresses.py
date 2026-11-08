@@ -28,6 +28,11 @@ DEFAULT_PLANETS = ["Jupiter", "Saturn", "Uranus", "Neptune", "Pluto", "Chiron"]
 
 MAX_COUNT = 24
 
+# The lunar nodes' mean motion is backwards through the zodiac, so their
+# ordinary ingress is into the previous sign. For them a re-entry is the
+# reverse: the true node's brief direct spells carry it back forwards.
+_NORMALLY_RETROGRADE = {"North Node", "South Node"}
+
 # Nudge past a found ingress so the next search cannot re-converge on it.
 _STEP_PAST_JD = 0.5
 
@@ -122,7 +127,8 @@ def get_sign_ingresses(
                     "planet": planet_name,
                     "from_sign": _SIGN_NAMES.get(from_sign),
                     "into_sign": _SIGN_NAMES.get(into_sign),
-                    "retrograde_re_entry": into_sign == _previous_sign(from_sign),
+                    "retrograde_re_entry": (into_sign == _previous_sign(from_sign))
+                    != (planet_name in _NORMALLY_RETROGRADE),
                     "date_time_utc": date_tools.to_datetime(
                         jd, lat=0.0, lon=0.0, time_zone="UTC").isoformat(),
                     "date_time_local": date_tools.to_datetime(

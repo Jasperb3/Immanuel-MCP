@@ -53,17 +53,36 @@ arcsecond drift), so this is a minor bump.
   On 1.5.4, `configure_immanuel_settings("locale", "pt_BR")` failed on a host
   without that OS locale, and every later chart call failed with it. 1.6
   translates per chart from its own files; the locale/cache workaround is
-  deleted and reset restores English.
+  deleted and reset restores English. Values are validated against the
+  locales immanuel ships (`de_DE`, `es_ES`, `pt_BR`, plus `en_US` for
+  English): 1.6 silently falls back to English for an unknown locale, so a
+  typo used to report success and change nothing. `list_available_settings`
+  lists them.
+- **Compact charts keep their major aspects in a non-English locale.** The
+  compact serializer chose major aspects by English name, so with
+  `locale=de_DE` a natal chart kept 3 of its 17 major aspects (only
+  "Opposition" is spelled the same). It now matches on the aspect angle.
+  English output is byte-identical.
 - **`configure_immanuel_settings("aspects", ...)` accepts names.**
-  `"CONJUNCTION,TRINE"` failed with `invalid literal for int()`; names now
-  resolve via `immanuel.const.calc`, angles from 0 to 180 (`"120"`, `"54.3"`)
-  are accepted, and anything else is rejected with the valid names.
+  `"CONJUNCTION,TRINE"` failed with `invalid literal for int()`. Names now
+  resolve via `immanuel.const.calc` or immanuel's display names, ignoring
+  case, hyphens and spaces (`"Semi-sextile"` works), angles from 0 to 180
+  (`"120"`, `"54.3"`) are accepted, and anything else is rejected with the
+  valid names. `list_available_settings` now shows immanuel's own aspect names
+  under `aspects.available` (its hand-kept table spelled "Sesquiquadrate",
+  which nothing accepted).
 - **`configure_immanuel_settings("objects", ...)` resolves names.** `"SUN,MOON"`
   was stored as fixed-star strings, so the next chart failed with
   `Invalid object index`. Names and codes now resolve via
-  `immanuel.const.chart`. Any other string is accepted only if the Swiss
-  Ephemeris can resolve it as a fixed star; otherwise the call is rejected
+  `immanuel.const.chart`. Anything else is accepted only if immanuel's
+  ephemeris can resolve it: an asteroid's official number whose ephemeris file
+  is installed (`"433"`), or a fixed-star name. Otherwise the call is rejected
   and the session left unchanged.
+- **`reset_immanuel_settings` reports every change it makes.** Its diff left
+  out the orb settings and `orb_calculation`, and compared `objects` and
+  `aspects` only by count, so resetting `default_orb` from 5 back to 1 said
+  "Nothing changed". The summaries now include every configurable key, and
+  `changed` compares the full lists.
 - **`*_orb` keys are limited to the real orbs** (`default_orb`, `exact_orb`,
   `chart_shape_orb`). Any key ending `_orb` used to be set on the config,
   real or not.
@@ -77,8 +96,13 @@ arcsecond drift), so this is a minor bump.
   `orb_status` and `movement` where they used to be null. "North Node" /
   "South Node" now mean the true nodes everywhere (they already did in chart
   output), so explicitly requested node ingresses report the true node.
+  Because the nodes normally move backwards, their ordinary ingresses are not
+  flagged `retrograde_re_entry`; the flag marks a move against that motion.
 
 ### Tests
+- `test_lifecycle_fixes.py` reported failure by returning 1, which pytest
+  ignores; it now asserts. The README banner counts only tests expected to
+  pass (strict xfails are deselected).
 - `test_immanuel_server.py` recorded failures instead of raising, so it always
   passed. It now re-raises. The 9 tests that were already failing on 0.8.1
   (checked against a clean `main`) are strict `xfail`s with the reason.

@@ -263,11 +263,13 @@ def test_readme_banner_counts_match_reality():
     # whatever is first on PATH rather than this venv, which collected a
     # different (much smaller) set of tests and failed the assertion.
     collected = subprocess.run(
+        # Expected failures (strict xfails) are not "passing", so they are
+        # deselected from the count the banner advertises.
         [sys.executable, "-m", "pytest", "tests/", "--collect-only", "-q",
-         "-p", "no:cacheprovider"],
+         "-p", "no:cacheprovider", "-m", "not xfail"],
         cwd=REPO_ROOT, capture_output=True, text=True,
     )
     assert collected.returncode == 0, collected.stdout[-800:]
-    count = re.search(r"^(\d+) tests? collected", collected.stdout, re.MULTILINE)
+    count = re.search(r"^(\d+)(?:/\d+)? tests? collected", collected.stdout, re.MULTILINE)
     assert count, collected.stdout[-800:]
     assert int(banner.group(3)) == int(count.group(1))

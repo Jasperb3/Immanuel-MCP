@@ -11,6 +11,10 @@ module-level name to a fresh copy, so a ``from ... import _session_config``
 elsewhere would keep the stale object and silently ignore every reset.
 """
 
+import os
+import re
+
+import immanuel
 from immanuel import charts
 from immanuel.const import calc as calc_const
 from immanuel.const import chart as chart_const
@@ -181,21 +185,30 @@ def _aspect_constants() -> dict:
     }
 
 
+def _aspect_key(name: str) -> str:
+    """Spelling-insensitive key: 'Semi-sextile', 'semi sextile' and
+    'SEMISEXTILE' all match immanuel's SEMISEXTILE / 'Semisextile'."""
+    return re.sub(r"[\s_-]", "", name).upper()
+
+
 def resolve_aspects(value: str) -> list:
     """
     Resolve a comma-separated aspect list to immanuel's aspect angles.
 
-    Each item is an aspect name from immanuel.const.calc ('TRINE', any case)
-    or a numeric angle in [0, 180] ('120', '54.3'). Raises ValueError listing
-    the valid names on anything else.
+    Each item is an aspect name ('TRINE', 'Semi-sextile': constant or display
+    name, any case, hyphens and spaces ignored) or a numeric angle in [0, 180]
+    ('120', '54.3'). Raises ValueError listing the valid names on anything else.
     """
     constants = _aspect_constants()
+    lookup = {_aspect_key(attr): angle for attr, angle in constants.items()}
+    lookup.update({_aspect_key(display): angle
+                   for angle, display in names_const.ASPECTS.items()})
     angles = []
     for raw in value.split(","):
         item = raw.strip()
-        key = _normalize_house_system(item)
-        if key in constants:
-            angles.append(constants[key])
+        key = _aspect_key(item)
+        if key in lookup:
+            angles.append(lookup[key])
             continue
         try:
             angle = float(item)
@@ -226,15 +239,18 @@ def _object_constants() -> dict:
     }
 
 
-def _is_resolvable_fixed_star(name: str) -> str:
-    """Return '' if the Swiss Ephemeris resolves `name` as a fixed star, else
-    the reason it does not. Uses immanuel's own lookup, so the same ephemeris
-    path a chart would search is the one checked."""
+def _ephemeris_rejects(index) -> str:
+    """Return '' if immanuel's ephemeris resolves `index` (a fixed-star name,
+    or an object code such as an asteroid's official number), else the reason
+    it does not. Uses immanuel's own lookup, so the ephemeris path a chart
+    would search is the one checked."""
     from immanuel.tools import ephemeris
     try:
-        ephemeris.get_fixed_star(name, 2451545.0)  # J2000; any date resolves the name
-    except Exception as e:  # swisseph.Error, raised for unknown names and a missing catalogue
-        return str(e)
+        # J2000; any date resolves the name. lat/lon are needed only by
+        # location-dependent points, which are all named constants anyway.
+        ephemeris.get(index, 2451545.0, lat=0.0, lon=0.0)
+    except Exception as e:  # swisseph.Error for unknown names and missing files, KeyError/ValueError for bad codes
+        return f"{type(e).__name__}: {e}"
     return ""
 
 
@@ -243,9 +259,11 @@ def resolve_objects(value: str) -> list:
     Resolve a comma-separated object list to immanuel object indices.
 
     Each item is a chart-const name ('SUN', 'TRUE_NORTH_NODE', any case), a
-    numeric object code ('4000001'), or a fixed-star name the Swiss Ephemeris
-    can actually resolve. Anything else raises ValueError: storing an
-    unresolvable name makes every later chart fail with 'Invalid object index'.
+    numeric object code ('4000001'), or something immanuel's ephemeris can
+    actually resolve: an asteroid's official number whose ephemeris file is
+    installed ('433'), or a fixed-star name. Anything else raises ValueError:
+    storing an unresolvable index makes every later chart fail with
+    'Invalid object index'.
     """
     constants = _object_constants()
     valid_codes = set(constants.values())
@@ -259,14 +277,40 @@ def resolve_objects(value: str) -> list:
         if key in constants:
             objects.append(constants[key])
             continue
-        reason = "not a fixed star name" if item.isdigit() else _is_resolvable_fixed_star(item)
+        candidate = int(item) if item.isdigit() else item
+        reason = _ephemeris_rejects(candidate)
         if reason:
             valid = ", ".join(sorted(constants))
             raise ValueError(
-                f"Unknown object '{item}': not an object name or code, and not a fixed "
-                f"star the Swiss Ephemeris can resolve ({reason}). Valid names: {valid}")
-        objects.append(item)
+                f"Unknown object '{item}': not an object name or code, and not an "
+                f"asteroid number or fixed star the Swiss Ephemeris can resolve "
+                f"({reason}). Valid names: {valid}")
+        objects.append(candidate)
     return objects
+
+
+def available_locales() -> list:
+    """The locales immanuel ships translations for, plus 'en_US' (English,
+    the untranslated default)."""
+    locales_dir = os.path.join(os.path.dirname(immanuel.__file__), "locales")
+    shipped = sorted(
+        entry for entry in os.listdir(locales_dir)
+        if os.path.isdir(os.path.join(locales_dir, entry)) and not entry.startswith("_"))
+    return ["en_US", *shipped]
+
+
+def resolve_locale(value: str):
+    """
+    Resolve a locale to the value stored on the Config: one of immanuel's
+    shipped locales, or None for 'en_US' (English is the untranslated
+    default). Raises ValueError listing the valid locales on anything else -
+    immanuel 1.6 silently falls back to English for an unknown locale, so
+    without this a typo would report success and change nothing.
+    """
+    valid = available_locales()
+    if value.strip() not in valid:
+        raise ValueError(f"Unknown locale '{value}'. Valid values: {', '.join(valid)}")
+    return None if value.strip() == "en_US" else value.strip()
 
 
 # Numeric orb settings that exist on charts.Config.
@@ -274,16 +318,28 @@ ORB_SETTINGS = ("default_orb", "exact_orb", "chart_shape_orb")
 
 
 def _settings_summary() -> dict:
-    """Human-readable snapshot of the settings a caller is likely to care about."""
+    """Human-readable snapshot of every setting configure_immanuel_settings
+    can change. objects and aspects are shown as counts."""
     config = get_session_config()
+    orb_calculation_names = {v: k for k, v in ORB_CALCULATION_CONSTANTS.items()}
     return {
         "house_system": house_system_display_name(config.house_system),
         "locale": config.locale,
         "mc_progression_method": dict(names_const.PROGRESSION_METHODS).get(
             config.mc_progression_method),
+        "orb_calculation": orb_calculation_names.get(config.orb_calculation),
+        **{key: getattr(config, key) for key in ORB_SETTINGS},
         "objects": len(config.objects),
         "aspects": len(config.aspects),
     }
+
+
+def _settings_state() -> dict:
+    """The summary with objects and aspects in full, so a change of members
+    that keeps the same count still shows up in reset's `changed` list."""
+    config = get_session_config()
+    return {**_settings_summary(),
+            "objects": list(config.objects), "aspects": list(config.aspects)}
 
 
 def reset_global_settings() -> dict:
@@ -302,12 +358,13 @@ def reset_global_settings() -> dict:
     chart from its Config, so restoring the Config restores the language.
     """
     global _session_config
-    previous = _settings_summary()
+    previous, previous_state = _settings_summary(), _settings_state()
 
     _session_config = _STARTUP_CONFIG.copy()
 
-    restored = _settings_summary()
-    changed = sorted(k for k in restored if previous.get(k) != restored.get(k))
+    restored, restored_state = _settings_summary(), _settings_state()
+    changed = sorted(k for k in restored_state
+                     if previous_state.get(k) != restored_state.get(k))
 
     return {
         "previous_settings": previous,

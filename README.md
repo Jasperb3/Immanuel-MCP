@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.9.0 · 23 tools · 180 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.9.0 · 23 tools · 188 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -503,10 +503,10 @@ Modifies the session-level chart configuration. **This changes the settings for 
 
 #### Common Settings:
 - **House Systems**: accepted as the numeric code (`108`, `"108"`), the constant name (`PLACIDUS`, `WHOLE_SIGN`, `EQUAL`) or the display name (`"Placidus"`, `"Equal House"`). Every value shown by `list_available_settings` is a valid input; invalid ones return an error listing all valid values as `CODE — CONSTANT_NAME — Display Name`
-- **Objects**: comma-separated object names or codes, replacing the whole list (e.g., "SUN,MOON,MERCURY,VENUS,MARS,JUPITER,SATURN,URANUS,NEPTUNE,PLUTO,CHIRON,TRUE_NORTH_NODE" or "4000001,4000002"). Names are immanuel's constant names in any case. A name that is neither is accepted only if the Swiss Ephemeris resolves it as a fixed star; the bundled ephemeris has no star catalogue (`sefstars.txt`), so in practice star names are rejected. Unknown values return an error listing the valid names and leave the session unchanged
-- **Aspects**: comma-separated aspect names or angles from 0 to 180 (e.g., "CONJUNCTION,OPPOSITION,SQUARE,TRINE" or "0,180,90,120")
+- **Objects**: comma-separated object names or codes, replacing the whole list (e.g., "SUN,MOON,MERCURY,VENUS,MARS,JUPITER,SATURN,URANUS,NEPTUNE,PLUTO,CHIRON,TRUE_NORTH_NODE" or "4000001,4000002"). Names are immanuel's constant names in any case. Anything else is accepted only if the Swiss Ephemeris resolves it: an asteroid's official number whose ephemeris file you have installed (`433`), or a fixed-star name. The bundled ephemeris has no star catalogue (`sefstars.txt`), so in practice star names are rejected. Unknown values return an error listing the valid names and leave the session unchanged
+- **Aspects**: comma-separated aspect names or angles from 0 to 180 (e.g., "CONJUNCTION,OPPOSITION,SQUARE,TRINE", "Semi-sextile" or "0,180,90,120"). Case, hyphens and spaces are ignored; `list_available_settings` shows every accepted name under `aspects.available`
 - **Orbs**: `default_orb`, `exact_orb`, `chart_shape_orb` (numeric values)
-- **Locale**: `pt_BR`, `es_ES` or `de_DE` translate sign, object and aspect names; unset means English. No OS locale is needed
+- **Locale**: `pt_BR`, `es_ES` or `de_DE` translate sign, object and aspect names; `en_US` (or a reset) means English. Anything else is rejected. No OS locale is needed
 - **MC progression method**: `NAIBOD`, `SOLAR_ARC`, `DAILY_HOUSES`
 - **Orb calculation**: `MEAN`, `MAX` (key: `orb_calculation`)
 
