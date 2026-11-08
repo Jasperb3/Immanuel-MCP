@@ -11,6 +11,7 @@ kept - they are the core of progression and return technique.
 from typing import Any, Dict, List, Tuple
 
 from ..interpretations.aspects import (
+    english_aspect_terms,
     get_context_aware_interpretation,
     normalize_aspects_to_list,
 )
@@ -55,7 +56,7 @@ def build_full_cross_aspects(
 
     entries = []
     for aspect in normalize_aspects_to_list(
-        cross_chart_data.get("aspects", {}), filter_self_aspects=False
+        cross_chart_data.get("aspects", {})
     ):
         from_name = object_names.get(aspect.get("from_index"))
         to_name = object_names.get(aspect.get("to_index"))
@@ -102,9 +103,7 @@ def build_compact_cross_aspects(
             "orb": round(get_actual_orb(aspect), 2),
             "priority": classify_aspect_priority(aspect),
         }
-        interp = get_context_aware_interpretation(
-            aspect.get("object1", ""), aspect.get("object2", ""), aspect.get("type", "")
-        )
+        interp = get_context_aware_interpretation(*english_aspect_terms(aspect))
         entry["keywords"] = interp.get("keywords", [])
         entry["nature"] = interp.get("nature", "variable")
         if "description" in interp:

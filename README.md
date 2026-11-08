@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.9.0 · 23 tools · 188 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.10.0 · 23 tools · 234 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -43,7 +43,8 @@ Every chart-generating tool accepts a per-call `house_system` override and retur
 - **Universal Integration**: Available in Natal, Transit-to-Natal, Solar Return, Lunar Return, and Progressed charts
 - **Size Efficient**: Adds only ~3-5 KB to responses while providing rich context
 - **Angular Separation**: Shows current distance (0-180°) from exact event occurrence
-- **Ephemeris-Searched Exact Dates**: `exact_date` and `exact_dates` come from an ephemeris search, not a linear speed estimate; a retrograde outer-planet transit reports all of its passes
+- **Ephemeris-Searched Exact Dates**: `exact_date` and `exact_dates` come from an ephemeris search, not a linear speed estimate. A retrograde outer-planet transit reports all of its passes. Since v0.10.0 this includes the future timeline, so ages above are typical, not limits. A 1984 chart's Uranus Opposition perfects at 44.5, and the timeline reports when it actually happens. `lifecycle_summary.next_major_event` is the next HIGH/CRITICAL pass still ahead.
+- **Aspect Patterns**: full single-chart outputs carry `aspect_patterns` (T-square, grand trine, yod, grand cross, kite, mystic rectangle, cradle, grand sextile, grand quintile), built from the ten planets and Chiron only. Charts built against another chart (transit-to-natal, synastry) carry none: cross-chart patterns aren't supported.
 
 ### Configuration
 - Dynamically configure all Immanuel library settings (house systems, orbs, calculation methods, etc.)
@@ -506,7 +507,7 @@ Modifies the session-level chart configuration. **This changes the settings for 
 - **Objects**: comma-separated object names or codes, replacing the whole list (e.g., "SUN,MOON,MERCURY,VENUS,MARS,JUPITER,SATURN,URANUS,NEPTUNE,PLUTO,CHIRON,TRUE_NORTH_NODE" or "4000001,4000002"). Names are immanuel's constant names in any case. Anything else is accepted only if the Swiss Ephemeris resolves it: an asteroid's official number whose ephemeris file you have installed (`433`), or a fixed-star name. The bundled ephemeris has no star catalogue (`sefstars.txt`), so in practice star names are rejected. Unknown values return an error listing the valid names and leave the session unchanged
 - **Aspects**: comma-separated aspect names or angles from 0 to 180 (e.g., "CONJUNCTION,OPPOSITION,SQUARE,TRINE", "Semi-sextile" or "0,180,90,120"). Case, hyphens and spaces are ignored; `list_available_settings` shows every accepted name under `aspects.available`
 - **Orbs**: `default_orb`, `exact_orb`, `chart_shape_orb` (numeric values)
-- **Locale**: `pt_BR`, `es_ES` or `de_DE` translate sign, object and aspect names; `en_US` (or a reset) means English. Anything else is rejected. No OS locale is needed
+- **Locale**: `pt_BR`, `es_ES` or `de_DE` translate sign, object and aspect names; `en_US` (or a reset) means English. Anything else is rejected. No OS locale is needed. Interpretive text (aspect keywords and interpretations, lifecycle descriptions) stays English by design, so a localized response mixes translated chart data with English prose
 - **MC progression method**: `NAIBOD`, `SOLAR_ARC`, `DAILY_HOUSES`
 - **Orb calculation**: `MEAN`, `MAX` (key: `orb_calculation`)
 
@@ -576,6 +577,9 @@ This server is **tropical-zodiac only** (the underlying immanuel settings expose
 - **Southern latitudes**: `33s45` or `-33.75`
 - **Western longitudes**: `117w09` or `-117.15`
 - **Eastern longitudes**: `2e20` or `2.33`
+
+#### Slow first call after restarting Claude Desktop
+Measured on Windows (v0.10.0): the server answers `initialize` in about 1.5 s (about 3 s right after a `git pull` that changes `pyproject.toml`, while `uv run` rebuilds the project), and the first natal chart takes 0.05 s. A longer wait right after a restart happens inside Claude Desktop while it launches all its configured servers, not in this server. Retry the call. If it is consistently slow, run `uv run python immanuel_server.py` by hand to check the startup time.
 
 #### Chart generation errors
 - **Date format**: Use "YYYY-MM-DD HH:MM:SS" (24-hour time)

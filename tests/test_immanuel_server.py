@@ -537,7 +537,12 @@ class TestCompactChart:
                      patch('json.loads') as mock_loads:
                     
                     # Mock the compact serializer output
-                    compact_output = {"aspects": [{"filtered": "aspects"}]}
+                    # A real compact aspect: interpretations key on its
+                    # active/passive indices and angle.
+                    compact_output = {"aspects": [{
+                        "type": "Trine", "angle": 120.0, "object1": "Sun", "object2": "Moon",
+                        "active": 4000001, "passive": 4000002, "orb": 1.2,
+                        "from_object": "Sun", "to_object": "Moon"}]}
                     mock_dumps.return_value = json.dumps(compact_output)
                     mock_loads.return_value = compact_output
                     

@@ -13,6 +13,77 @@ from immanuel.const import chart as chart_const
 
 from .constants import KEY_ASPECTS, KEY_HOUSES, KEY_OBJECTS
 
+from immanuel.reports import pattern as pattern_report
+
+
+# Objects aspect patterns are built from: the ten planets and Chiron. No
+# angles or points - immanuel's own search uses every chart aspect, so the
+# Asc, MC, Part of Fortune and Lilith became pattern vertices.
+PATTERN_OBJECTS = {
+    chart_const.SUN, chart_const.MOON, chart_const.MERCURY, chart_const.VENUS,
+    chart_const.MARS, chart_const.JUPITER, chart_const.SATURN, chart_const.URANUS,
+    chart_const.NEPTUNE, chart_const.PLUTO, chart_const.CHIRON,
+}
+
+# immanuel's pattern constants -> the keys its serialized aspect_patterns use.
+_PATTERN_KEYS = {
+    calc_const.T_SQUARE: "t_square",
+    calc_const.GRAND_TRINE: "grand_trine",
+    calc_const.YOD: "yod",
+    calc_const.GRAND_CROSS: "grand_cross",
+    calc_const.KITE: "kite",
+    calc_const.MYSTIC_RECTANGLE: "mystic_rectangle",
+    calc_const.CRADLE: "cradle",
+    calc_const.GRAND_SEXTILE: "grand_sextile",
+    calc_const.GRAND_QUINTILE: "grand_quintile",
+}
+
+
+def planet_aspect_patterns(chart_json: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Aspect patterns for a serialized single chart, from planet-only aspects.
+
+    Recomputes with immanuel's own search rather than filtering its output:
+    a vertex is a cluster of conjunct objects whose aspects are pooled, so
+    dropping the Asc from a vertex could leave a pattern the remaining
+    planets do not actually form. Given the unfiltered aspects this
+    reproduces immanuel's aspect_patterns exactly; the shape is unchanged.
+    """
+    aspects = {
+        int(from_index): {
+            int(to_index): aspect for to_index, aspect in to_aspects.items()
+            if int(to_index) in PATTERN_OBJECTS
+        }
+        for from_index, to_aspects in (chart_json.get(KEY_ASPECTS) or {}).items()
+        if int(from_index) in PATTERN_OBJECTS
+    }
+    found = pattern_report.aspect_patterns({k: v for k, v in aspects.items() if v})
+    return json.loads(json.dumps(
+        {name: found.get(constant, []) for constant, name in _PATTERN_KEYS.items()},
+        cls=ToJSON))
+
+
+def serialize_full_chart(chart) -> Dict[str, Any]:
+    """
+    The full ToJSON serialization of a chart, with aspect_patterns built from
+    the planets and Chiron only.
+
+    A chart built against another chart (aspects_to: transits to a natal
+    chart, synastry, a return's cross aspects) gets aspect_patterns None.
+    immanuel identifies objects by index, so the transit and natal Suns are
+    both 4000001 and its search merges the two charts' objects into the same
+    vertices; cross-chart patterns are not supported.
+    """
+    chart_json = json.loads(json.dumps(chart, cls=ToJSON))
+    if "aspect_patterns" in chart_json:
+        # _aspects_to is private, but checking here guards every caller,
+        # where a flag at each call site could be forgotten.
+        if getattr(chart, "_aspects_to", None) is not None:
+            chart_json["aspect_patterns"] = None
+        else:
+            chart_json["aspect_patterns"] = planet_aspect_patterns(chart_json)
+    return chart_json
+
 
 class CompactJSONSerializer(ToJSON):
     """
@@ -282,6 +353,9 @@ class CompactJSONSerializer(ToJSON):
                                             from_index = to_index = None
                                         simplified_aspects.append({
                                             'type': aspect.get('type'),
+                                            # The angle is locale-proof where 'type'
+                                            # is translated; interpretations key on it.
+                                            'angle': aspect.get('aspect'),
                                             'object1': active_name,
                                             'object2': passive_name,
                                             'orb': aspect.get('difference', {}).get('raw'),

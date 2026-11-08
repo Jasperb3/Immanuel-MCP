@@ -18,6 +18,7 @@ from datetime import datetime
 
 import swisseph as swe
 from immanuel.const import calc as calc_const
+from immanuel.const import chart as chart_const
 from immanuel.tools import date as date_tools
 from immanuel.tools import ephemeris, transit
 
@@ -33,6 +34,27 @@ from immanuel.tools import ephemeris, transit
 # at a linear cost in ephemeris calls; it cannot close it.
 STEP_DEGREES = 0.5
 MAX_STEP_DAYS = 10.0
+
+# Upper bounds on each body's geocentric |speed| in degrees/day: the maximum
+# sampled daily over 1900-2100, padded 1.5x. A body this far from a target
+# longitude cannot reach it sooner than distance / bound, so a crossing search
+# may jump that far without being able to miss a crossing. Bodies not listed
+# (Sun, Moon) are never skipped.
+_MAX_SPEED_PADDING = 1.5
+_MAX_SPEED = {
+    index: speed * _MAX_SPEED_PADDING for index, speed in {
+        chart_const.MERCURY: 2.2027, chart_const.VENUS: 1.2589,
+        chart_const.MARS: 0.7914, chart_const.JUPITER: 0.2424,
+        chart_const.SATURN: 0.1307, chart_const.URANUS: 0.0646,
+        chart_const.NEPTUNE: 0.0405, chart_const.PLUTO: 0.0405,
+        chart_const.CHIRON: 0.1460,
+        chart_const.TRUE_NORTH_NODE: 0.2590, chart_const.TRUE_SOUTH_NODE: 0.2590,
+    }.items()
+}
+
+# Distance kept from the target when skipping: inside it, the ordinary
+# station-safe stepping takes over.
+_SKIP_MARGIN_DEGREES = 1.0
 
 
 def body_position(index: int, jd: float) -> dict:
@@ -51,6 +73,7 @@ def find_state_changes(
     to_jd: float,
     state,
     max_hits: int = None,
+    safe_skip=None,
 ) -> list:
     """
     Julian dates within a window at which some property of a moving body
@@ -64,6 +87,9 @@ def find_state_changes(
                a comparable value. A change in that value is a crossing; the
                returned date is the first instant carrying the new value.
         max_hits: Stop once this many crossings are found.
+        safe_skip: Optional callable taking the ephemeris dict and returning
+               a number of days the state provably cannot change in. The
+               scanner advances by the larger of that and its usual step.
 
     Returns:
         Chronological list of Julian dates, empty if the property never
@@ -85,7 +111,10 @@ def find_state_changes(
                 return hits
 
         previous_jd, previous_state = jd, current_state
-        jd += min(STEP_DEGREES / max(abs(planet["speed"]), 1e-9), MAX_STEP_DAYS)
+        step = min(STEP_DEGREES / max(abs(planet["speed"]), 1e-9), MAX_STEP_DAYS)
+        if safe_skip is not None:
+            step = max(step, safe_skip(planet))
+        jd += step
 
     return hits
 
@@ -120,7 +149,8 @@ def _aspect_targets(point: float, aspect: float) -> list:
     return targets[:1] if abs(targets[0] - targets[1]) < 1e-9 else targets
 
 
-def _crossings(index: int, target: float, from_jd: float, to_jd: float) -> list:
+def _crossings(index: int, target: float, from_jd: float, to_jd: float,
+               skip: bool = True) -> list:
     """
     Julian dates at which a body's longitude crosses a fixed longitude.
 
@@ -128,12 +158,26 @@ def _crossings(index: int, target: float, from_jd: float, to_jd: float) -> list:
     antipode as well as at the target, since the signed difference wraps
     between -180 and 180, so each candidate is checked for actually being at
     the target before it is kept.
+
+    With `skip`, a body far from the target jumps ahead by the time it would
+    need at its maximum speed to come within _SKIP_MARGIN_DEGREES of it.
+    That cannot pass a target crossing; it can pass an antipode flip, which is
+    then bisected and discarded like any other. It cut a 20-year lifecycle
+    search for a slow planet from ~900 ephemeris samples to a few dozen.
     """
     def side(planet: dict) -> bool:
         return swe.difdeg2n(planet["lon"], target) >= 0
 
+    max_speed = _MAX_SPEED.get(index) if skip else None
+
+    def safe_skip(planet: dict) -> float:
+        distance = abs(swe.difdeg2n(planet["lon"], target)) - _SKIP_MARGIN_DEGREES
+        return max(distance, 0.0) / max_speed
+
     return [
-        jd for jd in find_state_changes(index, from_jd, to_jd, side)
+        jd for jd in find_state_changes(
+            index, from_jd, to_jd, side,
+            safe_skip=safe_skip if max_speed else None)
         if abs(swe.difdeg2n(body_position(index, jd)["lon"], target)) < 1.0
     ]
 

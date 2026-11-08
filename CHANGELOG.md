@@ -5,6 +5,79 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-11-08
+
+Follow-ups from the 0.9.0 Claude Desktop smoke test. Lifecycle date fields
+change meaning (they are now real perfections) and compact aspects gain a
+field, hence the minor bump.
+
+### Changed
+- **Future lifecycle events are dated by the ephemeris.** Upcoming returns and
+  major transits used to be age arithmetic: once a native passed a transit's
+  typical age, its `exact_date` was simply the query date (flagged estimated),
+  and `date_range` was ±orb/mean-speed around it, so both moved with the query
+  date. Each event's next pass sequence is now searched, so `exact_date` is the
+  first pass on or after the query date, `exact_dates` the whole sequence,
+  `date_range` first-to-last pass, `exact_date_estimated: false` and
+  `prediction_basis: "ephemeris"`. Example: a 1 Jan 1984 chart's Uranus
+  Opposition is 2028-06-19 / 2028-12-29 / 2029-04-05 whatever the query date.
+  The `age_range` gate is gone: that perfection is at age 44.5, and the old
+  gate dropped the event from the timeline after 43. Mean-period returns are
+  real too: that chart's next Mars Return is 2027-08-25, not the
+  arithmetic's 2027-03-29, when Mars is 64° away. The arithmetic remains only
+  as a fallback without a natal chart.
+- **`lifecycle_summary.next_major_event`** is the earliest pass still ahead
+  among HIGH/CRITICAL events, with `next_major_event_date` and
+  `years_until_event` from that pass. It used to be the first active event,
+  dated with the query date: for the 1984 chart, a Pluto Square whose passes
+  were all behind it. A sooner MODERATE event (that Mars Return) is skipped.
+- **Aspect patterns are built from the ten planets and Chiron only.** immanuel
+  used every chart aspect, so the Asc, MC, Part of Fortune and Lilith became
+  vertices. Patterns are recomputed with immanuel's own search from
+  planet-only aspects; given all aspects this reproduces immanuel's output
+  exactly, and the shape is unchanged. Charts built against another chart get
+  `aspect_patterns: null`. Transit and natal objects share indices, so the
+  search merged both charts into the same vertices; no tool output exposed
+  those, and now none can.
+- Compact aspects carry an `angle` field (e.g. `120.0`), the locale-proof
+  identity of the aspect.
+
+### Fixed
+- **Same-planet transits are back.** Transit-to-natal removed every aspect
+  between the same planet in both charts as a "self-aspect": transit Saturn
+  conjunct natal Saturn (the Saturn Return), the Uranus opposition, the Pluto
+  square, Sun–Sun synastry. The full tool always dropped them; compact
+  transit-to-natal and compact synastry dropped them only with
+  `include_interpretations=True`, the default, so results depended on that
+  flag. A single chart never aspects an object to itself, so the filter is
+  gone. On a 1990 chart queried at 2019-12-01, the 0.7° Saturn Return now
+  appears in every transit-to-natal output.
+- **Interpretations no longer go generic in a non-English session.** The
+  lookup keyed on the translated aspect and planet names, so under `pt_BR`
+  every aspect fell back to "energy, connection, influence". It now keys on
+  the object indices and the aspect angle. English output is unchanged. The
+  interpretive prose itself (aspect keywords and interpretations, lifecycle
+  text) stays English by design, so a localized response mixes translated
+  chart data with English text.
+
+### Performance
+- The ephemeris crossing search may skip ahead when a body is far from its
+  target (distance ÷ 1.5 × the body's maximum speed, measured over
+  1900–2100). Without it the new lifecycle dating made a transit-to-natal call
+  0.25 s instead of 0.02 s; with it, 0.05 s. A body cannot reach the target
+  sooner, so no crossing can be skipped. The only differences from the
+  stepped scanner (3 in 792 searches) are station pairs inside one step, its
+  documented blind spot. One of those was a Venus pair that only the skip
+  found.
+
+### Not changed
+- The slow first call after the 0.9.0 restart could not be reproduced. On
+  Windows the server answers `initialize` in ~1.5 s (~3 s after a
+  `pyproject.toml` change triggers a `uv run` rebuild), and the first natal
+  chart takes 0.05 s, including straight after a fresh immanuel install. The
+  wait happens in Claude Desktop while it starts its servers. Documented under
+  Troubleshooting.
+
 ## [0.9.0] - 2026-11-08
 
 Moves to immanuel 1.6. Response content changes (more aspects, a new key,
