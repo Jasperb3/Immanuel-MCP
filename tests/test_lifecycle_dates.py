@@ -414,3 +414,45 @@ def test_at_a_grazing_station_exact_date_is_one_of_its_two_passes():
     # 4 days either side: the closest-pass rule allows either
     assert _event(events, "Neptune Square")["exact_date"] in ("2025-12-06", "2025-12-14")
 
+
+# --- sequences that run past the timeline horizon (0.10.4) ------------------
+# The future-timeline scan stopped at the 20-year horizon, so a sequence
+# that started inside it lost its later passes. Queried 2026-06-15, horizon
+# 2046-06-15.
+
+HORIZON_QUERY = "2026-06-15 12:00:00"
+
+
+@pytest.mark.parametrize("birth, name, passes", [
+    ("1987-02-12 09:30:00", "Saturn Return Cycle 2", ["2046-01-20", "2046-06-18", "2046-10-20"]),
+    ("2006-10-26 14:30:00", "Neptune Square",
+     ["2045-08-02", "2045-09-06", "2046-05-13", "2046-12-15", "2047-03-08"]),
+    ("1971-01-19 11:30:00", "Chiron Opposition", ["2046-01-03", "2046-02-05", "2046-08-21"]),
+])
+def test_a_sequence_crossing_the_horizon_is_listed_whole(birth, name, passes):
+    events, _ = _compact((birth, "51n30", "0w07"), HORIZON_QUERY, LONDON_TZ)
+    event = _event(events, name)
+    assert event["status"] == "upcoming"
+    assert event["exact_dates"] == passes
+    assert event["exact_date"] == passes[0]
+    assert event["date_range"] == f"{passes[0]} to {passes[-1]}"
+
+
+def test_a_sequence_starting_after_the_horizon_is_not_listed():
+    from datetime import datetime
+
+    from immanuel.const import calc as calc_const
+    from immanuel.const import chart as chart_const
+
+    from immanuel_mcp.lifecycle.timeline import find_next_pass
+
+    # 2006 London natal Neptune 317.0327: the square's first pass is
+    # 2045-08-02, a month after a 20-year horizon from 2025-07-01.
+    natal_neptune = 317.0327
+    reference = datetime(2025, 7, 1, 12)
+    assert find_next_pass(chart_const.NEPTUNE, natal_neptune, calc_const.SQUARE,
+                          reference, 20) == ([], None)
+    passes, first = find_next_pass(chart_const.NEPTUNE, natal_neptune, calc_const.SQUARE,
+                                   reference, 20.2)
+    assert first.strftime("%Y-%m-%d") == "2045-08-02"
+    assert len(passes) == 5
