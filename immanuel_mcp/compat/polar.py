@@ -2,7 +2,7 @@
 Let charts inside the polar circles build.
 
 immanuel 1.6 and 1.7 hard-code Placidus for the Part of Fortune Ascendant
-(tools/part.py) and the diurnal check (tools/condition.py), and uses the
+(tools/part.py) and the diurnal check (tools/condition.py), and use the
 chart's own system for the houses. All three go through
 immanuel.tools.sweph.angles_houses_vertex, which calls swe.houses_ex2 or
 swe.houses_armc_ex2. Inside a polar circle the Swiss Ephemeris C library
