@@ -130,3 +130,59 @@ def test_the_shim_matches_the_immanuel_it_was_written_for():
     assert list(inspect.signature(sweph.angles_houses_vertex).parameters) == [
         "lat", "house_system", "first_house_lon", "jd", "lon", "armc", "armc_obliquity"]
     assert sweph._SWE[sweph_const("PORPHYRIUS")] == b"O"
+
+
+# --- the top-level house_system names the cusps actually used (0.10.5) ------
+# immanuel serialises the configured system, so a default chart at Tromsø
+# read "house_system": "Placidus" beside Porphyry cusps, an applied_settings
+# of "Porphyry (polar fallback from Placidus)" and a warning saying so. It
+# now reads "Porphyrius", immanuel's own name for the system, which is what a
+# chart asking for it reads and what house_system= accepts back.
+
+TOP_LEVEL_TOOLS = ["natal", "progressed", "solar_return", "summary"]
+
+
+@pytest.mark.parametrize("tool", TOP_LEVEL_TOOLS)
+def test_a_polar_fallback_chart_names_porphyry_at_the_top_level(tool):
+    result = TOOLS[tool]()
+    assert result["house_system"] == "Porphyrius"
+    assert result["applied_settings"]["house_system"] == FALLBACK_NAME
+
+
+def test_only_the_compact_tools_lack_the_top_level_field():
+    have = sorted(tool for tool in TOOLS if "house_system" in TOOLS[tool]())
+    assert set(TOP_LEVEL_TOOLS) <= set(have), have
+    for tool in have:
+        assert TOOLS[tool]()["house_system"] == "Porphyrius", tool
+
+
+@pytest.mark.parametrize("tool", TOP_LEVEL_TOOLS)
+def test_a_polar_whole_sign_chart_keeps_its_name(tool):
+    assert TOOLS[tool](house_system="WHOLE_SIGN")["house_system"] == "Whole Sign"
+
+
+LONDON = ("1990-05-15 12:00:00", "51n30", "0w07")
+LONDON_TOOLS = {
+    "natal": lambda: immanuel_server.generate_natal_chart(*LONDON, "Europe/London"),
+    "summary": lambda: immanuel_server.get_chart_summary(*LONDON, "Europe/London"),
+    "solar_return": lambda: immanuel_server.generate_solar_return_chart(*LONDON, 2026, "Europe/London"),
+    "progressed": lambda: immanuel_server.generate_progressed_chart(
+        *LONDON, "2026-11-08 12:00:00", "Europe/London"),
+}
+
+
+@pytest.mark.parametrize("tool", sorted(LONDON_TOOLS))
+def test_a_chart_outside_the_polar_circle_is_unchanged(tool):
+    result = LONDON_TOOLS[tool]()
+    assert result["house_system"] == "Placidus"
+    assert result["applied_settings"]["house_system"] == "Placidus"
+    assert "warnings" not in result
+
+
+def test_a_return_relocated_out_of_the_polar_circle_keeps_its_own_name():
+    # The Tromsø natal chart falls back within the same call, but the
+    # return chart is cast in London, where Placidus works.
+    result = immanuel_server.generate_solar_return_chart(
+        *TROMSO, 2026, TROMSO_TZ, return_latitude="51n30", return_longitude="0w07")
+    assert result["status"] == "success", result.get("message")
+    assert result["house_system"] == "Placidus"
