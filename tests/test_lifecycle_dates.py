@@ -288,3 +288,40 @@ def test_an_infant_has_only_the_age_band():
     stage = _stage(("2020-01-01 12:00:00", "51n30", "0w07"), "2021-06-01 12:00:00", LONDON_TZ)
     assert stage["stage_basis"] == "age_band"
     assert stage["stage_name"] == "Childhood"
+
+
+# --- North Node return crossings (0.10.2) -----------------------------------
+# The true node wobbles, so for 1990 London it crosses the natal node three
+# times: 2027-09-22, 09-25 and 09-26 (brute-force scan of TRUE_NODE). The
+# scanner's step put two crossings inside one step, so only one was reported,
+# and which one depended on the query date.
+
+NODE_PASSES = ["2027-09-22", "2027-09-25", "2027-09-26"]
+
+
+@pytest.mark.parametrize("query_date", [
+    "2019-12-01 12:00:00", "2022-06-01 12:00:00", "2026-11-08 12:00:00", "2027-06-01 12:00:00"])
+def test_north_node_return_lists_every_crossing(query_date):
+    events, _ = _compact(LONDON_1990, query_date, LONDON_TZ)
+    node = _event(events, "North Node Return Cycle 2")
+    assert node["exact_dates"] == NODE_PASSES
+    assert node["exact_date"] == "2027-09-22"
+    assert node["date_range"] == "2027-09-22 to 2027-09-26"
+
+
+def test_the_natal_and_transiting_node_are_the_same_point():
+    from immanuel_mcp.constants import PLANET_CONSTANTS
+    natal = charts.Natal(create_subject(*LONDON_1990, LONDON_TZ))
+    assert PLANET_CONSTANTS["North Node"] == chart_const.TRUE_NORTH_NODE
+    assert chart_const.TRUE_NORTH_NODE in natal.objects
+    assert chart_const.NORTH_NODE not in natal.objects  # no mean node to mix up
+
+
+def test_an_active_node_return_lists_every_crossing():
+    natal = charts.Natal(create_subject(*LONDON_1990, LONDON_TZ))
+    transit = charts.Natal(create_subject("2027-09-24 12:00:00", "51n30", "0w07", LONDON_TZ))
+    reference = datetime(2027, 9, 24, 11, 0)
+    data = detect_lifecycle_events(natal, transit, datetime(1990, 5, 15, 11, 0), reference)
+    node = [e for e in data["current_events"] if e.get("planet") == "North Node"]
+    assert len(node) == 1
+    assert node[0]["exact_dates"] == NODE_PASSES

@@ -35,6 +35,19 @@ from immanuel.tools import ephemeris, transit
 STEP_DEGREES = 0.5
 MAX_STEP_DAYS = 10.0
 
+# Tighter day caps for bodies whose longitude oscillates faster than their
+# mean motion suggests. The true node wobbles (~1.5 deg, half-month period),
+# so near a return it crosses the same longitude several times, 1-3 days
+# apart: 1990 London's crosses its natal node on 2027-09-22, 25 and 26. A
+# 10-day step put two of those inside one step and reported one crossing,
+# chosen by where the samples happened to fall. Six hours resolves crossings
+# a day apart; the skip below keeps the cost to the degree or so around the
+# target.
+_MAX_STEP_DAYS_BY_BODY = {
+    chart_const.TRUE_NORTH_NODE: 0.25,
+    chart_const.TRUE_SOUTH_NODE: 0.25,
+}
+
 # Upper bounds on each body's geocentric |speed| in degrees/day: the maximum
 # sampled daily over 1900-2100, padded 1.5x. A body this far from a target
 # longitude cannot reach it sooner than distance / bound, so a crossing search
@@ -96,6 +109,7 @@ def find_state_changes(
         changes within the window.
     """
     hits = []
+    max_step = _MAX_STEP_DAYS_BY_BODY.get(index, MAX_STEP_DAYS)
     jd = from_jd
     previous_jd = jd
     previous_state = state(body_position(index, jd))
@@ -111,7 +125,7 @@ def find_state_changes(
                 return hits
 
         previous_jd, previous_state = jd, current_state
-        step = min(STEP_DEGREES / max(abs(planet["speed"]), 1e-9), MAX_STEP_DAYS)
+        step = min(STEP_DEGREES / max(abs(planet["speed"]), 1e-9), max_step)
         if safe_skip is not None:
             step = max(step, safe_skip(planet))
         jd += step
