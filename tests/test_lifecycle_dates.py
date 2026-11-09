@@ -386,3 +386,31 @@ def test_an_active_mars_return_picks_the_nearest_of_several_clusters():
     mars = _active("2035-10-15 12:00:00", "Mars Return")
     assert mars["status"] == "active"
     assert mars["exact_dates"] == ["2035-07-05", "2035-10-06", "2035-10-24"]
+
+
+# --- a pass at a grazing station (0.10.4) -----------------------------------
+# 1984 San Diego's Neptune Square target is 359.3776 deg. Neptune stations
+# direct in December 2025 17.7" past it: it crosses on 12-06, turns, and
+# re-crosses on 12-14. Both crossings fell inside one 10-day scan step, the
+# side was the same at both ends, and the pair was lost - or not, depending
+# on where the query date put the samples.
+
+SD_1984 = ("1984-01-01 12:00:00", "32n43", "117w09")
+SD_TZ = "America/Los_Angeles"
+SD_NEPTUNE_SQUARE = ["2024-05-17", "2024-08-18", "2025-03-14", "2025-12-06", "2025-12-14"]
+
+
+@pytest.mark.parametrize("query_date", ["2024-08-15 12:00:00", "2025-12-10 12:00:00"])
+def test_a_grazing_station_keeps_both_of_its_passes(query_date):
+    events, _ = _compact(SD_1984, query_date, SD_TZ)
+    neptune = _event(events, "Neptune Square")
+    assert neptune["status"] == "active"
+    assert neptune["exact_dates"] == SD_NEPTUNE_SQUARE
+    assert neptune["date_range"] == "2024-05-17 to 2025-12-14"
+
+
+def test_at_a_grazing_station_exact_date_is_one_of_its_two_passes():
+    events, _ = _compact(SD_1984, "2025-12-10 12:00:00", SD_TZ)
+    # 4 days either side: the closest-pass rule allows either
+    assert _event(events, "Neptune Square")["exact_date"] in ("2025-12-06", "2025-12-14")
+

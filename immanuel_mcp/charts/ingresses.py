@@ -16,7 +16,7 @@ from ..app import mcp
 from ..utils.call_context import reports_warnings
 from ..utils.datetimes import iso_timestamp, parse_datetime_value
 from ..utils.errors import handle_chart_error
-from ..utils.search import body_position, find_state_changes
+from ..utils.search import body_position, find_state_changes, station_pair_filter
 from ..constants import PLANET_CONSTANTS
 
 logger = logging.getLogger(__name__)
@@ -52,6 +52,12 @@ def _previous_sign(sign: int) -> int:
     return (sign - 2) % 12 + 1
 
 
+def _boundary_distance(planet: dict) -> float:
+    """Degrees from a planet to the nearer edge of its sign."""
+    within = planet["lon"] % 30
+    return min(within, 30 - within)
+
+
 def _next_ingress_jd(planet_index: int, jd: float) -> float:
     """
     Julian date of a planet's next sign change, in either direction.
@@ -64,7 +70,8 @@ def _next_ingress_jd(planet_index: int, jd: float) -> float:
         ValueError: If no crossing is found within the search ceiling.
     """
     hits = find_state_changes(
-        planet_index, jd, jd + _MAX_SEARCH_DAYS, position.sign, max_hits=1)
+        planet_index, jd, jd + _MAX_SEARCH_DAYS, position.sign, max_hits=1,
+        may_hide_pair=station_pair_filter(planet_index, _boundary_distance))
     if not hits:
         raise ValueError(
             f"No sign change found within {_MAX_SEARCH_DAYS / 365.25:.0f} years")
