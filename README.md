@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.10.2 · 23 tools · 290 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.10.3 · 23 tools · 325 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -44,9 +44,10 @@ Every chart-generating tool accepts a per-call `house_system` override and retur
 - **Size Efficient**: Adds only ~3-5 KB to responses while providing rich context
 - **Angular Separation**: Shows current distance (0-180°) from exact event occurrence
 - **Ephemeris-Searched Exact Dates**: `exact_date` and `exact_dates` come from an ephemeris search, not a linear speed estimate. A retrograde outer-planet transit reports all of its passes. Since v0.10.0 this includes the future timeline, so ages above are typical, not limits. A 1984 chart's Uranus Opposition perfects at 44.5, and the timeline reports when it actually happens. `lifecycle_summary.next_major_event` is the next HIGH/CRITICAL pass still ahead.
+- **`exact_date` and `exact_dates` (v0.10.3)**: `exact_dates` is always the whole pass sequence, active or upcoming, and doesn't move with the query date (a 1990 London chart's Pluto Square lists all five passes, 2033-03-25 to 2034-11-29, whichever date you ask on). `exact_date` differs by status. For an **upcoming** event it's the first pass on or after the query date. For an **active** event it's the pass *closest* to the query date, which may be in the past (asked on 2034-10-15, that Pluto Square reads 2034-09-27).
 - **Ages at the event (v0.10.1)**: `age_at_event` is the age on the event's own date: the first pass of the current pass sequence for an active event, the `exact_date` for an upcoming one, and the estimated perfection for the progressed Moon. The 1984 chart's Uranus Opposition reads 44.5, not the textbook 41. Only an arithmetic fallback (`exact_date_estimated: true`, no natal chart) reports the generic `typical_age`.
 - **Life stage (v0.10.1)**: `lifecycle_summary.current_stage` comes from the dated events, and `stage_basis` says how:
-  - `"ephemeris"`: a HIGH/CRITICAL event is under way (in orb, or between its passes). Example: "Pluto Square", `age_range` [41.1, 41.9].
+  - `"ephemeris"`: a HIGH/CRITICAL event is under way (in orb, or between its passes). Example: "Pluto Square", `age_range` [40.2, 41.9] (its five passes, 2024-03-28 to 2025-11-26).
   - `"ephemeris_past"`: none is, but one ended within the last three years. Example: "After Saturn Return Cycle 1".
   - `"age_band"`: neither, so the generic age table is used (e.g. "Post-Saturn Return", [31, 36]).
 
@@ -319,7 +320,9 @@ Calculates a solar return chart for a specific year.
 - `include_natal_aspects`: Include return-planet-to-natal aspects under `natal_cross_aspects` (default: true). Each entry carries explicit `return_object`/`natal_object` keys.
 - `return_latitude` / `return_longitude`: Optional coordinates to relocate the return chart to where the person is at the return moment (the astrological convention). The return *moment* is unchanged; only houses/angles move. The response echoes `return_location: {latitude, longitude, relocated}`.
 
-Both solar return tools report the return moment in `solar_return_info.return_date` (v0.10.2): naive ISO in the birth timezone, like `lunar_return_info.return_date`, e.g. `"2026-05-15T05:04:25.519850"` for a 1990-05-15 London chart.
+Both solar return tools report the return moment in `solar_return_info.return_date` (v0.10.2), in the birth timezone, e.g. `"2026-05-15T05:04:25+01:00"` for a 1990-05-15 London chart.
+
+**Timestamps (v0.10.3):** every return and calendar timestamp (`solar_return_info.return_date`, `lunar_return_info.return_date` and `returns_in_month`, and the lunation and ingress `date_time_utc`/`date_time_local`) is ISO 8601 with whole seconds and an explicit offset. Seconds are truncated, so a shown time is never later than the moment.
 
 ### `generate_compact_solar_return_chart`
 Generates a streamlined solar return chart optimized for LLM processing.
@@ -346,7 +349,7 @@ Calculates the monthly lunar return chart (the moment the Moon returns to its na
 - `return_month`: Month for the lunar return (1–12)
 - `include_natal_aspects`: Include return-to-natal aspects under `natal_cross_aspects` (default: true)
 - `return_latitude` / `return_longitude`: Optional relocation coordinates; the return instant is preserved and reported in the return location's zone
-- `occurrence` (v0.10.2): which return in the month, default 1. The sidereal month is ~27.3 days, so about one month in three has two returns, and the second is reachable only with `occurrence=2` (for a 1990-05-15 London chart, July 2026 has 1 July and 28 July). `lunar_return_info.returns_in_month` always lists every return in the month, and asking for one that doesn't exist returns an error naming those that do.
+- `occurrence` (v0.10.2): which return in the month, default 1. The sidereal month is ~27.3 days, so about one month in three has two returns, and the second is reachable only with `occurrence=2` (for a 1990-05-15 London chart, July 2026 has 1 July and 28 July). `lunar_return_info.returns_in_month` always lists every return in the month, and asking for one that doesn't exist returns an error naming those that do. Since v0.10.3 every month is reliable: the old search skipped a return in about 1 month in 100, and is replaced.
 
 ### `generate_compact_lunar_return_chart`
 Streamlined lunar return chart optimized for LLM processing. Same parameters as the full tool, plus `aspect_priority` for the natal cross-aspects (see compact solar return).
