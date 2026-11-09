@@ -11,6 +11,7 @@ from immanuel.charts import ToJSON
 from immanuel.const import calc as calc_const
 from immanuel.const import chart as chart_const
 
+from .compat.polar import reported_house_system
 from .constants import KEY_ASPECTS, KEY_HOUSES, KEY_OBJECTS
 
 from immanuel.reports import pattern as pattern_report
@@ -73,8 +74,14 @@ def serialize_full_chart(chart) -> Dict[str, Any]:
     immanuel identifies objects by index, so the transit and natal Suns are
     both 4000001 and its search merges the two charts' objects into the same
     vertices; cross-chart patterns are not supported.
+
+    house_system names the system the cusps actually use: "Porphyrius" for a
+    chart inside a polar circle that fell back (reported_house_system).
     """
     chart_json = json.loads(json.dumps(chart, cls=ToJSON))
+    if "house_system" in chart_json:
+        # Inside a polar circle the cusps are Porphyry, whatever was asked for
+        chart_json["house_system"] = reported_house_system(chart)
     if "aspect_patterns" in chart_json:
         # _aspects_to is private, but checking here guards every caller,
         # where a flag at each call site could be forgotten.

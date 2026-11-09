@@ -22,9 +22,12 @@ import logging
 from importlib import metadata
 
 import swisseph as swe
+from immanuel.const import chart as chart_const
+from immanuel.const import names
+from immanuel.support.localize import localize
 from immanuel.tools import sweph
 
-from ..utils.call_context import note_polar_fallback
+from ..utils.call_context import note_polar_fallback, polar_fell_back
 
 logger = logging.getLogger(__name__)
 
@@ -83,3 +86,35 @@ def install() -> None:
     if sweph.swe is not swe and not installed():
         raise RuntimeError("immanuel.tools.sweph.swe is not the swisseph module")
     sweph.swe = PROXY
+
+
+def reported_house_system(chart) -> str:
+    """
+    The chart's house_system as immanuel serialises it (the configured
+    system's name, translated), except Porphyrius (immanuel's name for
+    Porphyry, which resolve_house_system accepts back) when this chart's own
+    houses fell back to it.
+
+    The fallback is recorded per call, and one call can build a polar chart
+    and a non-polar one (a Tromsø natal with a return relocated to London),
+    so the chart's own subjects are re-checked. Placidus and its kin fail on
+    latitude and obliquity alone, which is what that check sees. Only runs
+    when the call recorded a fallback for this system, so every other chart
+    is untouched.
+    """
+    system = chart._config.house_system
+    code = sweph._SWE.get(system)
+    if not polar_fell_back(code):
+        return chart.house_system
+    subjects = [getattr(chart, name, None) for name in ("_native", "_partner")]
+    if not any(_falls_back(subject, code) for subject in subjects if subject is not None):
+        return chart.house_system
+    return localize(names.HOUSE_SYSTEMS[chart_const.PORPHYRIUS], chart._config.locale)
+
+
+def _falls_back(subject, code: bytes) -> bool:
+    try:
+        swe.houses_ex2(subject.julian_date, subject.latitude, subject.longitude, code)
+    except swe.Error as error:
+        return POLAR_MESSAGE in str(error)
+    return False

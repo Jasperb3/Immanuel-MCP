@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.5] - 2026-11-09
+
+### Fixed
+- **The top-level `house_system` names the polar fallback.** Inside a polar
+  circle the cusps are Porphyry, and `applied_settings` and the warning
+  said so, but the full chart tools' top-level `house_system` still read
+  the requested system. Tromsø 1988-12-21 09:00 (69n39 18e57) with default
+  houses: `get_chart_summary`, `generate_natal_chart`,
+  `generate_solar_return_chart`, `generate_progressed_chart` and
+  `generate_lunar_return_chart` read `"Placidus"`; they now read
+  `"Porphyrius"`, immanuel's own name for the system (translated by
+  locale), which is also the value `house_system=` accepts. A chart
+  outside the polar circle, including a return relocated out of it within
+  the same call, is unchanged. Compact tools have no such field.
+
 ## [0.10.4] - 2026-11-09
 
 Fixes for the two gaps Ben's wider check of 0.10.3 found. Both are rare;

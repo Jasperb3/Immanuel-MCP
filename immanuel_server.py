@@ -20,6 +20,7 @@ from immanuel import charts
 from immanuel.const import chart as chart_const
 from immanuel.tools import convert
 from immanuel_mcp.serializers import CompactJSONSerializer, serialize_full_chart
+from immanuel_mcp.compat.polar import reported_house_system
 from immanuel_mcp.utils.call_context import reports_warnings
 
 # Configure logging to file only (CRITICAL: logging to stdout/stderr breaks stdio transport)
@@ -315,7 +316,7 @@ def get_chart_summary(
             diurnal = None
 
         try:
-            chart_house_system = natal.house_system if hasattr(natal, 'house_system') else "Unknown"
+            chart_house_system = reported_house_system(natal) if hasattr(natal, 'house_system') else "Unknown"
         except Exception as e:
             logger.error(f"Error accessing house system: {e}")
             chart_house_system = "Unknown"
