@@ -26,6 +26,7 @@ from ..app import mcp
 from ..utils.call_context import reports_warnings
 from ..lifecycle.attach import attach_lifecycle_section
 from ..utils.coordinates import parse_coordinate
+from ..utils.datetimes import iso_timestamp
 from ..utils.subjects import create_subject
 from ..utils.errors import handle_chart_error, validate_aspect_priority, validate_inputs
 from ..utils.settings import build_call_config, build_applied_settings
@@ -101,10 +102,10 @@ def _subject_at(jd: float, lat: float, lon: float, timezone: str = None) -> char
     return charts.Subject(**kwargs)
 
 
-def _local_iso(jd: float, lat: float, lon: float, timezone: str = None) -> str:
-    """A return moment as the naive local ISO string return_date uses."""
-    return date_tools.to_datetime(
-        jd, lat=lat, lon=lon, time_zone=timezone).replace(tzinfo=None).isoformat()
+def _moment_iso(jd: float, lat: float, lon: float, timezone: str = None) -> str:
+    """A return moment as return_date shows it (see iso_timestamp), in the
+    given zone, or the zone inferred from the coordinates."""
+    return iso_timestamp(date_tools.to_datetime(jd, lat=lat, lon=lon, time_zone=timezone))
 
 
 def _find_lunar_return_jd(
@@ -128,7 +129,7 @@ def _find_lunar_return_jd(
     if not returns:
         raise ValueError(f"No lunar return found in {year}-{month:02d}")
     if not 1 <= occurrence <= len(returns):
-        listed = ", ".join(_local_iso(jd, lat, lon, timezone) for jd in returns)
+        listed = ", ".join(_moment_iso(jd, lat, lon, timezone) for jd in returns)
         raise ValueError(
             f"occurrence={occurrence} does not exist: {year}-{month:02d} has "
             f"{len(returns)} lunar return{'s' if len(returns) > 1 else ''} "
@@ -287,10 +288,10 @@ def generate_lunar_return_chart(
         if relocated:
             return_local_dt = date_tools.to_datetime(return_jd, lat=return_lat, lon=return_lon)
             return_subject = _subject_at(return_jd, return_lat, return_lon)
-            return_date_value = return_local_dt.isoformat()
+            return_date_value = iso_timestamp(return_local_dt)
         else:
             return_subject = _subject_at(return_jd, lat, lon, timezone)
-            return_date_value = lunar_return_dt.isoformat()
+            return_date_value = iso_timestamp(return_moment)
         lunar_return_chart = charts.Natal(return_subject, config=call_config)
 
         # Serialize to JSON
@@ -317,8 +318,8 @@ def generate_lunar_return_chart(
             # Every return in the month, so a second one is visible without
             # guessing; select it with occurrence=2. Same zone as return_date.
             'returns_in_month': [
-                date_tools.to_datetime(jd, lat=return_lat, lon=return_lon).isoformat() if relocated
-                else _local_iso(jd, lat, lon, timezone)
+                _moment_iso(jd, return_lat, return_lon) if relocated
+                else _moment_iso(jd, lat, lon, timezone)
                 for jd in _find_lunar_return_jds(
                     natal_moon_longitude, return_year, return_month, lat, lon, timezone)
             ],
@@ -464,10 +465,10 @@ def generate_compact_lunar_return_chart(
         if relocated:
             return_local_dt = date_tools.to_datetime(return_jd, lat=return_lat, lon=return_lon)
             return_subject = _subject_at(return_jd, return_lat, return_lon)
-            return_date_value = return_local_dt.isoformat()
+            return_date_value = iso_timestamp(return_local_dt)
         else:
             return_subject = _subject_at(return_jd, lat, lon, timezone)
-            return_date_value = lunar_return_dt.isoformat()
+            return_date_value = iso_timestamp(return_moment)
         lunar_return_chart = charts.Natal(return_subject, config=call_config)
 
         # Serialize to JSON using compact serializer
@@ -495,8 +496,8 @@ def generate_compact_lunar_return_chart(
             # Every return in the month, so a second one is visible without
             # guessing; select it with occurrence=2. Same zone as return_date.
             'returns_in_month': [
-                date_tools.to_datetime(jd, lat=return_lat, lon=return_lon).isoformat() if relocated
-                else _local_iso(jd, lat, lon, timezone)
+                _moment_iso(jd, return_lat, return_lon) if relocated
+                else _moment_iso(jd, lat, lon, timezone)
                 for jd in _find_lunar_return_jds(
                     natal_moon_longitude, return_year, return_month, lat, lon, timezone)
             ],

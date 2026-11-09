@@ -5,6 +5,22 @@ from datetime import datetime
 from typing import Union
 
 
+def iso_timestamp(moment: datetime) -> str:
+    """
+    A computed moment (a return, a lunation, an ingress) as the one
+    timestamp format the tools emit: ISO 8601, whole seconds, explicit
+    offset, e.g. '2026-07-01T13:51:43+01:00'.
+
+    Seconds are truncated, not rounded: a displayed time is never later than
+    the moment, so a return at 23:59:59.8 on the last day of a month still
+    reads as that day. Month membership is decided from the Julian date
+    before formatting, never from this string.
+    """
+    if moment.tzinfo is None or moment.utcoffset() is None:
+        raise ValueError(f"iso_timestamp needs an aware datetime, got {moment!r}")
+    return moment.replace(microsecond=0).isoformat()
+
+
 def parse_datetime_value(value: Union[str, datetime]) -> datetime:
     """Parse various datetime formats used throughout the API."""
     if isinstance(value, datetime):
