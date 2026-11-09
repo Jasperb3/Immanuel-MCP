@@ -28,10 +28,11 @@ from immanuel.tools import ephemeris
 # unbounded step. Both are needed - a body slow enough for the cap to bind
 # covers under half a degree across it.
 #
-# Like any sampling scheme this can still miss a pair of crossings that both
-# fall inside one step, which needs a station within a quarter degree of the
-# boundary being searched for. Tightening these numbers narrows that window
-# at a linear cost in ephemeris calls; it cannot close it.
+# Two crossings of one boundary inside a single step need the body to turn
+# back between them, i.e. a station. Watching the side alone misses that
+# pair (the side is the same at both ends), so find_state_changes also
+# watches the sign of the speed, which is in every sample already; see
+# _station_crossings.
 STEP_DEGREES = 0.5
 MAX_STEP_DAYS = 10.0
 
@@ -95,6 +96,7 @@ def find_state_changes(
     state,
     max_hits: int = None,
     safe_skip=None,
+    may_hide_pair=None,
 ) -> list:
     """
     Julian dates within a window at which some property of a moving body
@@ -111,6 +113,11 @@ def find_state_changes(
         safe_skip: Optional callable taking the ephemeris dict and returning
                a number of days the state provably cannot change in. The
                scanner advances by the larger of that and its usual step.
+        may_hide_pair: Optional callable taking the ephemeris dicts at two
+               consecutive samples and the days between them, returning
+               False when no pair of state changes can hide between them.
+               It only saves the station bisection; without it every
+               station between two same-state samples is checked.
 
     Returns:
         Chronological list of Julian dates, empty if the property never
@@ -120,19 +127,31 @@ def find_state_changes(
     max_step = _MAX_STEP_DAYS_BY_BODY.get(index, MAX_STEP_DAYS)
     jd = from_jd
     previous_jd = jd
-    previous_state = state(body_position(index, jd))
+    previous_planet = body_position(index, jd)
+    previous_state = state(previous_planet)
+    previous_direct = previous_planet["speed"] >= 0
 
     while jd < to_jd:
         planet = body_position(index, jd)
         current_state = state(planet)
+        direct = planet["speed"] >= 0
 
         if current_state != previous_state:
-            hits.append(
-                _bisect_state_change(index, previous_jd, jd, previous_state, state))
+            found = [_bisect_state_change(index, previous_jd, jd, previous_state, state)]
+        elif direct != previous_direct and (
+                may_hide_pair is None
+                or may_hide_pair(previous_planet, planet, jd - previous_jd)):
+            found = _station_crossings(index, previous_jd, jd, previous_state,
+                                       previous_direct, state)
+        else:
+            found = []
+        for hit in found:
+            hits.append(hit)
             if max_hits is not None and len(hits) >= max_hits:
                 return hits
 
-        previous_jd, previous_state = jd, current_state
+        previous_jd, previous_state, previous_direct = jd, current_state, direct
+        previous_planet = planet
         step = _FIXED_STEP_DAYS.get(index) or min(
             STEP_DEGREES / max(abs(planet["speed"]), 1e-9), max_step)
         if safe_skip is not None:
@@ -140,6 +159,53 @@ def find_state_changes(
         jd += step
 
     return hits
+
+
+def station_pair_filter(index: int, distance):
+    """
+    A may_hide_pair test for find_state_changes, given `distance`: the
+    degrees from a sample (ephemeris dict) to the nearest state boundary.
+
+    To cross a boundary and come back, a body travels at least both samples'
+    distances to it, and its padded maximum speed bounds how far it can
+    travel between them. None for a body with no bound (Sun, Moon), which
+    never stations anyway.
+    """
+    bound = _MAX_SPEED.get(index)
+    if bound is None:
+        return None
+
+    def may_hide_pair(before: dict, after: dict, days: float) -> bool:
+        return distance(before) + distance(after) <= bound * days
+
+    return may_hide_pair
+
+
+def _station_crossings(index: int, lo: float, hi: float, lo_state, lo_direct: bool,
+                       state) -> list:
+    """
+    The crossings hidden by a station between two samples with the same
+    state: [] or a pair.
+
+    Between the samples the body turns, so its longitude runs to an extreme
+    at the station and back. On either side of the station the motion is
+    one-way, so each half holds at most one crossing; with the same state at
+    both ends, there are two (the station itself on the far side) or none.
+    1984 San Diego's Neptune stations 17.7" past its square target on
+    2025-12-10 and crosses it on 12-06 and 12-14, inside one 10-day step.
+    """
+    a, b = lo, hi
+    while (b - a) > calc_const.MAX_ERROR:
+        mid = (a + b) / 2
+        if (body_position(index, mid)["speed"] >= 0) == lo_direct:
+            a = mid
+        else:
+            b = mid
+    station_state = state(body_position(index, b))
+    if station_state == lo_state:
+        return []
+    return [_bisect_state_change(index, lo, b, lo_state, state),
+            _bisect_state_change(index, b, hi, station_state, state)]
 
 
 def _bisect_state_change(index: int, lo: float, hi: float, lo_state, state) -> float:
@@ -187,20 +253,35 @@ def _crossings(index: int, target: float, from_jd: float, to_jd: float,
     That cannot pass a target crossing; it can pass an antipode flip, which is
     then bisected and discarded like any other. It cut a 20-year lifecycle
     search for a slow planet from ~900 ephemeris samples to a few dozen.
+
+    Nor can it hide a grazing station: throughout a skip the body stays more
+    than _SKIP_MARGIN_DEGREES from the target, and inside the margin the
+    skip is zero, so a station near the target always falls in an ordinary
+    step, where find_state_changes checks it.
+
+    A station between two samples on the same side is only bisected when a
+    pair of crossings could hide there: crossing over and back means
+    travelling at least the two samples' distances from the target combined,
+    which the maximum speed bounds. Without that test the stations a skip
+    jumps over, degrees from the target, cost ~200 bisections per lifecycle
+    chart.
     """
     def side(planet: dict) -> bool:
         return swe.difdeg2n(planet["lon"], target) >= 0
 
+    def distance(planet: dict) -> float:
+        return abs(swe.difdeg2n(planet["lon"], target))
+
     max_speed = _MAX_SPEED.get(index) if skip else None
 
     def safe_skip(planet: dict) -> float:
-        distance = abs(swe.difdeg2n(planet["lon"], target)) - _SKIP_MARGIN_DEGREES
-        return max(distance, 0.0) / max_speed
+        return max(distance(planet) - _SKIP_MARGIN_DEGREES, 0.0) / max_speed
 
     return [
         jd for jd in find_state_changes(
             index, from_jd, to_jd, side,
-            safe_skip=safe_skip if max_speed else None)
+            safe_skip=safe_skip if max_speed else None,
+            may_hide_pair=station_pair_filter(index, distance))
         if abs(swe.difdeg2n(body_position(index, jd)["lon"], target)) < 1.0
     ]
 

@@ -4,21 +4,20 @@ The crossing search's safe skip must not lose crossings.
 
 _crossings() may jump a body that is far from its target by the time it would
 need at its (padded) maximum speed to get within a degree. Physically that
-cannot pass a crossing of the target. What it does change is where samples
-fall, and the stepping scanner has a documented blind spot: two crossings
-inside one step near a station. Which such pair gets caught depends on sample
-phase, so the two scanners may disagree there, and only there.
+cannot pass a crossing of the target; it only changes where samples fall.
 
-Offline, over 792 searches (11 bodies x 24 targets x three 30-year windows
-from 1900, 1968 and 2023), the only disagreements were three such station
-pairs, one of them a Venus pair the unskipped scanner missed.
+Before 0.10.4 the stepping scanner had a blind spot: two crossings inside one
+step near a station, caught or not by sample phase, so the two scanners
+disagreed there (three station pairs over 792 offline searches). The scanner
+now watches the speed's sign and recovers both crossings of such a pair, so
+the skipped and stepped scans must agree exactly.
 """
 
 import pytest
 import swisseph as swe
 from immanuel.const import chart as chart_const
 
-from immanuel_mcp.utils.search import MAX_STEP_DAYS, _crossings, body_position
+from immanuel_mcp.utils.search import _crossings, body_position
 
 BODIES = [chart_const.MARS, chart_const.JUPITER, chart_const.SATURN, chart_const.URANUS,
           chart_const.NEPTUNE, chart_const.PLUTO, chart_const.CHIRON,
@@ -36,22 +35,15 @@ def _is_crossing(index, jd, target):
 
 
 @pytest.mark.parametrize("index", BODIES)
-def test_skip_only_differs_inside_the_station_blind_spot(index):
+def test_skip_finds_exactly_what_the_stepped_scan_finds(index):
     for target in TARGETS:
         stepped = _crossings(index, target, START_JD, START_JD + SPAN_DAYS, skip=False)
         skipped = _crossings(index, target, START_JD, START_JD + SPAN_DAYS, skip=True)
-        union = sorted(set(round(jd, 4) for jd in stepped + skipped))
-
         for jd in stepped + skipped:
             assert _is_crossing(index, jd, target), (index, target, jd)
-
-        only_one = set(round(jd, 4) for jd in stepped) ^ set(round(jd, 4) for jd in skipped)
-        for jd in only_one:
-            neighbours = [other for other in union if other != jd and abs(other - jd) <= MAX_STEP_DAYS]
-            assert neighbours, (
-                f"body {index} target {target}: crossing at JD {jd} found by only one "
-                f"scanner, with no other crossing within {MAX_STEP_DAYS} days - the skip "
-                f"lost an isolated crossing")
+        assert len(stepped) == len(skipped), (index, target, stepped, skipped)
+        for a, b in zip(stepped, skipped):
+            assert abs(a - b) < 1e-5, (index, target, a, b)
 
 
 def test_skip_is_what_makes_lifecycle_dating_cheap():

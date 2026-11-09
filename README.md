@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.10.3 · 23 tools · 325 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.10.4 · 23 tools · 388 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -45,6 +45,7 @@ Every chart-generating tool accepts a per-call `house_system` override and retur
 - **Angular Separation**: Shows current distance (0-180°) from exact event occurrence
 - **Ephemeris-Searched Exact Dates**: `exact_date` and `exact_dates` come from an ephemeris search, not a linear speed estimate. A retrograde outer-planet transit reports all of its passes. Since v0.10.0 this includes the future timeline, so ages above are typical, not limits. A 1984 chart's Uranus Opposition perfects at 44.5, and the timeline reports when it actually happens. `lifecycle_summary.next_major_event` is the next HIGH/CRITICAL pass still ahead.
 - **`exact_date` and `exact_dates` (v0.10.3)**: `exact_dates` is always the whole pass sequence, active or upcoming, and doesn't move with the query date (a 1990 London chart's Pluto Square lists all five passes, 2033-03-25 to 2034-11-29, whichever date you ask on). `exact_date` differs by status. For an **upcoming** event it's the first pass on or after the query date. For an **active** event it's the pass *closest* to the query date, which may be in the past (asked on 2034-10-15, that Pluto Square reads 2034-09-27).
+- **Whole sequences, edge cases included (v0.10.4)**: a planet that stations just past its target crosses it twice within days, and both passes are listed (a 1984 San Diego chart's Neptune Square has five, the last two on 2025-12-06 and 12-14 around a station 17.7″ past exact). A future event is listed when its first pass falls within the 20-year horizon, and then carries every pass of its sequence, including those past the horizon.
 - **Ages at the event (v0.10.1)**: `age_at_event` is the age on the event's own date: the first pass of the current pass sequence for an active event, the `exact_date` for an upcoming one, and the estimated perfection for the progressed Moon. The 1984 chart's Uranus Opposition reads 44.5, not the textbook 41. Only an arithmetic fallback (`exact_date_estimated: true`, no natal chart) reports the generic `typical_age`.
 - **Life stage (v0.10.1)**: `lifecycle_summary.current_stage` comes from the dated events, and `stage_basis` says how:
   - `"ephemeris"`: a HIGH/CRITICAL event is under way (in orb, or between its passes). Example: "Pluto Square", `age_range` [40.2, 41.9] (its five passes, 2024-03-28 to 2025-11-26).

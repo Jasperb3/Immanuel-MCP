@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.4] - 2026-11-09
+
+Fixes for the two gaps Ben's wider check of 0.10.3 found. Both are rare;
+neither is a regression.
+
+### Fixed
+- **Both passes at a grazing station.** A planet that stations just past a
+  target crosses it, turns, and crosses back. When both crossings fell
+  inside one scan step the pair was lost, or not, depending on where the
+  query date put the samples. 1984-01-01 San Diego's Neptune Square (target
+  359.3776°, Neptune stationing 17.7″ past it) listed 2024-05-17 / 08-18 /
+  2025-03-14 when queried on 2024-08-15, missing 2025-12-06 and 12-14. The
+  scanner now also watches the sign of the speed and checks the side at
+  each station that could hide a pair. It applies to every search on the
+  scanner: lifecycle dates, returns and the sign-ingress calendar. Cost:
+  about +4 ms per lifecycle chart (~46 → 50 ms warm), and a few ms on the
+  default ingress calendar. 1,584 ingresses over 11 start dates are
+  unchanged.
+- **Sequences that cross the 20-year horizon are listed whole.** The
+  future-timeline search stopped at the horizon, cutting a sequence that
+  started inside it. Queried 2026-06-15 for London births: 1987-02-12
+  Saturn Return Cycle 2 gained 2046-06-18 and 10-20; 2006-10-26 Neptune
+  Square gained 2046-12-15 and 2047-03-08; 1971-01-19 Chiron Opposition
+  gained 2046-08-21. The horizon still decides which events are listed (the
+  first pass on or after the query must fall within it).
+
 ## [0.10.3] - 2026-11-09
 
 Fixes from Ben's independent check of 0.10.2.

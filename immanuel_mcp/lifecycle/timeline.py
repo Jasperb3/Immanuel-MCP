@@ -61,26 +61,49 @@ def find_next_pass(
     The first pass sequence of `aspect` to `natal_longitude` that perfects on
     or after `reference`, within `years_ahead`. Every perfection of that
     sequence is returned, including ones up to `lookback_years` behind the
-    reference date, with the first perfection on or after it:
-    (passes, next_pass), or ([], None) if none falls inside the window.
-    Both are chosen by Julian date, so a pass within rounding of the
+    reference date and ones past the horizon, with the first perfection on
+    or after it: (passes, next_pass), or ([], None) if none falls inside the
+    window. Both are chosen by Julian date, so a pass within rounding of the
     reference cannot be selected as a sequence yet missing as the next pass.
+
+    The horizon decides which sequence is listed (its next pass is within
+    it), not where it is cut off: the scan keeps going until a whole
+    PASS_GAP_DAYS after the last pass is empty. Before 0.10.4 it stopped at
+    the horizon, so a 1987 Saturn Return starting 2046-01-20, five months
+    inside a 20-year horizon, lost its 2046-06-18 and 10-20 passes.
 
     The reference is treated as UTC, as in find_event_exact_dates: a
     sub-day error cannot move a perfection the search converges on.
     """
     reference_jd = date_tools.to_jd(reference, lat=0.0, lon=0.0, time_zone="UTC")
-    lookback_days = lookback_years * 365.25
+    horizon_jd = reference_jd + years_ahead * 365.25
+    start_jd = reference_jd - lookback_years * 365.25
+    end_jd = horizon_jd + PASS_GAP_DAYS
     hits = find_exact_aspect_dates(
-        planet_index, natal_longitude, aspect,
-        reference_jd - lookback_days, lookback_days + years_ahead * 365.25,
+        planet_index, natal_longitude, aspect, start_jd, end_jd - start_jd,
         max_hits=_MAX_HITS,
     )
     for group in group_passes(hits):
         if group[-1] >= reference_jd:
             next_jd = next(jd for jd in group if jd >= reference_jd)
+            if next_jd > horizon_jd:
+                break
+            _close_sequence(planet_index, natal_longitude, aspect, group, end_jd)
             return [_jd_to_datetime(jd) for jd in group], _jd_to_datetime(next_jd)
     return [], None
+
+
+def _close_sequence(planet_index: int, natal_longitude: float, aspect: float,
+                    group: List[float], scanned_to_jd: float) -> None:
+    """Extend `group` in place until PASS_GAP_DAYS after its last pass has
+    been scanned and found empty. Each scan starts just after the last pass,
+    so no stretch between scans goes unsampled."""
+    while group[-1] + PASS_GAP_DAYS > scanned_to_jd:
+        after = group[-1] + 2 * calc_const.MAX_ERROR  # past the bisected pass
+        scanned_to_jd = after + PASS_GAP_DAYS
+        more = find_exact_aspect_dates(planet_index, natal_longitude, aspect,
+                                       after, PASS_GAP_DAYS, max_hits=_MAX_HITS)
+        group.extend(jd for jd in more if jd > after)
 
 
 def find_last_pass(
