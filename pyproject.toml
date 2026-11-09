@@ -17,7 +17,7 @@ classifiers = [
 ]
 dependencies = [
     "mcp[cli]",
-    "immanuel>=1.6.0,<1.7",
+    "immanuel>=1.7.0,<1.8",
     "tzdata>=2025.2",
 ]
 
