@@ -16,7 +16,7 @@ from immanuel.const import calc as calc_const
 from immanuel.tools import date as date_tools
 
 from ..constants import PLANET_CONSTANTS
-from ..utils.search import find_exact_aspect_dates
+from ..utils.search import PASS_GAP_DAYS, find_exact_aspect_dates, group_passes
 from .constants import (
     ORBITAL_PERIODS,
     RETURN_SIGNIFICANCE,
@@ -28,13 +28,6 @@ from .returns import age_on, get_return_significance
 from .transits import ASPECT_ANGLES
 
 logger = logging.getLogger(__name__)
-
-# Consecutive perfections of the same aspect closer together than this belong
-# to one pass sequence (a retrograde planet perfects up to three times, months
-# apart). The next sequence of the same aspect is always far more than a year
-# later, so splitting on the gap never merges, say, a waxing and a waning
-# square.
-PASS_GAP_DAYS = 365.25
 
 # The search starts this far before the reference date, so a pass sequence
 # already under way is reported whole. A slow planet's transit sequence can
@@ -50,18 +43,6 @@ _RETURN_WINDOW_PERIODS = 1.5
 # Generous cap: Mars, the fastest tracked body, perfects ~a dozen times in a
 # 20-year window.
 _MAX_HITS = 64
-
-
-def group_passes(jds: List[float], gap_days: float = PASS_GAP_DAYS) -> List[List[float]]:
-    """Split sorted perfection dates into pass sequences, starting a new
-    sequence wherever the gap between consecutive hits exceeds gap_days."""
-    groups: List[List[float]] = []
-    for jd in sorted(jds):
-        if groups and jd - groups[-1][-1] <= gap_days:
-            groups[-1].append(jd)
-        else:
-            groups.append([jd])
-    return groups
 
 
 def _jd_to_datetime(jd: float) -> datetime:

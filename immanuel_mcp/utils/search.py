@@ -229,6 +229,56 @@ def find_exact_aspect_dates(
     return sorted(hits)[:max_hits]
 
 
+# Consecutive perfections of the same aspect closer together than this belong
+# to one pass sequence (a retrograde planet perfects up to three times, months
+# apart). The next sequence of the same aspect is always far more than a year
+# later, so splitting on the gap never merges, say, a waxing and a waning
+# square.
+PASS_GAP_DAYS = 365.25
+
+# A cluster search looks this far either side of the reference: the longest
+# pass sequences (a slow planet's square) span about two years.
+CLUSTER_HALF_WINDOW_DAYS = 4 * 365.25
+_CLUSTER_MAX_HITS = 64
+
+
+def group_passes(jds: list, gap_days: float = PASS_GAP_DAYS) -> list:
+    """Split sorted perfection dates into pass sequences, starting a new
+    sequence wherever the gap between consecutive hits exceeds gap_days."""
+    groups = []
+    for jd in sorted(jds):
+        if groups and jd - groups[-1][-1] <= gap_days:
+            groups[-1].append(jd)
+        else:
+            groups.append([jd])
+    return groups
+
+
+def find_pass_cluster(index: int, point: float, aspect: float, reference_jd: float,
+                      half_window_days: float = CLUSTER_HALF_WINDOW_DAYS) -> list:
+    """
+    The whole pass sequence of `aspect` to `point` that the reference date
+    belongs to: the one whose span (first to last pass) contains it, else the
+    one nearest it (in orb before the first pass, or after the last). [] if
+    the window holds no perfection.
+
+    The window is fixed, not sized from the body's current speed, and
+    uncapped in practice, so a five-pass Pluto square comes back whole
+    whichever of its passes the query is near.
+    """
+    hits = find_exact_aspect_dates(
+        index, point, aspect, reference_jd - half_window_days, 2 * half_window_days,
+        max_hits=_CLUSTER_MAX_HITS)
+    clusters = group_passes(hits)
+    if not clusters:
+        return []
+
+    def distance(cluster):
+        return max(cluster[0] - reference_jd, reference_jd - cluster[-1], 0.0)
+
+    return min(clusters, key=distance)
+
+
 def find_return_jd(index: int, target_longitude: float, from_jd: float) -> float:
     """Julian date of an object's next return to a fixed longitude."""
     return transit.next_aspect_to(

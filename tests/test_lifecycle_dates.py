@@ -67,7 +67,7 @@ def test_next_major_event_is_the_next_significant_perfection():
 def test_a_fully_perfected_transit_is_not_listed_as_upcoming():
     events, _ = _lifecycle("2026-11-08 12:00:00")
     pluto = [e for e in events if e.get("event_type") == "Pluto Square"]
-    # Its passes (2025-01-24, 08-30, 11-26) are all behind the query date; it
+    # Its five passes (2024-03-28 to 2025-11-26) are all behind the query date; it
     # may still be active (in orb), but never "upcoming".
     assert all(e["status"] != "upcoming" for e in pluto)
 
@@ -224,8 +224,12 @@ def test_active_event_age_is_the_age_at_the_first_pass_of_its_cluster():
     events, summary = _lifecycle("2026-11-08 12:00:00")
     pluto = _event(events, "Pluto Square")
     assert pluto["status"] == "active"
-    assert pluto["exact_dates"][0] == "2025-01-24"
-    assert pluto["age_at_event"] == pytest.approx(41.1, abs=0.1)
+    # Five passes, 2024-03-28 to 2025-11-26 (raw swisseph scan). Before
+    # 0.10.3 the active search truncated it to the last three, so this read
+    # 2025-01-24 / 41.1.
+    assert pluto["exact_dates"] == [
+        "2024-03-28", "2024-06-08", "2025-01-24", "2025-08-30", "2025-11-26"]
+    assert pluto["age_at_event"] == pytest.approx(40.2, abs=0.1)
     assert summary["current_age"] == pytest.approx(42.9, abs=0.1)  # not the current age
 
 
@@ -256,8 +260,8 @@ def test_stage_is_the_active_ephemeris_event_not_the_age_band():
     stage = _stage(NATAL, "2026-11-08 12:00:00", TZ)
     assert stage["stage_name"] == "Pluto Square"
     assert stage["stage_basis"] == "ephemeris"
-    # Multi-pass: the span of the passes, 2025-01-24 to 2025-11-26
-    assert stage["age_range"] == [41.1, 41.9]
+    # Multi-pass: the span of all five passes, 2024-03-28 to 2025-11-26
+    assert stage["age_range"] == [40.2, 41.9]
 
 
 def test_stage_during_the_saturn_return():
@@ -325,3 +329,60 @@ def test_an_active_node_return_lists_every_crossing():
     node = [e for e in data["current_events"] if e.get("planet") == "North Node"]
     assert len(node) == 1
     assert node[0]["exact_dates"] == NODE_PASSES
+
+
+# --- active events report the whole pass cluster (0.10.3) -------------------
+# While active, the 1990 London Pluto Square reported 2-3 of its five passes,
+# chosen by the query date: the active search sized its window from the
+# current speed and kept at most 3 hits. Upcoming queries got all five.
+
+PLUTO_SQUARE_PASSES = ["2033-03-25", "2033-07-11", "2034-01-30", "2034-09-27", "2034-11-29"]
+
+
+def _active(query_date, name):
+    events, _ = _compact(LONDON_1990, query_date, LONDON_TZ)
+    matches = [e for e in events if e.get("event_type", "").startswith(name)]
+    assert len(matches) == 1, [e.get("event_type") for e in events]
+    return matches[0]
+
+
+@pytest.mark.parametrize("query_date", [
+    "2033-01-15 12:00:00",  # in orb (1.9 deg), before the first pass
+    "2033-04-01 12:00:00", "2033-06-01 12:00:00", "2034-01-15 12:00:00",
+    "2034-01-30 12:00:00",  # exactly on a pass
+    "2034-10-15 12:00:00",  # between passes 4 and 5
+    "2034-12-15 12:00:00", "2035-03-01 12:00:00",
+])
+def test_an_active_pluto_square_reports_all_five_passes(query_date):
+    pluto = _active(query_date, "Pluto Square")
+    assert pluto["status"] == "active"
+    assert pluto["exact_dates"] == PLUTO_SQUARE_PASSES
+    assert pluto["date_range"] == "2033-03-25 to 2034-11-29"
+    assert pluto["age_at_event"] == pytest.approx(42.9, abs=0.05)
+    # exact_date for an active event stays the pass closest to the query
+    assert pluto["exact_date"] in PLUTO_SQUARE_PASSES
+
+
+def test_an_active_event_exact_date_is_the_closest_pass_even_if_past():
+    assert _active("2034-10-15 12:00:00", "Pluto Square")["exact_date"] == "2034-09-27"
+    assert _active("2034-01-30 12:00:00", "Pluto Square")["exact_date"] == "2034-01-30"
+
+
+@pytest.mark.parametrize("query_date", ["2031-08-01 12:00:00", "2031-12-01 12:00:00"])
+def test_an_active_neptune_square_keeps_its_three_passes(query_date):
+    neptune = _active(query_date, "Neptune Square")
+    assert neptune["status"] == "active"
+    assert neptune["exact_dates"] == ["2031-05-09", "2031-10-02", "2032-03-10"]
+
+
+def test_an_active_single_pass_return_is_unchanged():
+    saturn = _active("2020-02-02 12:00:00", "Saturn Return")
+    assert saturn["exact_dates"] == ["2020-02-02"]
+
+
+def test_an_active_mars_return_picks_the_nearest_of_several_clusters():
+    # A +-4 year window holds several Mars return clusters (~every 2.1
+    # years); the 2035 retrograde one is three passes.
+    mars = _active("2035-10-15 12:00:00", "Mars Return")
+    assert mars["status"] == "active"
+    assert mars["exact_dates"] == ["2035-07-05", "2035-10-06", "2035-10-24"]
