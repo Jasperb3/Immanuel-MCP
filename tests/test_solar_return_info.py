@@ -4,7 +4,7 @@ Solar return responses report when the return happens.
 
 Neither tool said so (the full chart's native.date_time is the birth time),
 so callers borrowed the moment from another engine. solar_return_info
-.return_date mirrors lunar_return_info.return_date: naive ISO in the birth
+.return_date mirrors lunar_return_info.return_date: ISO 8601 in the birth
 timezone.
 """
 

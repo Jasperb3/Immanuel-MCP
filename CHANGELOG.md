@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.3] - 2026-11-09
+
+Fixes from Ben's independent check of 0.10.2.
+
+### Fixed
+- **Active events report their whole pass sequence.** The active search
+  sized its window from the planet's current speed and kept at most three
+  hits, so a long sequence came back partial and moved with the query date.
+  1990-05-15 London's Pluto Square (2033-03-25 / 07-11 / 2034-01-30 / 09-27 /
+  11-29) read passes 2-3 on 2034-01-15 and the last two on 2035-03-01, and
+  `date_range`, `age_at_event` and `current_stage.age_range` moved with it.
+  It now lists all five whenever it is active, with `age_at_event` 42.9.
+  **Correction to 0.10.1:** the 1984 San Diego Pluto Square also has five
+  passes, from 2024-03-28 (age 40.2), not three from 2025-01-24 (41.1). The
+  same chart's Neptune Square, which had no dates at all in one context,
+  now lists its five. Where the full sequence shows a pass still ahead,
+  `next_major_event` can now name the active event.
+- **No lunar return is skipped.** The search used immanuel's
+  `transit.next_aspect_to`, which steps a day on the unsigned distance and
+  overshoots when the Moon accelerates during that day. 6 of 528 month
+  searches (four charts, 2020-2030) skipped a return, e.g. 1990 London
+  February 2026 errored ("No lunar return found"), though the Moon returns
+  2026-02-14 23:51 UTC. It is now the station-safe signed scan, with a
+  month-by-month sweep test against a brute-force scan. Return moments are
+  also more exact (the Moon within 0.0001″ of natal, against 0.0035″), which
+  moves them by a few milliseconds.
+- **A lunar return in a fall-back night's repeated hour is cast at the right
+  instant.** The chart was rebuilt from the local wall-clock time, which
+  immanuel resolves to the first reading. A 1995-03-04 07:31:37 London
+  birth's return at 01:30 GMT on 2026-10-25 was cast at 01:30 BST, an hour
+  early, with a clock-change warning. It is now built from the Julian date.
+- **One timestamp format.** `lunar_return_info.return_date` and
+  `returns_in_month`, `solar_return_info.return_date`, and the lunation and
+  ingress `date_time_utc`/`date_time_local` are ISO 8601 with whole seconds
+  and an explicit offset (e.g. `2026-07-28T20:07:33+01:00`; previously
+  `2026-07-28T20:07:33.143294`). Seconds are truncated, so a return at
+  23:59:59.8 on the last day of a month still reads as that day.
+
 ## [0.10.2] - 2026-11-09
 
 Fixes from a sweep of all 23 tools against independent Swiss Ephemeris

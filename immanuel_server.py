@@ -61,7 +61,7 @@ from immanuel_mcp.utils.coordinates import parse_coordinate
 from immanuel_mcp.utils.errors import (
     validate_inputs, handle_chart_error, validate_aspect_priority, validate_progression_date)
 from immanuel_mcp.utils.subjects import create_subject, effective_timezone
-from immanuel_mcp.utils.datetimes import parse_datetime_value
+from immanuel_mcp.utils.datetimes import iso_timestamp, parse_datetime_value
 from immanuel_mcp.utils.settings import build_call_config, build_applied_settings
 from immanuel_mcp.optimizers.positions import build_optimized_transit_positions
 from immanuel_mcp.optimizers.dignities import build_dignities_section
@@ -449,7 +449,7 @@ def generate_solar_return_chart(
         The full SolarReturn chart object serialized to a JSON dictionary, plus
         return-to-natal aspects under 'natal_cross_aspects' (each entry carries
         'return_object' and 'natal_object'), a 'return_location' echo, and
-        'solar_return_info.return_date': the return moment, naive ISO in the
+        'solar_return_info.return_date': the return moment, ISO 8601 with offset in the
         birth timezone (relocation does not change it).
     """
     try:
@@ -543,8 +543,7 @@ def generate_solar_return_chart(
         # When the return happens, in the birth timezone (relocation keeps
         # it), in the same form as lunar_return_info.return_date.
         result["solar_return_info"] = {
-            "return_date": solar_return.solar_return_date_time.datetime.replace(
-                tzinfo=None).isoformat(),
+            "return_date": iso_timestamp(solar_return.solar_return_date_time.datetime),
         }
         result["return_location"] = {
             "latitude": return_lat,
@@ -610,7 +609,7 @@ def generate_compact_solar_return_chart(
         A compact SolarReturn chart object serialized to a JSON dictionary, plus
         return-to-natal aspects under 'natal_cross_aspects' (each entry carries
         'return_object' and 'natal_object'), a 'return_location' echo, and
-        'solar_return_info.return_date': the return moment, naive ISO in the
+        'solar_return_info.return_date': the return moment, ISO 8601 with offset in the
         birth timezone (relocation does not change it).
     """
     try:
@@ -706,8 +705,7 @@ def generate_compact_solar_return_chart(
         # When the return happens, in the birth timezone (relocation keeps
         # it), in the same form as lunar_return_info.return_date.
         result["solar_return_info"] = {
-            "return_date": solar_return.solar_return_date_time.datetime.replace(
-                tzinfo=None).isoformat(),
+            "return_date": iso_timestamp(solar_return.solar_return_date_time.datetime),
         }
         result["return_location"] = {
             "latitude": return_lat,

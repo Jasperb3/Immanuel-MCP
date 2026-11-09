@@ -21,7 +21,7 @@ from immanuel.const import chart as chart_const
 from immanuel.tools import date as date_tools
 
 from ..constants import PLANET_CONSTANTS
-from ..utils.search import find_exact_aspect_dates
+from ..utils.search import find_pass_cluster
 from .constants import (
     ORBITAL_PERIODS,
     RETURN_SIGNIFICANCE,
@@ -101,46 +101,22 @@ def find_event_exact_dates(
     natal_longitude: float,
     aspect: float,
     reference: datetime,
-    tolerance: float,
-    speed: float,
 ) -> list:
     """
-    Ephemeris-searched dates on which a lifecycle event perfects.
+    Ephemeris-searched dates on which an active lifecycle event perfects:
+    every pass of the sequence the reference belongs to (find_pass_cluster),
+    so a retrograde planet's three - or a slow square's five - passes come
+    back whole and the same whatever the query date.
 
-    Replaces the linear speed estimate for anything with a real ephemeris.
-    A retrograde slow planet perfects the same aspect up to three times, so
-    this returns every perfection in the window the event is within orb for.
-
-    The reference datetime is treated as UTC for the search's starting Julian
-    date. That is only a starting point - the search converges on the true
-    perfection regardless - so the sub-day error from an unknown zone does not
-    affect the result.
-
-    Args:
-        planet_index: Immanuel chart constant for the transiting planet
-        natal_longitude: The natal point's ecliptic longitude in degrees
-        aspect: Aspect angle in degrees (0 for a return)
-        reference: Datetime the orb was measured at
-        tolerance: Orb tolerance in degrees for this event
-        speed: The transiting planet's daily motion in degrees
+    The reference datetime is treated as UTC for the search's Julian date.
+    That only places the reference among the passes; a sub-day error cannot
+    change which sequence it belongs to.
 
     Returns:
         Chronological list of datetimes, empty if the search finds none.
     """
-    daily = max(abs(speed), 1e-4)
-    # Cover the whole in-orb span, tripled so retrograde loops that carry the
-    # planet back out of orb and in again are not cut off. Bounded so a
-    # near-stationary body cannot request a centuries-wide search.
-    half_window = min(max(tolerance / daily * 3, 30.0), 730.0)
-
     reference_jd = date_tools.to_jd(reference, lat=0.0, lon=0.0, time_zone="UTC")
-    hits = find_exact_aspect_dates(
-        planet_index,
-        natal_longitude,
-        aspect,
-        reference_jd - half_window,
-        half_window * 2,
-    )
+    hits = find_pass_cluster(planet_index, natal_longitude, aspect, reference_jd)
     return [
         date_tools.to_datetime(jd, lat=0.0, lon=0.0, time_zone="UTC").replace(tzinfo=None)
         for jd in hits
@@ -336,7 +312,7 @@ def calculate_planetary_return(
         try:
             exact_dates = find_event_exact_dates(
                 planet_const, natal_pos, calc_const.CONJUNCTION,
-                transit_datetime, tolerance, speed)
+                transit_datetime)
         except Exception as e:
             logger.warning(f"Exact-date search failed for {planet_name} return: {e}")
         exact_datetime = closest_exact_date(exact_dates, transit_datetime)

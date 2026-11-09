@@ -14,7 +14,7 @@ from immanuel.tools import position
 
 from ..app import mcp
 from ..utils.call_context import reports_warnings
-from ..utils.datetimes import parse_datetime_value
+from ..utils.datetimes import iso_timestamp, parse_datetime_value
 from ..utils.errors import handle_chart_error
 from ..utils.search import body_position, find_state_changes
 from ..constants import PLANET_CONSTANTS
@@ -131,10 +131,10 @@ def get_sign_ingresses(
                     "into_sign": _SIGN_NAMES.get(into_sign),
                     "retrograde_re_entry": (into_sign == _previous_sign(from_sign))
                     != (planet_name in _NORMALLY_RETROGRADE),
-                    "date_time_utc": date_tools.to_datetime(
-                        jd, lat=0.0, lon=0.0, time_zone="UTC").isoformat(),
-                    "date_time_local": date_tools.to_datetime(
-                        jd, lat=0.0, lon=0.0, time_zone=local_zone).isoformat(),
+                    "date_time_utc": iso_timestamp(date_tools.to_datetime(
+                        jd, lat=0.0, lon=0.0, time_zone="UTC")),
+                    "date_time_local": iso_timestamp(date_tools.to_datetime(
+                        jd, lat=0.0, lon=0.0, time_zone=local_zone)),
                 })
                 jd += _STEP_PAST_JD
             ingresses[planet_name] = events

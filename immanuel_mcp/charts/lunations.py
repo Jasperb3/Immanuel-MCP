@@ -15,7 +15,7 @@ from immanuel.tools import ephemeris, position, transit
 from ..app import mcp
 from ..utils.call_context import reports_warnings
 from ..utils.coordinates import parse_coordinate
-from ..utils.datetimes import parse_datetime_value
+from ..utils.datetimes import iso_timestamp, parse_datetime_value
 from ..utils.errors import handle_chart_error
 
 logger = logging.getLogger(__name__)
@@ -41,10 +41,10 @@ def _event(kind: str, jd: float, lat: float, lon: float, timezone: str,
     """Build one calendar entry from a Julian date."""
     entry = {
         "type": kind,
-        "date_time_utc": date_tools.to_datetime(
-            jd, lat=0.0, lon=0.0, time_zone="UTC").isoformat(),
-        "date_time_local": date_tools.to_datetime(
-            jd, lat=lat, lon=lon, time_zone=timezone).isoformat(),
+        "date_time_utc": iso_timestamp(date_tools.to_datetime(
+            jd, lat=0.0, lon=0.0, time_zone="UTC")),
+        "date_time_local": iso_timestamp(date_tools.to_datetime(
+            jd, lat=lat, lon=lon, time_zone=timezone)),
         **_moon_placement(jd),
     }
     if eclipse_type is not None:

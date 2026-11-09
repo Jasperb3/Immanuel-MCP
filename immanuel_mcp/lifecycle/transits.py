@@ -192,7 +192,7 @@ def check_major_transit(
         try:
             exact_dates = find_event_exact_dates(
                 transit_planet_const, natal_pos, ASPECT_ANGLES[aspect_type],
-                transit_datetime, tolerance, speed)
+                transit_datetime)
         except Exception as e:
             logger.warning(
                 f"Exact-date search failed for {transit_config['name']}: {e}")
