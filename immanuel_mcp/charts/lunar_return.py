@@ -27,8 +27,9 @@ from ..utils.call_context import reports_warnings
 from ..lifecycle.attach import attach_lifecycle_section
 from ..utils.coordinates import parse_coordinate
 from ..utils.datetimes import iso_timestamp
-from ..utils.subjects import create_subject
-from ..utils.errors import handle_chart_error, validate_aspect_priority, validate_inputs
+from ..utils.subjects import create_subject, warn_on_untimed_derived_chart
+from ..utils.errors import (
+    handle_chart_error, validate_aspect_priority, validate_inputs, validate_time_status)
 from ..utils.settings import build_call_config, build_applied_settings
 from ..utils.search import crossed_by, find_return_jd
 from ..optimizers.cross_aspects import (
@@ -88,17 +89,24 @@ def _find_lunar_return_jds(
     return found
 
 
-def _subject_at(jd: float, lat: float, lon: float, timezone: str = None) -> charts.Subject:
+def _subject_at(jd: float, lat: float, lon: float, timezone: str = None,
+                birth_time_status: int = chart_const.TIME_KNOWN) -> charts.Subject:
     """
     A Subject at the return instant, given by its Julian date. Never by a
     wall-clock time: in the repeated hour of a fall-back night immanuel
     resolves a local time - and even an aware datetime, UTC included - to
     the first reading, so a return at 01:30 GMT on 2026-10-25 was cast at
     01:30 BST, an hour early. The Julian date has no such ambiguity.
+
+    From an untimed birth the instant itself is uncertain, so the return
+    chart is TIME_APPROXIMATE (no houses or angles). Never TIME_UNKNOWN:
+    immanuel would recast the return instant at local noon.
     """
     kwargs = {"date_time": jd, "latitude": lat, "longitude": lon}
     if timezone:
         kwargs["timezone"] = timezone
+    if birth_time_status != chart_const.TIME_KNOWN:
+        kwargs["time_status"] = chart_const.TIME_APPROXIMATE
     return charts.Subject(**kwargs)
 
 
@@ -192,7 +200,8 @@ def generate_lunar_return_chart(
     include_natal_aspects: bool = True,
     return_latitude: str = None,
     return_longitude: str = None,
-    occurrence: int = 1
+    occurrence: int = 1,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Calculate lunar return chart for specified month/year.
@@ -228,6 +237,11 @@ def generate_lunar_return_chart(
                     lunar_return_info.returns_in_month always lists every
                     return in the month; asking for one that doesn't exist
                     returns an error naming those that do.
+        time_status: Birth time status: "known" (default), "approximate" or
+                     "unknown" (natal chart cast for local noon). The return
+                     is then searched from that natal Moon, its instant is
+                     uncertain (up to ~12 hours for "unknown", see warnings),
+                     and the return chart omits houses and angles.
 
     Returns:
         Full lunar return chart with all positions and aspects, plus
@@ -240,6 +254,7 @@ def generate_lunar_return_chart(
 
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
+        status = validate_time_status(time_status)
 
         if not 1 <= return_month <= 12:
             raise ValueError(f"Return month must be between 1 and 12. Got: {return_month}")
@@ -257,7 +272,8 @@ def generate_lunar_return_chart(
         return_lon = parse_coordinate(return_longitude, is_latitude=False) if return_longitude else lon
 
         # Get natal Moon's position
-        natal_subject = create_subject(date_time, lat, lon, timezone)
+        natal_subject = create_subject(date_time, lat, lon, timezone, status)
+        warn_on_untimed_derived_chart("lunar", natal_subject)
         natal_chart = charts.Natal(natal_subject, config=call_config)
         natal_moon = natal_chart.objects.get(4000002)  # Moon's index
 
@@ -287,10 +303,10 @@ def generate_lunar_return_chart(
         # the Subject.
         if relocated:
             return_local_dt = date_tools.to_datetime(return_jd, lat=return_lat, lon=return_lon)
-            return_subject = _subject_at(return_jd, return_lat, return_lon)
+            return_subject = _subject_at(return_jd, return_lat, return_lon, birth_time_status=status)
             return_date_value = iso_timestamp(return_local_dt)
         else:
-            return_subject = _subject_at(return_jd, lat, lon, timezone)
+            return_subject = _subject_at(return_jd, lat, lon, timezone, birth_time_status=status)
             return_date_value = iso_timestamp(return_moment)
         lunar_return_chart = charts.Natal(return_subject, config=call_config)
 
@@ -340,7 +356,7 @@ def generate_lunar_return_chart(
             comparison_datetime=lunar_return_dt
         )
 
-        result["applied_settings"] = build_applied_settings(house_system)
+        result["applied_settings"] = build_applied_settings(house_system, status)
         result["status"] = "success"
         logger.info(f"Lunar return chart generated successfully for {lunar_return_dt.isoformat()}")
         return result
@@ -364,7 +380,8 @@ def generate_compact_lunar_return_chart(
     aspect_priority: str = "tight",
     return_latitude: str = None,
     return_longitude: str = None,
-    occurrence: int = 1
+    occurrence: int = 1,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Calculate compact lunar return chart with optimized response.
@@ -404,6 +421,11 @@ def generate_compact_lunar_return_chart(
                     lunar_return_info.returns_in_month always lists every
                     return in the month; asking for one that doesn't exist
                     returns an error naming those that do.
+        time_status: Birth time status: "known" (default), "approximate" or
+                     "unknown" (natal chart cast for local noon). The return
+                     is then searched from that natal Moon, its instant is
+                     uncertain (up to ~12 hours for "unknown", see warnings),
+                     and the return chart omits houses and angles.
 
     Returns:
         Compact lunar return chart optimized for LLM processing, plus
@@ -416,6 +438,7 @@ def generate_compact_lunar_return_chart(
 
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
+        status = validate_time_status(time_status)
         validate_aspect_priority(aspect_priority)
 
         if not 1 <= return_month <= 12:
@@ -434,7 +457,8 @@ def generate_compact_lunar_return_chart(
         return_lon = parse_coordinate(return_longitude, is_latitude=False) if return_longitude else lon
 
         # Get natal Moon's position
-        natal_subject = create_subject(date_time, lat, lon, timezone)
+        natal_subject = create_subject(date_time, lat, lon, timezone, status)
+        warn_on_untimed_derived_chart("lunar", natal_subject)
         natal_chart = charts.Natal(natal_subject, config=call_config)
         natal_moon = natal_chart.objects.get(4000002)  # Moon's index
 
@@ -464,10 +488,10 @@ def generate_compact_lunar_return_chart(
         # the Subject.
         if relocated:
             return_local_dt = date_tools.to_datetime(return_jd, lat=return_lat, lon=return_lon)
-            return_subject = _subject_at(return_jd, return_lat, return_lon)
+            return_subject = _subject_at(return_jd, return_lat, return_lon, birth_time_status=status)
             return_date_value = iso_timestamp(return_local_dt)
         else:
-            return_subject = _subject_at(return_jd, lat, lon, timezone)
+            return_subject = _subject_at(return_jd, lat, lon, timezone, birth_time_status=status)
             return_date_value = iso_timestamp(return_moment)
         lunar_return_chart = charts.Natal(return_subject, config=call_config)
 
@@ -518,7 +542,7 @@ def generate_compact_lunar_return_chart(
             comparison_datetime=lunar_return_dt
         )
 
-        result["applied_settings"] = build_applied_settings(house_system)
+        result["applied_settings"] = build_applied_settings(house_system, status)
         result["status"] = "success"
         logger.info(f"Compact lunar return chart generated successfully for {lunar_return_dt.isoformat()}")
         return result

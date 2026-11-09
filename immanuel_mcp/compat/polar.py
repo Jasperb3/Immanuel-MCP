@@ -1,8 +1,8 @@
 """
 Let charts inside the polar circles build.
 
-immanuel 1.6 hard-codes Placidus for the Part of Fortune Ascendant
-(tools/part.py) and the diurnal check (tools/condition.py), and uses the
+immanuel 1.6 and 1.7 hard-code Placidus for the Part of Fortune Ascendant
+(tools/part.py) and the diurnal check (tools/condition.py), and use the
 chart's own system for the houses. All three go through
 immanuel.tools.sweph.angles_houses_vertex, which calls swe.houses_ex2 or
 swe.houses_armc_ex2. Inside a polar circle the Swiss Ephemeris C library
@@ -32,8 +32,9 @@ from ..utils.call_context import note_polar_fallback, polar_fell_back
 logger = logging.getLogger(__name__)
 
 # The immanuel releases whose sweph.py this was checked against. The pin is
-# immanuel>=1.6.0,<1.7; widen this only after re-reading angles_houses_vertex.
-SUPPORTED = ("1.6.",)
+# immanuel>=1.7.0,<1.8 (angles_houses_vertex is unchanged from 1.6); widen
+# this only after re-reading angles_houses_vertex.
+SUPPORTED = ("1.7.",)
 POLAR_MESSAGE = "polar circle"
 PORPHYRY = b"O"
 _HSYS_POSITION = 3  # houses_ex2(jd, lat, lon, hsys) / houses_armc_ex2(armc, lat, eps, hsys)

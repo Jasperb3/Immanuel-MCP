@@ -4,8 +4,25 @@ from datetime import datetime, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 
 from immanuel import charts
+from immanuel.const import chart as chart_const
+from immanuel.const import names as names_const
+from immanuel.support.localize import localize
+from immanuel.tools import convert, position, sweph
+from immanuel.tools import date as date_tools
 
 from .call_context import add_warning
+
+TIME_STATUS_NAMES = {
+    chart_const.TIME_KNOWN: "known",
+    chart_const.TIME_APPROXIMATE: "approximate",
+    chart_const.TIME_UNKNOWN: "unknown",
+}
+
+# What immanuel 1.7 leaves out of a chart whose birth time isn't known.
+_OMITTED = (
+    "houses, the angles (Ascendant, MC and their opposites), the Vertex, the "
+    "Parts of Fortune, Spirit and Eros, sect and day/night triplicity rulers "
+    "are omitted")
 
 
 def _utc_offset(local: datetime) -> str:
@@ -44,7 +61,104 @@ def _warn_on_clock_change(subject: charts.Subject) -> None:
             f"of the two")
 
 
-def create_subject(date_time: str, latitude: float, longitude: float, timezone: str = None) -> charts.Subject:
+def _moon_at(local: datetime, locale: str = None) -> dict:
+    lon, _ = sweph.longitude(chart_const.MOON, date_tools.to_jd(local))
+    return {
+        "time": local.isoformat(),
+        "longitude": lon,
+        "sign": localize(names_const.SIGNS[position.sign(lon)], locale),
+        "sign_longitude": convert.dec_to_string(position.sign_longitude(lon)),
+    }
+
+
+def moon_range(subject: charts.Subject, locale: str = None) -> dict:
+    """
+    Where the Moon is over the subject's local birth day, 00:00 to 23:59.
+
+    For an unknown birth time the chart's Moon is the noon Moon, while the
+    real one could be anywhere along this span (12-15 degrees). sign_change
+    says whether the Moon's sign itself is in doubt.
+    """
+    day = subject.date_time
+    start = _moon_at(day.replace(hour=0, minute=0, second=0, microsecond=0), locale)
+    end = _moon_at(day.replace(hour=23, minute=59, second=0, microsecond=0), locale)
+    start_sign = position.sign(start["longitude"])
+    return {
+        "start": start,
+        "end": end,
+        "sign_change": position.sign(end["longitude"]) != start_sign,
+    }
+
+
+def _warn_on_time_status(subject: charts.Subject, who: str = None) -> None:
+    """Say what an approximate or unknown birth time leaves out. `who`
+    ("Native", "Partner") names the person in a two-chart call."""
+    label = f"{who}'s birth time" if who else "Birth time"
+    status = subject.time_status
+    local = subject.date_time
+    if status == chart_const.TIME_APPROXIMATE:
+        add_warning(
+            f"{label} approximate: the chart is cast at {local:%Y-%m-%d %H:%M} "
+            f"{local.tzname()}, but {_OMITTED}, since they depend on an exact time.")
+    elif status == chart_const.TIME_UNKNOWN:
+        span = moon_range(subject)
+        start, end = span["start"], span["end"]
+        moon = (
+            f"The Moon changes sign that day ({start['sign']} {start['sign_longitude']} "
+            f"at 00:00 to {end['sign']} {end['sign_longitude']} at 23:59), so its "
+            f"sign is uncertain."
+            if span["sign_change"] else
+            f"It stays in {start['sign']} all day ({start['sign_longitude']} at "
+            f"00:00 to {end['sign_longitude']} at 23:59).")
+        add_warning(
+            f"{label} unknown: the chart is cast for local noon "
+            f"({local:%Y-%m-%d} 12:00 {local.tzname()}), and {_OMITTED}. The Moon "
+            f"moves 12-15 degrees a day, so its position may be up to ~7 degrees "
+            f"off. {moon}")
+
+
+def warn_on_untimed_derived_chart(kind: str, subject: charts.Subject) -> None:
+    """
+    Say how an approximate or unknown birth time carries into a chart derived
+    from it: "solar" or "lunar" return (the instant is found from the natal
+    Sun or Moon) or "progressed". `subject` is the birth subject.
+    """
+    status = subject.time_status
+    if status == chart_const.TIME_KNOWN:
+        return
+    omitted = "the return chart's houses and angles are omitted"
+    if kind == "progressed":
+        add_warning(
+            "Progressed chart from an untimed birth: the progressed angles are "
+            "omitted, and the progressed Moon (about 1 degree a month) carries "
+            "the natal Moon's uncertainty of up to ~7 degrees, so progressed-Moon "
+            "timing may be up to ~7 months out."
+            if status == chart_const.TIME_UNKNOWN else
+            "Progressed chart from an approximate birth time: the progressed "
+            "angles are omitted.")
+        return
+    name = {"solar": "Solar", "lunar": "Lunar"}[kind]
+    if status == chart_const.TIME_APPROXIMATE:
+        add_warning(
+            f"{name} return from an approximate birth time: the return instant "
+            f"shifts by about as much as the birth time is off, so {omitted}.")
+    elif kind == "solar":
+        add_warning(
+            "Solar return from an untimed birth: the natal Sun is the noon Sun, "
+            "up to ~0.5 degrees from the real one, so the return instant may be "
+            f"off by up to ~12 hours either way; {omitted}.")
+    else:
+        span = moon_range(subject)
+        start, end = span["start"], span["end"]
+        add_warning(
+            f"Lunar return from an untimed birth: the natal Moon is the noon Moon, "
+            f"and the real one lies between {start['sign']} {start['sign_longitude']} "
+            f"(00:00) and {end['sign']} {end['sign_longitude']} (23:59), so the "
+            f"return instant may be off by up to ~12 hours either way; {omitted}.")
+
+
+def create_subject(date_time: str, latitude: float, longitude: float, timezone: str = None,
+                   time_status: int = chart_const.TIME_KNOWN, who: str = None) -> charts.Subject:
     """
     Create an Immanuel Subject with optional timezone.
 
@@ -53,6 +167,11 @@ def create_subject(date_time: str, latitude: float, longitude: float, timezone: 
         latitude: Parsed latitude as float
         longitude: Parsed longitude as float
         timezone: Optional IANA timezone name
+        time_status: chart_const.TIME_KNOWN (default), TIME_APPROXIMATE or
+            TIME_UNKNOWN (see validate_time_status). Anything but known adds
+            a warning naming what the chart leaves out.
+        who: Names the person in that warning ("Native", "Partner") when a
+            call takes two birth charts.
 
     Returns:
         Configured Subject instance
@@ -64,8 +183,13 @@ def create_subject(date_time: str, latitude: float, longitude: float, timezone: 
     }
     if timezone:
         subject_kwargs['timezone'] = timezone
+    if time_status != chart_const.TIME_KNOWN:
+        subject_kwargs['time_status'] = time_status
     subject = charts.Subject(**subject_kwargs)
-    _warn_on_clock_change(subject)
+    if time_status != chart_const.TIME_UNKNOWN:
+        # An unknown time is replaced by noon, so the given clock time is moot.
+        _warn_on_clock_change(subject)
+    _warn_on_time_status(subject, who)
     return subject
 
 

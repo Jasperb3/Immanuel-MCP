@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.10.5 · 23 tools · 402 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.11.0 · 23 tools · 463 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -67,8 +67,8 @@ Every chart-generating tool accepts a per-call `house_system` override and retur
 - Python 3.10 or higher
 - [uv](https://docs.astral.sh/uv/) package manager
 
-> **Run this server in its own environment.** Since v0.9.0 it requires
-> immanuel 1.6, which depends on `pysweph`. `pysweph` and `pyswisseph`
+> **Run this server in its own environment.** It requires immanuel 1.7
+> (1.6 since v0.9.0, 1.7 since v0.11.0), which depends on `pysweph`. `pysweph` and `pyswisseph`
 > (required by kerykeion below 6, and by `kerykeion[swiss]`) install the same
 > `swisseph` module, so only one can be present, and with `pysweph` installed
 > kerykeion silently returns `house = None` for some planets. Never co-install
@@ -262,6 +262,7 @@ Person 2: Born November 22, 1990 at 9:45 AM in Paris (48n52, 2e20)"
 Every chart tool accepts, in addition to the parameters listed per tool:
 - `timezone`: Optional IANA timezone name (e.g., "Europe/London"). Inferred from coordinates when omitted.
 - `house_system`: Optional house system **for that call only** (e.g., "CAMPANUS", "WHOLE_SIGN"). Applied to every chart built within the call without touching the session-global settings; an invalid name returns an error listing all 23 valid values. Per-call overrides start from library defaults and deliberately ignore session-level `configure_immanuel_settings` changes.
+- `time_status` (v0.11.0): how well the birth time is known, `"known"` (default), `"approximate"` or `"unknown"`, on every tool that takes a birth time. Composite and synastry take `native_time_status` and `partner_time_status`; transit-to-natal applies it to the natal chart only. See [Untimed charts](#untimed-charts-v0110).
 
 Every response carries:
 - `status`: `"success"` or `"error"` (error responses keep the existing `error`/`message`/`type`/`suggestion` keys).
@@ -270,7 +271,22 @@ Every response carries:
   - **Polar fallback.** A chart inside a polar circle can't have Placidus, Koch or other polar-sensitive houses, so the Swiss Ephemeris uses Porphyry cusps. `applied_settings.house_system` then reads `"Porphyry (polar fallback from Placidus)"`, and the full chart tools' top-level `house_system` reads `"Porphyrius"` (immanuel's name for Porphyry, and the value `house_system=` accepts) since v0.10.5. The Ascendant and MC are unaffected. Pass `house_system="WHOLE_SIGN"` (or another non-polar system) to get that system with no warning. Before v0.10.2 every chart tool failed inside the polar circles, Whole Sign included.
   - **Clock changes.** A local time that never happened (spring forward) or happened twice (fall back) is accepted, and the warning says which reading was used, e.g. "01:30 occurred twice on 1990-10-28 in Europe/London (the clocks went back); using 01:30 BST (UTC+1), the first of the two".
 
-Invalid input is rejected rather than guessed at (v0.10.2): an unknown `aspect_priority` (valid: `tight`, `moderate`, `loose`, `all`), a `progression_date_time` before birth, and an unknown timezone ("Unknown IANA timezone 'Mars/Olympus'"; tzdata is suggested only when no zone database is installed).
+#### Untimed charts (v0.11.0)
+
+immanuel 1.7's `time_status`. Without a known time a chart has no houses and no angles, so these are omitted: house cusps and every object's house, the Ascendant, Descendant, MC and IC, the Vertex, the Parts of Fortune, Spirit and Eros, sect (`in_sect`, `diurnal`), day/night triplicity rulers, and quadrant weightings. Planets, signs, aspects between planets, the other dignities and the chart shape stay.
+
+| | `"approximate"` | `"unknown"` |
+|---|---|---|
+| Chart cast at | the given time | local noon on the birth date |
+| Moon | about right | up to ~7° off; natal tools add `moon_range` |
+
+The response says what happened: `applied_settings.house_system` is `null` with `applied_settings.time_status` (transit-to-natal keeps the transit chart's house system and adds `natal_time_status`), and a warning lists what is missing. `get_chart_summary` returns `rising_sign`, `house_system` and `diurnal` as `null`.
+
+- **`moon_range`** (natal tools, `"unknown"` only): `{start, end, sign_change}`, the Moon at 00:00 and 23:59 local time on the birth date (`time`, `longitude`, `sign`, `sign_longitude`). When `sign_change` is true the warning says the Moon's sign is uncertain.
+- **Returns.** The return instant is found from the natal Sun or Moon, so it inherits the uncertainty: up to ~12 hours either way for `"unknown"` (the warning cites the day's Moon span for lunar returns), and about as much as the birth time is off for `"approximate"`. Return charts are cast at the computed instant without houses or angles.
+- **Progressions.** The progressed angles are omitted; for `"unknown"` the progressed Moon can be ~7° off, so its timing can be ~7 months out.
+
+Invalid input is rejected rather than guessed at (v0.10.2): an unknown `aspect_priority` (valid: `tight`, `moderate`, `loose`, `all`), a `progression_date_time` before birth, and an unknown timezone ("Unknown IANA timezone 'Mars/Olympus'"; tzdata is suggested only when no zone database is installed), and an unknown `time_status` (v0.11.0).
 
 ### `generate_natal_chart`
 Generates a complete birth chart with full astrological data.

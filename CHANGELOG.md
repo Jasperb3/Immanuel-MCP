@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-11-09
+
+Migration to immanuel 1.7.0, released the same day. Known-time output is
+identical to 0.10.5 apart from immanuel's own new `date_time.time_status`
+field (below) and float noise of at most 6e-14 (True South Node), checked
+over the 90-case snapshot set.
+
+### Added
+- **`time_status` on every tool that takes a birth time**: `"known"`
+  (default), `"approximate"` or `"unknown"`, passed to immanuel 1.7's new
+  `Subject(time_status=...)`. Composite and synastry take
+  `native_time_status` and `partner_time_status`; transit-to-natal applies
+  it to the natal chart only. Without a known time the chart omits houses,
+  angles, the Vertex, the Parts of Fortune/Spirit/Eros, sect, day/night
+  triplicity rulers and quadrant weightings, and `"unknown"` casts it for
+  local noon. `applied_settings.house_system` is then `null` with a
+  `time_status` key (`natal_time_status` on transit-to-natal, whose transit
+  chart keeps its houses), a warning lists what is missing, and
+  `get_chart_summary` returns `rising_sign`, `house_system` and `diurnal`
+  as `null`. An invalid value is an error.
+- **`moon_range`** on `generate_natal_chart` and
+  `generate_compact_natal_chart` for an unknown time: the Moon at 00:00 and
+  23:59 local on the birth date, and `sign_change`. The warning says when
+  the Moon's sign itself is uncertain.
+- **Untimed returns and progressions.** The return instant comes from the
+  natal Sun or Moon, so the tools warn that it is uncertain (up to ~12 h
+  for `"unknown"`), and the return chart omits houses and angles. Lunar
+  return charts are cast as `TIME_APPROXIMATE` at the computed instant: as
+  `TIME_UNKNOWN` immanuel would recast the instant at noon. Progressed
+  charts warn about the progressed Moon's timing.
+
+### Changed
+- **Requires `immanuel>=1.7.0,<1.8`** (1.6 is no longer supported; scipy
+  leaves the lock). Every full chart now carries immanuel's
+  `date_time.time_status` (`"Known time"`, translated) on `native`,
+  `partner`, `progressed_date_time`, `progression_date_time` and
+  `solar_return_date_time`.
+- Ephemeris searches read samples from 1.7's `sweph.longitude()`: same
+  values, a third of the cost. A warm compact transit-to-natal call went
+  from 49.3 to 42.1 ms.
+
+### Fixed
+- **`in_sect` on night charts.** immanuel 1.7.0 drops `in_sect` from every
+  object in a chart with `diurnal: false` (`Chart.wrap_objects` only
+  computes it for day charts). `compat/sect.py` probes one known night
+  chart at startup and, only if the bug shows, recomputes it with
+  immanuel's own `condition.is_object_in_sect`, as 1.6 did. Nothing tested
+  sect before; all 402 tests passed on 1.7.0 with the bug in place.
+- `get_planetary_positions` returns `house: null` instead of failing on a
+  chart without houses.
+- An untimed chart inside a polar circle no longer warns about a Porphyry
+  fallback: it casts no houses.
+
 ## [0.10.5] - 2026-11-09
 
 ### Fixed

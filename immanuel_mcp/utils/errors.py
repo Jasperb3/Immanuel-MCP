@@ -4,6 +4,9 @@ import re
 import zoneinfo
 from datetime import datetime
 from typing import Any, Dict
+
+from immanuel.const import chart as chart_const
+
 from .coordinates import parse_coordinate
 from .datetimes import parse_datetime_value
 
@@ -16,6 +19,27 @@ def validate_aspect_priority(aspect_priority: str) -> None:
         raise ValueError(
             f"Unknown aspect_priority '{aspect_priority}'. Valid values: "
             f"{', '.join(VALID_ASPECT_PRIORITIES)}")
+
+
+def validate_time_status(time_status) -> int:
+    """
+    The immanuel TIME_* constant for a time_status argument.
+
+    Accepts "known", "approximate" or "unknown" (any case; None means known)
+    or the constants 1/2/3, so any value a response echoes is a valid input.
+    """
+    if time_status is None:
+        return chart_const.TIME_KNOWN
+    names = {"known": chart_const.TIME_KNOWN, "approximate": chart_const.TIME_APPROXIMATE,
+             "unknown": chart_const.TIME_UNKNOWN}
+    if isinstance(time_status, str) and time_status.strip().lower() in names:
+        return names[time_status.strip().lower()]
+    if not isinstance(time_status, bool) and str(time_status).strip() in ("1", "2", "3"):
+        return int(str(time_status).strip())
+    raise ValueError(
+        f"Unknown time_status '{time_status}'. Valid values: known, approximate, "
+        f"unknown (approximate: cast at the given time without houses or angles; "
+        f"unknown: cast for local noon without them).")
 
 
 def validate_progression_date(birth_date_time: str, progression_date_time: str) -> None:

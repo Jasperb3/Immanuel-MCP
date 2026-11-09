@@ -60,8 +60,15 @@ from immanuel_mcp.app import mcp
 
 from immanuel_mcp.utils.coordinates import parse_coordinate
 from immanuel_mcp.utils.errors import (
-    validate_inputs, handle_chart_error, validate_aspect_priority, validate_progression_date)
-from immanuel_mcp.utils.subjects import create_subject, effective_timezone
+    validate_inputs, handle_chart_error, validate_aspect_priority, validate_progression_date,
+    validate_time_status)
+from immanuel_mcp.utils.subjects import (
+    TIME_STATUS_NAMES,
+    create_subject,
+    effective_timezone,
+    moon_range,
+    warn_on_untimed_derived_chart,
+)
 from immanuel_mcp.utils.datetimes import iso_timestamp, parse_datetime_value
 from immanuel_mcp.utils.settings import build_call_config, build_applied_settings
 from immanuel_mcp.optimizers.positions import build_optimized_transit_positions
@@ -90,7 +97,8 @@ def generate_compact_natal_chart(
     latitude: str,
     longitude: str,
     timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Generates a compact natal chart with essential information.
@@ -107,6 +115,10 @@ def generate_compact_natal_chart(
                   If not provided, timezone is inferred from coordinates.
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        time_status: Birth time status: "known" (default), "approximate" or
+                     "unknown". Without a known time, houses, angles, the
+                     Vertex, the Parts, sect and day/night triplicity rulers
+                     are omitted, and "unknown" casts the chart for local noon.
 
     Returns:
         A compact Natal chart object serialized to a JSON dictionary, including simplified
@@ -117,6 +129,7 @@ def generate_compact_natal_chart(
 
         # Validate inputs first
         validate_inputs(date_time, latitude, longitude)
+        status = validate_time_status(time_status)
 
         # Parse coordinates
         lat = parse_coordinate(latitude, is_latitude=True)
@@ -125,7 +138,7 @@ def generate_compact_natal_chart(
         call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
-        subject = create_subject(date_time, lat, lon, timezone)
+        subject = create_subject(date_time, lat, lon, timezone, status)
 
         # Generate natal chart
         natal = charts.Natal(subject, config=call_config)
@@ -155,7 +168,10 @@ def generate_compact_natal_chart(
             result["lifecycle_events"] = None
             result["lifecycle_summary"] = None
 
-        result["applied_settings"] = build_applied_settings(house_system)
+        if status == chart_const.TIME_UNKNOWN:
+            # Where the real Moon could be over the birth day.
+            result["moon_range"] = moon_range(subject, call_config.locale)
+        result["applied_settings"] = build_applied_settings(house_system, status)
         result["status"] = "success"
         logger.info("Compact natal chart generated successfully")
         return result
@@ -171,7 +187,8 @@ def generate_natal_chart(
     latitude: str,
     longitude: str,
     timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Generates a natal (birth) chart for a specific person or event.
@@ -184,6 +201,10 @@ def generate_natal_chart(
                   If not provided, timezone is inferred from coordinates.
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        time_status: Birth time status: "known" (default), "approximate" or
+                     "unknown". Without a known time, houses, angles, the
+                     Vertex, the Parts, sect and day/night triplicity rulers
+                     are omitted, and "unknown" casts the chart for local noon.
 
     Returns:
         The full Natal chart object serialized to a JSON dictionary.
@@ -193,6 +214,7 @@ def generate_natal_chart(
 
         # Validate inputs first
         validate_inputs(date_time, latitude, longitude)
+        status = validate_time_status(time_status)
 
         # Parse coordinates
         lat = parse_coordinate(latitude, is_latitude=True)
@@ -201,7 +223,7 @@ def generate_natal_chart(
         call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
-        subject = create_subject(date_time, lat, lon, timezone)
+        subject = create_subject(date_time, lat, lon, timezone, status)
 
         # Generate natal chart
         natal = charts.Natal(subject, config=call_config)
@@ -231,7 +253,10 @@ def generate_natal_chart(
             result["lifecycle_events"] = None
             result["lifecycle_summary"] = None
 
-        result["applied_settings"] = build_applied_settings(house_system)
+        if status == chart_const.TIME_UNKNOWN:
+            # Where the real Moon could be over the birth day.
+            result["moon_range"] = moon_range(subject, call_config.locale)
+        result["applied_settings"] = build_applied_settings(house_system, status)
         result["status"] = "success"
         logger.info("Natal chart generated successfully")
         return result
@@ -248,7 +273,8 @@ def get_chart_summary(
     latitude: str,
     longitude: str,
     timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Get a simplified summary of key chart information.
@@ -260,6 +286,10 @@ def get_chart_summary(
         timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York')
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        time_status: Birth time status: "known" (default), "approximate" or
+                     "unknown". Without a known time, houses, angles, the
+                     Vertex, the Parts, sect and day/night triplicity rulers
+                     are omitted, and "unknown" casts the chart for local noon.
 
     Returns:
         A simplified summary with just the essential information.
@@ -268,13 +298,14 @@ def get_chart_summary(
         logger.info(f"Generating chart summary for {date_time} at {latitude}, {longitude}")
 
         validate_inputs(date_time, latitude, longitude)
+        status = validate_time_status(time_status)
 
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
         call_config = build_call_config(house_system)
 
-        subject = create_subject(date_time, lat, lon, timezone)
+        subject = create_subject(date_time, lat, lon, timezone, status)
         natal = charts.Natal(subject, config=call_config)
 
         # Extract key information with defensive error handling
@@ -321,6 +352,10 @@ def get_chart_summary(
             logger.error(f"Error accessing house system: {e}")
             chart_house_system = "Unknown"
 
+        if status != chart_const.TIME_KNOWN:
+            # No Ascendant, houses or day/night without a birth time.
+            rising_sign = chart_house_system = diurnal = None
+
         result = {
             "sun_sign": sun_sign,
             "moon_sign": moon_sign,
@@ -329,7 +364,7 @@ def get_chart_summary(
             "moon_phase": moon_phase,
             "diurnal": diurnal,
             "house_system": chart_house_system,
-            "applied_settings": build_applied_settings(house_system),
+            "applied_settings": build_applied_settings(house_system, status),
             "status": "success"
         }
 
@@ -348,7 +383,8 @@ def get_planetary_positions(
     latitude: str,
     longitude: str,
     timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Get just the planetary positions in a simplified format.
@@ -360,6 +396,10 @@ def get_planetary_positions(
         timezone: Optional IANA timezone name (e.g., 'Europe/London', 'America/New_York')
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        time_status: Birth time status: "known" (default), "approximate" or
+                     "unknown". Without a known time, houses, angles, the
+                     Vertex, the Parts, sect and day/night triplicity rulers
+                     are omitted, and "unknown" casts the chart for local noon.
 
     Returns:
         Dictionary containing planetary positions in signs and houses.
@@ -368,13 +408,14 @@ def get_planetary_positions(
         logger.info(f"Getting planetary positions for {date_time} at {latitude}, {longitude}")
 
         validate_inputs(date_time, latitude, longitude)
+        status = validate_time_status(time_status)
 
         lat = parse_coordinate(latitude, is_latitude=True)
         lon = parse_coordinate(longitude, is_latitude=False)
 
         call_config = build_call_config(house_system)
 
-        subject = create_subject(date_time, lat, lon, timezone)
+        subject = create_subject(date_time, lat, lon, timezone, status)
         natal = charts.Natal(subject, config=call_config)
         
         planets = {}
@@ -391,13 +432,13 @@ def get_planetary_positions(
                 planets[name] = {
                     "sign": planet.sign.name,
                     "degree": planet.sign_longitude.formatted,
-                    "house": planet.house.number,
+                    "house": planet.house.number if hasattr(planet, "house") else None,
                     "retrograde": planet.movement.retrograde if hasattr(planet, 'movement') else False
                 }
         
         result = {
             "planets": planets,
-            "applied_settings": build_applied_settings(house_system),
+            "applied_settings": build_applied_settings(house_system, status),
             "status": "success"
         }
         logger.info("Planetary positions retrieved successfully")
@@ -419,7 +460,8 @@ def generate_solar_return_chart(
     house_system: str = None,
     include_natal_aspects: bool = True,
     return_latitude: str = None,
-    return_longitude: str = None
+    return_longitude: str = None,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Generates a solar return chart for a given year.
@@ -445,6 +487,12 @@ def generate_solar_return_chart(
                          (defaults to the birth latitude).
         return_longitude: Optional longitude to relocate the return chart to
                           (defaults to the birth longitude).
+        time_status: Birth time status: "known" (default), "approximate" or
+                     "unknown". Without a known time, houses, angles, the
+                     Vertex, the Parts, sect and day/night triplicity rulers
+                     are omitted, and "unknown" casts the chart for local
+                     noon. The return instant is then uncertain too (see
+                     warnings).
 
     Returns:
         The full SolarReturn chart object serialized to a JSON dictionary, plus
@@ -458,6 +506,7 @@ def generate_solar_return_chart(
 
         # Validate inputs first
         validate_inputs(date_time, latitude, longitude)
+        status = validate_time_status(time_status)
 
         # Validate return year
         if not 1900 <= return_year <= 2100:
@@ -474,10 +523,11 @@ def generate_solar_return_chart(
         return_lon = parse_coordinate(return_longitude, is_latitude=False) if return_longitude else lon
 
         # Create subject with optional timezone
-        subject = create_subject(date_time, lat, lon, timezone)
+        subject = create_subject(date_time, lat, lon, timezone, status)
 
         # Generate charts
         natal_chart = charts.Natal(subject, config=call_config)
+        warn_on_untimed_derived_chart("solar", subject)
 
         if relocated:
             # The return moment depends only on the Sun's geocentric longitude
@@ -487,7 +537,7 @@ def generate_solar_return_chart(
             # be reinterpreted in the return location's zone and the whole
             # chart silently wrong.
             birth_tz = timezone or str(subject.date_time.tzinfo)
-            return_subject = create_subject(date_time, return_lat, return_lon, birth_tz)
+            return_subject = create_subject(date_time, return_lat, return_lon, birth_tz, status)
         else:
             return_subject = subject
         solar_return = charts.SolarReturn(return_subject, return_year, config=call_config)
@@ -551,7 +601,7 @@ def generate_solar_return_chart(
             "longitude": return_lon,
             "relocated": relocated
         }
-        result["applied_settings"] = build_applied_settings(house_system)
+        result["applied_settings"] = build_applied_settings(house_system, status)
         result["status"] = "success"
         logger.info("Solar return chart generated successfully")
         return result
@@ -573,7 +623,8 @@ def generate_compact_solar_return_chart(
     include_natal_aspects: bool = True,
     aspect_priority: str = "tight",
     return_latitude: str = None,
-    return_longitude: str = None
+    return_longitude: str = None,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Generates a compact solar return chart for a given year.
@@ -605,6 +656,12 @@ def generate_compact_solar_return_chart(
                          (defaults to the birth latitude).
         return_longitude: Optional longitude to relocate the return chart to
                           (defaults to the birth longitude).
+        time_status: Birth time status: "known" (default), "approximate" or
+                     "unknown". Without a known time, houses, angles, the
+                     Vertex, the Parts, sect and day/night triplicity rulers
+                     are omitted, and "unknown" casts the chart for local
+                     noon. The return instant is then uncertain too (see
+                     warnings).
 
     Returns:
         A compact SolarReturn chart object serialized to a JSON dictionary, plus
@@ -618,6 +675,7 @@ def generate_compact_solar_return_chart(
 
         # Validate inputs first
         validate_inputs(date_time, latitude, longitude)
+        status = validate_time_status(time_status)
         validate_aspect_priority(aspect_priority)
 
         # Validate return year
@@ -635,10 +693,11 @@ def generate_compact_solar_return_chart(
         return_lon = parse_coordinate(return_longitude, is_latitude=False) if return_longitude else lon
 
         # Create subject with optional timezone
-        subject = create_subject(date_time, lat, lon, timezone)
+        subject = create_subject(date_time, lat, lon, timezone, status)
 
         # Generate charts
         natal_chart = charts.Natal(subject, config=call_config)
+        warn_on_untimed_derived_chart("solar", subject)
 
         if relocated:
             # The return moment depends only on the Sun's geocentric longitude
@@ -648,7 +707,7 @@ def generate_compact_solar_return_chart(
             # be reinterpreted in the return location's zone and the whole
             # chart silently wrong.
             birth_tz = timezone or str(subject.date_time.tzinfo)
-            return_subject = create_subject(date_time, return_lat, return_lon, birth_tz)
+            return_subject = create_subject(date_time, return_lat, return_lon, birth_tz, status)
         else:
             return_subject = subject
         solar_return = charts.SolarReturn(return_subject, return_year, config=call_config)
@@ -713,7 +772,7 @@ def generate_compact_solar_return_chart(
             "longitude": return_lon,
             "relocated": relocated
         }
-        result["applied_settings"] = build_applied_settings(house_system)
+        result["applied_settings"] = build_applied_settings(house_system, status)
         result["status"] = "success"
         logger.info("Compact solar return chart generated successfully")
         return result
@@ -732,7 +791,8 @@ def generate_progressed_chart(
     progression_date_time: str,
     timezone: str = None,
     house_system: str = None,
-    include_natal_aspects: bool = True
+    include_natal_aspects: bool = True,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Generates a secondary progression chart for a native chart to a specific future date.
@@ -748,6 +808,10 @@ def generate_progressed_chart(
         include_natal_aspects: Include progressed-to-natal aspects — the core
                                technique of secondary progressions — under
                                'natal_cross_aspects' (default: True).
+        time_status: Birth time status: "known" (default), "approximate" or
+                     "unknown". Without a known time, houses, angles, the
+                     Vertex, the Parts, sect and day/night triplicity rulers
+                     are omitted, and "unknown" casts the chart for local noon.
 
     Returns:
         The full Progressed chart object serialized to a JSON dictionary, plus
@@ -759,6 +823,7 @@ def generate_progressed_chart(
 
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
+        status = validate_time_status(time_status)
         validate_progression_date(date_time, progression_date_time)
         validate_inputs(progression_date_time, latitude, longitude)  # Reuse validation for progression date
 
@@ -769,7 +834,8 @@ def generate_progressed_chart(
         call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
-        subject = create_subject(date_time, lat, lon, timezone)
+        subject = create_subject(date_time, lat, lon, timezone, status)
+        warn_on_untimed_derived_chart("progressed", subject)
 
         # Generate charts
         natal_chart = charts.Natal(subject, config=call_config)
@@ -832,7 +898,7 @@ def generate_progressed_chart(
             additional_events=additional_events
         )
 
-        result["applied_settings"] = build_applied_settings(house_system)
+        result["applied_settings"] = build_applied_settings(house_system, status)
         result["status"] = "success"
         logger.info("Progressed chart generated successfully")
         return result
@@ -852,7 +918,8 @@ def generate_compact_progressed_chart(
     timezone: str = None,
     house_system: str = None,
     include_natal_aspects: bool = True,
-    aspect_priority: str = "tight"
+    aspect_priority: str = "tight",
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Generates a compact secondary progression chart for a native chart to a specific future date.
@@ -874,6 +941,10 @@ def generate_compact_progressed_chart(
         aspect_priority: Priority tier for the natal cross-aspects - "tight"
                          (default, 0-2° actual orb), "moderate" (>2-5°),
                          "loose" (>5°), or "all".
+        time_status: Birth time status: "known" (default), "approximate" or
+                     "unknown". Without a known time, houses, angles, the
+                     Vertex, the Parts, sect and day/night triplicity rulers
+                     are omitted, and "unknown" casts the chart for local noon.
 
     Returns:
         A compact Progressed chart object serialized to a JSON dictionary, plus
@@ -885,6 +956,7 @@ def generate_compact_progressed_chart(
 
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
+        status = validate_time_status(time_status)
         validate_progression_date(date_time, progression_date_time)
         validate_aspect_priority(aspect_priority)
         validate_inputs(progression_date_time, latitude, longitude)  # Reuse validation for progression date
@@ -896,7 +968,8 @@ def generate_compact_progressed_chart(
         call_config = build_call_config(house_system)
 
         # Create subject with optional timezone
-        subject = create_subject(date_time, lat, lon, timezone)
+        subject = create_subject(date_time, lat, lon, timezone, status)
+        warn_on_untimed_derived_chart("progressed", subject)
 
         # Generate charts
         natal_chart = charts.Natal(subject, config=call_config)
@@ -960,7 +1033,7 @@ def generate_compact_progressed_chart(
             additional_events=additional_events
         )
 
-        result["applied_settings"] = build_applied_settings(house_system)
+        result["applied_settings"] = build_applied_settings(house_system, status)
         result["status"] = "success"
         logger.info("Compact progressed chart generated successfully")
         return result
@@ -981,7 +1054,9 @@ def generate_composite_chart(
     partner_longitude: str,
     native_timezone: str = None,
     partner_timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    native_time_status: str = "known",
+    partner_time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Generates a composite (midpoint) chart for two subjects.
@@ -997,6 +1072,12 @@ def generate_composite_chart(
         partner_timezone: Optional IANA timezone for second subject (e.g., 'America/New_York').
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        native_time_status: The first subject's birth time status: "known"
+                            (default), "approximate" or "unknown" (cast for
+                            local noon).
+        partner_time_status: The second subject's birth time status, likewise.
+                             Unless both are known, houses, angles, the
+                             Vertex and the Parts are omitted.
 
     Returns:
         The full Composite chart object serialized to a JSON dictionary.
@@ -1007,6 +1088,8 @@ def generate_composite_chart(
         # Validate inputs for both subjects
         validate_inputs(native_date_time, native_latitude, native_longitude)
         validate_inputs(partner_date_time, partner_latitude, partner_longitude)
+        native_status = validate_time_status(native_time_status)
+        partner_status = validate_time_status(partner_time_status)
 
         # Parse coordinates for native
         native_lat = parse_coordinate(native_latitude, is_latitude=True)
@@ -1019,15 +1102,15 @@ def generate_composite_chart(
         call_config = build_call_config(house_system)
 
         # Create subjects with optional timezones
-        native = create_subject(native_date_time, native_lat, native_lon, native_timezone)
-        partner = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
+        native = create_subject(native_date_time, native_lat, native_lon, native_timezone, native_status, who="Native")
+        partner = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone, partner_status, who="Partner")
 
         # Generate composite chart
         composite = charts.Composite(native, partner, config=call_config)
 
         # Serialize to JSON
         result = serialize_full_chart(composite)
-        result["applied_settings"] = build_applied_settings(house_system)
+        result["applied_settings"] = build_applied_settings(house_system, max(native_status, partner_status))
         result["status"] = "success"
         logger.info("Composite chart generated successfully")
         return result
@@ -1048,7 +1131,9 @@ def generate_compact_composite_chart(
     partner_longitude: str,
     native_timezone: str = None,
     partner_timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    native_time_status: str = "known",
+    partner_time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Generates a compact composite (midpoint) chart for two subjects.
@@ -1068,6 +1153,12 @@ def generate_compact_composite_chart(
         partner_timezone: Optional IANA timezone for second subject (e.g., 'America/New_York').
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        native_time_status: The first subject's birth time status: "known"
+                            (default), "approximate" or "unknown" (cast for
+                            local noon).
+        partner_time_status: The second subject's birth time status, likewise.
+                             Unless both are known, houses, angles, the
+                             Vertex and the Parts are omitted.
 
     Returns:
         A compact Composite chart object serialized to a JSON dictionary.
@@ -1078,6 +1169,8 @@ def generate_compact_composite_chart(
         # Validate inputs for both subjects
         validate_inputs(native_date_time, native_latitude, native_longitude)
         validate_inputs(partner_date_time, partner_latitude, partner_longitude)
+        native_status = validate_time_status(native_time_status)
+        partner_status = validate_time_status(partner_time_status)
 
         # Parse coordinates for native
         native_lat = parse_coordinate(native_latitude, is_latitude=True)
@@ -1090,15 +1183,15 @@ def generate_compact_composite_chart(
         call_config = build_call_config(house_system)
 
         # Create subjects with optional timezones
-        native = create_subject(native_date_time, native_lat, native_lon, native_timezone)
-        partner = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
+        native = create_subject(native_date_time, native_lat, native_lon, native_timezone, native_status, who="Native")
+        partner = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone, partner_status, who="Partner")
 
         # Generate composite chart
         composite = charts.Composite(native, partner, config=call_config)
 
         # Serialize to JSON using the compact serializer
         result = json.loads(json.dumps(composite, cls=CompactJSONSerializer))
-        result["applied_settings"] = build_applied_settings(house_system)
+        result["applied_settings"] = build_applied_settings(house_system, max(native_status, partner_status))
         result["status"] = "success"
         logger.info("Compact composite chart generated successfully")
         return result
@@ -1119,7 +1212,9 @@ def generate_synastry_aspects(
     partner_longitude: str,
     native_timezone: str = None,
     partner_timezone: str = None,
-    house_system: str = None
+    house_system: str = None,
+    native_time_status: str = "known",
+    partner_time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Calculates the synastry aspects between two charts. This shows how one person's planets aspect another's.
@@ -1135,6 +1230,12 @@ def generate_synastry_aspects(
         partner_timezone: Optional IANA timezone for second subject (e.g., 'America/New_York').
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        native_time_status: The first subject's birth time status: "known"
+                            (default), "approximate" or "unknown" (cast for
+                            local noon).
+        partner_time_status: The second subject's birth time status, likewise.
+                             Unless both are known, houses, angles, the
+                             Vertex and the Parts are omitted.
 
     Returns:
         Dictionary with the aspects from the primary (native) Natal chart under
@@ -1146,6 +1247,8 @@ def generate_synastry_aspects(
         # Validate inputs for both subjects
         validate_inputs(native_date_time, native_latitude, native_longitude)
         validate_inputs(partner_date_time, partner_latitude, partner_longitude)
+        native_status = validate_time_status(native_time_status)
+        partner_status = validate_time_status(partner_time_status)
 
         # Parse coordinates for native
         native_lat = parse_coordinate(native_latitude, is_latitude=True)
@@ -1158,8 +1261,8 @@ def generate_synastry_aspects(
         # Create subjects with optional timezones
         call_config = build_call_config(house_system)
 
-        native_subject = create_subject(native_date_time, native_lat, native_lon, native_timezone)
-        partner_subject = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
+        native_subject = create_subject(native_date_time, native_lat, native_lon, native_timezone, native_status, who="Native")
+        partner_subject = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone, partner_status, who="Partner")
 
         # Create partner chart first
         partner_chart = charts.Natal(partner_subject, config=call_config)
@@ -1171,7 +1274,7 @@ def generate_synastry_aspects(
         chart_data = serialize_full_chart(native_chart)
         result = {
             "aspects": chart_data.get('aspects', {}),
-            "applied_settings": build_applied_settings(house_system),
+            "applied_settings": build_applied_settings(house_system, max(native_status, partner_status)),
             "status": "success"
         }
         logger.info("Synastry aspects generated successfully")
@@ -1194,7 +1297,9 @@ def generate_compact_synastry_aspects(
     native_timezone: str = None,
     partner_timezone: str = None,
     include_interpretations: bool = True,
-    house_system: str = None
+    house_system: str = None,
+    native_time_status: str = "known",
+    partner_time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Calculates compact synastry aspects between two charts, filtered to show only major aspects between major objects.
@@ -1215,6 +1320,12 @@ def generate_compact_synastry_aspects(
         include_interpretations: Include aspect interpretation keywords (default: True).
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Does not affect the session-global settings.
+        native_time_status: The first subject's birth time status: "known"
+                            (default), "approximate" or "unknown" (cast for
+                            local noon).
+        partner_time_status: The second subject's birth time status, likewise.
+                             Unless both are known, houses, angles, the
+                             Vertex and the Parts are omitted.
 
     Returns:
         Filtered synastry aspects showing only major aspects between major objects.
@@ -1225,6 +1336,8 @@ def generate_compact_synastry_aspects(
         # Validate inputs for both subjects
         validate_inputs(native_date_time, native_latitude, native_longitude)
         validate_inputs(partner_date_time, partner_latitude, partner_longitude)
+        native_status = validate_time_status(native_time_status)
+        partner_status = validate_time_status(partner_time_status)
 
         # Parse coordinates for native
         native_lat = parse_coordinate(native_latitude, is_latitude=True)
@@ -1237,8 +1350,8 @@ def generate_compact_synastry_aspects(
         # Create subjects with optional timezones
         call_config = build_call_config(house_system)
 
-        native_subject = create_subject(native_date_time, native_lat, native_lon, native_timezone)
-        partner_subject = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone)
+        native_subject = create_subject(native_date_time, native_lat, native_lon, native_timezone, native_status, who="Native")
+        partner_subject = create_subject(partner_date_time, partner_lat, partner_lon, partner_timezone, partner_status, who="Partner")
 
         # Create partner chart first
         partner_chart = charts.Natal(partner_subject, config=call_config)
@@ -1263,7 +1376,7 @@ def generate_compact_synastry_aspects(
 
         result = {
             "aspects": filtered_aspects,
-            "applied_settings": build_applied_settings(house_system),
+            "applied_settings": build_applied_settings(house_system, max(native_status, partner_status)),
             "status": "success"
         }
         logger.info("Compact synastry aspects generated successfully")
@@ -1377,7 +1490,8 @@ def generate_transit_to_natal(
     aspect_priority: str = "tight",  # Changed from "all" to "tight" for MCP size safety
     include_all_aspects: bool = False,
     include_lifecycle_events: bool = True,
-    house_system: str = None
+    house_system: str = None,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Calculates transiting planet aspects to a natal chart for a specific date.
@@ -1406,6 +1520,10 @@ def generate_transit_to_natal(
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Applied to both natal and transit charts.
                       Does not affect the session-global settings.
+        time_status: The natal birth time's status: "known" (default),
+                     "approximate" or "unknown" (cast for local noon). Without
+                     a known time the natal houses, angles, Vertex and Parts
+                     are omitted; the transit chart is unaffected.
 
     Returns:
         Dictionary containing natal chart summary, transit positions, paginated aspects,
@@ -1423,6 +1541,7 @@ def generate_transit_to_natal(
         # Validate natal inputs
         logger.debug(f"[TRANSIT-FULL] Validating inputs")
         validate_inputs(natal_date_time, natal_latitude, natal_longitude)
+        status = validate_time_status(time_status)
 
         # Parse natal coordinates
         logger.debug(f"[TRANSIT-FULL] Parsing coordinates: natal_lat={natal_latitude}, natal_lon={natal_longitude}")
@@ -1439,7 +1558,7 @@ def generate_transit_to_natal(
         # Create natal and transit subjects. The optional timezone applies to
         # both datetimes; when omitted, immanuel infers it from coordinates.
         logger.debug(f"[TRANSIT-FULL] Creating natal subject")
-        natal_subject = create_subject(natal_date_time, natal_lat, natal_lon, timezone)
+        natal_subject = create_subject(natal_date_time, natal_lat, natal_lon, timezone, status)
 
         # Create transit subject for the specified date
         logger.debug(f"[TRANSIT-FULL] Creating transit subject")
@@ -1487,6 +1606,8 @@ def generate_transit_to_natal(
                 rising_sign = asc.sign.name
         except Exception as e:
             logger.debug(f"Could not extract rising sign: {e}")
+        if status != chart_const.TIME_KNOWN:
+            rising_sign = None  # no Ascendant without a birth time
 
         # Build result with natal summary and transit aspects
         logger.debug(f"[TRANSIT-FULL] Building result dictionary")
@@ -1593,6 +1714,9 @@ def generate_transit_to_natal(
             "applied_settings": build_applied_settings(house_system),
             "status": "success"
         }
+        if status != chart_const.TIME_KNOWN:
+            # Natal houses are omitted; the transit chart's are still cast.
+            result["applied_settings"]["natal_time_status"] = TIME_STATUS_NAMES[status]
 
         # === LIFECYCLE EVENTS DETECTION ===
         if include_lifecycle_events:
@@ -1637,7 +1761,8 @@ def generate_compact_transit_to_natal(
     timezone: str | None = None,
     include_interpretations: bool = True,
     include_lifecycle_events: bool = True,
-    house_system: str = None
+    house_system: str = None,
+    time_status: str = "known"
 ) -> Dict[str, Any]:
     """
     Calculates compact transiting planet aspects to a natal chart with interpretation hints.
@@ -1658,6 +1783,10 @@ def generate_compact_transit_to_natal(
         house_system: Optional house system for this call only (e.g., 'CAMPANUS',
                       'WHOLE_SIGN'). Applied to both natal and transit charts.
                       Does not affect the session-global settings.
+        time_status: The natal birth time's status: "known" (default),
+                     "approximate" or "unknown" (cast for local noon). Without
+                     a known time the natal houses, angles, Vertex and Parts
+                     are omitted; the transit chart is unaffected.
 
     Returns:
         Compact dictionary with natal summary, transit positions, and filtered major aspects
@@ -1668,6 +1797,7 @@ def generate_compact_transit_to_natal(
 
         # Validate natal inputs
         validate_inputs(natal_date_time, natal_latitude, natal_longitude)
+        status = validate_time_status(time_status)
 
         # Parse natal coordinates
         natal_lat = parse_coordinate(natal_latitude, is_latitude=True)
@@ -1681,7 +1811,7 @@ def generate_compact_transit_to_natal(
 
         # Create natal and transit subjects. The optional timezone applies to
         # both datetimes; when omitted, immanuel infers it from coordinates.
-        natal_subject = create_subject(natal_date_time, natal_lat, natal_lon, timezone)
+        natal_subject = create_subject(natal_date_time, natal_lat, natal_lon, timezone, status)
 
         # Create transit subject for the specified date
         transit_subject = create_subject(transit_date_time, transit_lat, transit_lon, timezone)
@@ -1732,6 +1862,8 @@ def generate_compact_transit_to_natal(
                 rising_sign = asc.sign.name
         except Exception as e:
             logger.debug(f"Could not extract rising sign: {e}")
+        if status != chart_const.TIME_KNOWN:
+            rising_sign = None  # no Ascendant without a birth time
 
         # Build compact result
         result = {
@@ -1748,6 +1880,9 @@ def generate_compact_transit_to_natal(
             "applied_settings": build_applied_settings(house_system),
             "status": "success"
         }
+        if status != chart_const.TIME_KNOWN:
+            # Natal houses are omitted; the transit chart's are still cast.
+            result["applied_settings"]["natal_time_status"] = TIME_STATUS_NAMES[status]
 
         if include_lifecycle_events:
             attach_lifecycle_section(

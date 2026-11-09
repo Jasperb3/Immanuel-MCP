@@ -22,6 +22,7 @@ from immanuel.const import names as names_const
 from immanuel.tools import sweph
 
 from .call_context import add_warning, polar_fell_back
+from .subjects import TIME_STATUS_NAMES
 
 
 _session_config = charts.Config()
@@ -378,15 +379,23 @@ def reset_global_settings() -> dict:
     }
 
 
-def build_applied_settings(house_system: str = None) -> dict:
+def build_applied_settings(house_system: str = None,
+                           time_status: int = chart_const.TIME_KNOWN) -> dict:
     """
     Build the applied_settings echo for a chart response, so the consuming
     LLM can verify which settings produced the chart instead of assuming.
+
+    A chart without a known birth time casts no houses, so house_system is
+    None and time_status names the status ("approximate" or "unknown"). The
+    key is absent for a known time, so ordinary responses are unchanged.
     """
     if house_system is None:
         system, source = get_session_config().house_system, "session-global"
     else:
         system, source = resolve_house_system(house_system), "per-call"
+    if time_status != chart_const.TIME_KNOWN:
+        return {"house_system": None, "source": source,
+                "time_status": TIME_STATUS_NAMES[time_status]}
     name = house_system_display_name(system)
     if polar_fell_back(sweph._SWE.get(system)):
         add_warning(

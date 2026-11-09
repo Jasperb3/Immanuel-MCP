@@ -20,7 +20,7 @@ import swisseph as swe
 from immanuel.const import calc as calc_const
 from immanuel.const import chart as chart_const
 from immanuel.tools import date as date_tools
-from immanuel.tools import ephemeris
+from immanuel.tools import sweph
 
 # Bracketing budget: aim to advance this many degrees per probe, but never
 # more than this many days. The degree budget keeps a fast body from stepping
@@ -80,13 +80,15 @@ _SKIP_MARGIN_DEGREES = 1.0
 
 
 def body_position(index: int, jd: float) -> dict:
-    """Ephemeris position of a planet, asteroid or lunar node.
+    """Ecliptic longitude and speed of a planet, asteroid or lunar node.
 
-    ephemeris.get_planet() only knows planets and the major asteroids, so the
-    nodes raised KeyError. The generic get() also serves points; it requires
-    a latitude, which is unused for the geocentric bodies scanned here.
+    immanuel 1.7's sweph.longitude() serves every body whose position needs
+    only a Julian date, nodes included, and skips the declination and the
+    rest of the chart object that ephemeris.get() built: the same lon and
+    speed at about a third of the cost per sample.
     """
-    return ephemeris.get(index, jd, lat=0.0, lon=0.0)
+    lon, speed = sweph.longitude(index, jd)
+    return {"lon": lon, "speed": speed}
 
 
 def find_state_changes(
