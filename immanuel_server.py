@@ -20,6 +20,7 @@ from immanuel import charts
 from immanuel.const import chart as chart_const
 from immanuel.tools import convert
 from immanuel_mcp.serializers import CompactJSONSerializer, serialize_full_chart
+from immanuel_mcp.utils.call_context import reports_warnings
 
 # Configure logging to file only (CRITICAL: logging to stdout/stderr breaks stdio transport)
 # Create logs directory if it doesn't exist
@@ -81,6 +82,7 @@ from immanuel_mcp.interpretations.aspects import (
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_natal_chart(
     date_time: str,
     latitude: str,
@@ -161,6 +163,7 @@ def generate_compact_natal_chart(
         return handle_chart_error(e)
 
 @mcp.tool()
+@reports_warnings
 def generate_natal_chart(
     date_time: str,
     latitude: str,
@@ -237,6 +240,7 @@ def generate_natal_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def get_chart_summary(
     date_time: str,
     latitude: str,
@@ -336,6 +340,7 @@ def get_chart_summary(
 
 
 @mcp.tool()
+@reports_warnings
 def get_planetary_positions(
     date_time: str,
     latitude: str,
@@ -402,6 +407,7 @@ def get_planetary_positions(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_solar_return_chart(
     date_time: str,
     latitude: str,
@@ -547,6 +553,7 @@ def generate_solar_return_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_solar_return_chart(
     date_time: str,
     latitude: str,
@@ -700,6 +707,7 @@ def generate_compact_solar_return_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_progressed_chart(
     date_time: str,
     latitude: str,
@@ -817,6 +825,7 @@ def generate_progressed_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_progressed_chart(
     date_time: str,
     latitude: str,
@@ -942,6 +951,7 @@ def generate_compact_progressed_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_composite_chart(
     native_date_time: str,
     native_latitude: str,
@@ -1008,6 +1018,7 @@ def generate_composite_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_composite_chart(
     native_date_time: str,
     native_latitude: str,
@@ -1078,6 +1089,7 @@ def generate_compact_composite_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_synastry_aspects(
     native_date_time: str,
     native_latitude: str,
@@ -1151,6 +1163,7 @@ def generate_synastry_aspects(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_synastry_aspects(
     native_date_time: str,
     native_latitude: str,
@@ -1242,6 +1255,7 @@ def generate_compact_synastry_aspects(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_transit_chart(
     latitude: str,
     longitude: str,
@@ -1284,6 +1298,7 @@ def generate_transit_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_transit_chart(
     latitude: str,
     longitude: str,
@@ -1330,6 +1345,7 @@ def generate_compact_transit_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_transit_to_natal(
     natal_date_time: str,
     natal_latitude: str,
@@ -1595,6 +1611,7 @@ def generate_transit_to_natal(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_transit_to_natal(
     natal_date_time: str,
     natal_latitude: str,

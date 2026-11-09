@@ -19,6 +19,9 @@ from immanuel import charts
 from immanuel.const import calc as calc_const
 from immanuel.const import chart as chart_const
 from immanuel.const import names as names_const
+from immanuel.tools import sweph
+
+from .call_context import add_warning, polar_fell_back
 
 
 _session_config = charts.Config()
@@ -381,11 +384,16 @@ def build_applied_settings(house_system: str = None) -> dict:
     LLM can verify which settings produced the chart instead of assuming.
     """
     if house_system is None:
-        return {
-            "house_system": house_system_display_name(get_session_config().house_system),
-            "source": "session-global",
-        }
-    return {
-        "house_system": house_system_display_name(resolve_house_system(house_system)),
-        "source": "per-call",
-    }
+        system, source = get_session_config().house_system, "session-global"
+    else:
+        system, source = resolve_house_system(house_system), "per-call"
+    name = house_system_display_name(system)
+    if polar_fell_back(sweph._SWE.get(system)):
+        add_warning(
+            f"A chart in this response lies inside a polar circle, where {name} "
+            f"houses are undefined, so the Swiss Ephemeris used Porphyry cusps "
+            f"instead. The Ascendant and MC are unaffected. Pass "
+            f"house_system='WHOLE_SIGN' (or another non-polar system) to avoid "
+            f"the fallback.")
+        name = f"Porphyry (polar fallback from {name})"
+    return {"house_system": name, "source": source}

@@ -23,6 +23,7 @@ from immanuel.tools import date as date_tools
 from ..serializers import CompactJSONSerializer, serialize_full_chart
 
 from ..app import mcp
+from ..utils.call_context import reports_warnings
 from ..lifecycle.attach import attach_lifecycle_section
 from ..utils.coordinates import parse_coordinate
 from ..utils.subjects import create_subject
@@ -107,6 +108,7 @@ def find_lunar_return_date(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_lunar_return_chart(
     date_time: str,
     latitude: str,
@@ -269,6 +271,7 @@ def generate_lunar_return_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_lunar_return_chart(
     date_time: str,
     latitude: str,

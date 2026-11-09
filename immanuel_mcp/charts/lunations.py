@@ -13,6 +13,7 @@ from immanuel.tools import date as date_tools
 from immanuel.tools import ephemeris, position, transit
 
 from ..app import mcp
+from ..utils.call_context import reports_warnings
 from ..utils.coordinates import parse_coordinate
 from ..utils.datetimes import parse_datetime_value
 from ..utils.errors import handle_chart_error
@@ -52,6 +53,7 @@ def _event(kind: str, jd: float, lat: float, lon: float, timezone: str,
 
 
 @mcp.tool()
+@reports_warnings
 def get_lunations_and_eclipses(
     start_date_time: str,
     count: int = 6,

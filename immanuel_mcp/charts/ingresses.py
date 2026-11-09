@@ -13,6 +13,7 @@ from immanuel.tools import date as date_tools
 from immanuel.tools import position
 
 from ..app import mcp
+from ..utils.call_context import reports_warnings
 from ..utils.datetimes import parse_datetime_value
 from ..utils.errors import handle_chart_error
 from ..utils.search import body_position, find_state_changes
@@ -71,6 +72,7 @@ def _next_ingress_jd(planet_index: int, jd: float) -> float:
 
 
 @mcp.tool()
+@reports_warnings
 def get_sign_ingresses(
     start_date_time: str,
     planets: List[str] = None,
