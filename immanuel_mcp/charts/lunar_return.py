@@ -23,10 +23,11 @@ from immanuel.tools import date as date_tools
 from ..serializers import CompactJSONSerializer, serialize_full_chart
 
 from ..app import mcp
+from ..utils.call_context import reports_warnings
 from ..lifecycle.attach import attach_lifecycle_section
 from ..utils.coordinates import parse_coordinate
 from ..utils.subjects import create_subject
-from ..utils.errors import handle_chart_error, validate_inputs
+from ..utils.errors import handle_chart_error, validate_aspect_priority, validate_inputs
 from ..utils.settings import build_call_config, build_applied_settings
 from ..utils.search import find_return_jd
 from ..optimizers.cross_aspects import (
@@ -37,22 +38,24 @@ from ..optimizers.cross_aspects import (
 logger = logging.getLogger(__name__)
 
 
-def _find_lunar_return_jd(
+# Restart the search this far past a found return, so it can't find the
+# same one again; the next is ~27.3 days on.
+_RESTART_DAYS = 1.0
+
+
+def _find_lunar_return_jds(
     natal_moon_longitude: float,
     year: int,
     month: int,
     lat: float,
     lon: float,
     timezone: str = None
-) -> float:
+) -> list:
     """
-    Find the Julian date of the Moon's return to its natal position within
-    a given month. See find_lunar_return_date for the search semantics; the
-    month window is interpreted in the given timezone (or the zone inferred
-    from the coordinates when omitted).
-
-    Raises:
-        ValueError: If no lunar return is found in the specified month
+    Julian dates of every return of the Moon to its natal position within a
+    given month: one, or two when a return falls near the 1st and the next
+    ~27.3 days later still inside the month. The month window is interpreted
+    in the given timezone (or the zone inferred from the coordinates).
     """
     month_start = datetime(year, month, 1)
     month_end = datetime(year + 1, 1, 1) if month == 12 else datetime(year, month + 1, 1)
@@ -60,10 +63,48 @@ def _find_lunar_return_jd(
     start_jd = date_tools.to_jd(month_start, lat=lat, lon=lon, time_zone=timezone)
     end_jd = date_tools.to_jd(month_end, lat=lat, lon=lon, time_zone=timezone)
 
+    found = []
     return_jd = find_return_jd(chart_const.MOON, natal_moon_longitude, start_jd)
-    if return_jd >= end_jd:
+    while return_jd < end_jd:
+        found.append(return_jd)
+        return_jd = find_return_jd(
+            chart_const.MOON, natal_moon_longitude, return_jd + _RESTART_DAYS)
+    return found
+
+
+def _local_iso(jd: float, lat: float, lon: float, timezone: str = None) -> str:
+    """A return moment as the naive local ISO string return_date uses."""
+    return date_tools.to_datetime(
+        jd, lat=lat, lon=lon, time_zone=timezone).replace(tzinfo=None).isoformat()
+
+
+def _find_lunar_return_jd(
+    natal_moon_longitude: float,
+    year: int,
+    month: int,
+    lat: float,
+    lon: float,
+    timezone: str = None,
+    occurrence: int = 1,
+) -> float:
+    """
+    The Julian date of the `occurrence`-th lunar return in a month (1 = the
+    first). See _find_lunar_return_jds.
+
+    Raises:
+        ValueError: If the month has no such return. The message lists the
+            returns it does have.
+    """
+    returns = _find_lunar_return_jds(natal_moon_longitude, year, month, lat, lon, timezone)
+    if not returns:
         raise ValueError(f"No lunar return found in {year}-{month:02d}")
-    return return_jd
+    if not 1 <= occurrence <= len(returns):
+        listed = ", ".join(_local_iso(jd, lat, lon, timezone) for jd in returns)
+        raise ValueError(
+            f"occurrence={occurrence} does not exist: {year}-{month:02d} has "
+            f"{len(returns)} lunar return{'s' if len(returns) > 1 else ''} "
+            f"({listed}). Use occurrence 1 to {len(returns)}.")
+    return returns[occurrence - 1]
 
 
 def find_lunar_return_date(
@@ -72,7 +113,8 @@ def find_lunar_return_date(
     month: int,
     lat: float,
     lon: float,
-    timezone: str = None
+    timezone: str = None,
+    occurrence: int = 1,
 ) -> datetime:
     """
     Find the moment the Moon returns to its natal position within a given month.
@@ -83,7 +125,7 @@ def find_lunar_return_date(
 
     Note: the sidereal lunar month is ~27.3 days, so a 30/31-day calendar
     month occasionally contains two returns (one near the 1st and one near
-    the end). This function returns the first.
+    the end). `occurrence` picks one; the default is the first.
 
     Args:
         natal_moon_longitude: The natal Moon's ecliptic longitude in degrees
@@ -101,12 +143,14 @@ def find_lunar_return_date(
     Raises:
         ValueError: If no lunar return is found in the specified month
     """
-    return_jd = _find_lunar_return_jd(natal_moon_longitude, year, month, lat, lon, timezone)
+    return_jd = _find_lunar_return_jd(
+        natal_moon_longitude, year, month, lat, lon, timezone, occurrence)
     local_dt = date_tools.to_datetime(return_jd, lat=lat, lon=lon, time_zone=timezone)
     return local_dt.replace(tzinfo=None)
 
 
 @mcp.tool()
+@reports_warnings
 def generate_lunar_return_chart(
     date_time: str,
     latitude: str,
@@ -117,7 +161,8 @@ def generate_lunar_return_chart(
     house_system: str = None,
     include_natal_aspects: bool = True,
     return_latitude: str = None,
-    return_longitude: str = None
+    return_longitude: str = None,
+    occurrence: int = 1
 ) -> Dict[str, Any]:
     """
     Calculate lunar return chart for specified month/year.
@@ -147,6 +192,12 @@ def generate_lunar_return_chart(
                          (defaults to the birth latitude).
         return_longitude: Optional longitude to relocate the return chart to
                           (defaults to the birth longitude).
+        occurrence: Which return in the month (default 1). About one month in
+                    three has two (the sidereal month is ~27.3 days), and the
+                    second is reachable only with occurrence=2.
+                    lunar_return_info.returns_in_month always lists every
+                    return in the month; asking for one that doesn't exist
+                    returns an error naming those that do.
 
     Returns:
         Full lunar return chart with all positions and aspects, plus
@@ -193,7 +244,8 @@ def generate_lunar_return_chart(
             return_month,
             lat,
             lon,
-            timezone
+            timezone,
+            occurrence
         )
         lunar_return_dt = date_tools.to_datetime(
             return_jd, lat=lat, lon=lon, time_zone=timezone
@@ -240,7 +292,16 @@ def generate_lunar_return_chart(
             'return_date': return_date_value,
             'natal_moon_longitude': natal_moon_longitude,
             'return_year': return_year,
-            'return_month': return_month
+            'return_month': return_month,
+            'occurrence': occurrence,
+            # Every return in the month, so a second one is visible without
+            # guessing; select it with occurrence=2. Same zone as return_date.
+            'returns_in_month': [
+                date_tools.to_datetime(jd, lat=return_lat, lon=return_lon).isoformat() if relocated
+                else _local_iso(jd, lat, lon, timezone)
+                for jd in _find_lunar_return_jds(
+                    natal_moon_longitude, return_year, return_month, lat, lon, timezone)
+            ],
         }
         result['return_location'] = {
             'latitude': return_lat,
@@ -269,6 +330,7 @@ def generate_lunar_return_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_lunar_return_chart(
     date_time: str,
     latitude: str,
@@ -280,7 +342,8 @@ def generate_compact_lunar_return_chart(
     include_natal_aspects: bool = True,
     aspect_priority: str = "tight",
     return_latitude: str = None,
-    return_longitude: str = None
+    return_longitude: str = None,
+    occurrence: int = 1
 ) -> Dict[str, Any]:
     """
     Calculate compact lunar return chart with optimized response.
@@ -314,6 +377,12 @@ def generate_compact_lunar_return_chart(
                          (defaults to the birth latitude).
         return_longitude: Optional longitude to relocate the return chart to
                           (defaults to the birth longitude).
+        occurrence: Which return in the month (default 1). About one month in
+                    three has two (the sidereal month is ~27.3 days), and the
+                    second is reachable only with occurrence=2.
+                    lunar_return_info.returns_in_month always lists every
+                    return in the month; asking for one that doesn't exist
+                    returns an error naming those that do.
 
     Returns:
         Compact lunar return chart optimized for LLM processing, plus
@@ -326,6 +395,7 @@ def generate_compact_lunar_return_chart(
 
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
+        validate_aspect_priority(aspect_priority)
 
         if not 1 <= return_month <= 12:
             raise ValueError(f"Return month must be between 1 and 12. Got: {return_month}")
@@ -360,7 +430,8 @@ def generate_compact_lunar_return_chart(
             return_month,
             lat,
             lon,
-            timezone
+            timezone,
+            occurrence
         )
         lunar_return_dt = date_tools.to_datetime(
             return_jd, lat=lat, lon=lon, time_zone=timezone
@@ -408,7 +479,16 @@ def generate_compact_lunar_return_chart(
             'return_date': return_date_value,
             'natal_moon_longitude': natal_moon_longitude,
             'return_year': return_year,
-            'return_month': return_month
+            'return_month': return_month,
+            'occurrence': occurrence,
+            # Every return in the month, so a second one is visible without
+            # guessing; select it with occurrence=2. Same zone as return_date.
+            'returns_in_month': [
+                date_tools.to_datetime(jd, lat=return_lat, lon=return_lon).isoformat() if relocated
+                else _local_iso(jd, lat, lon, timezone)
+                for jd in _find_lunar_return_jds(
+                    natal_moon_longitude, return_year, return_month, lat, lon, timezone)
+            ],
         }
         result['return_location'] = {
             'latitude': return_lat,

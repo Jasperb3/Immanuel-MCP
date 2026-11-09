@@ -15,6 +15,7 @@ from ..interpretations.aspects import (
     get_context_aware_interpretation,
     normalize_aspects_to_list,
 )
+from ..utils.errors import validate_aspect_priority
 from ..pagination.helpers import (
     build_aspect_summary,
     classify_all_aspects,
@@ -22,8 +23,6 @@ from ..pagination.helpers import (
     filter_aspects_by_priority,
     get_actual_orb,
 )
-
-VALID_PRIORITIES = ("tight", "moderate", "loose", "all")
 
 
 def _movement_label(aspect: Dict[str, Any]) -> Any:
@@ -84,11 +83,9 @@ def build_compact_cross_aspects(
     objects and major aspects only, filtered to the requested priority
     tier, with interpretation hints.
 
-    An unknown aspect_priority falls back to 'tight' (same behaviour as
-    transit-to-natal).
+    An unknown aspect_priority is rejected, as on transit-to-natal.
     """
-    if aspect_priority not in VALID_PRIORITIES:
-        aspect_priority = "tight"
+    validate_aspect_priority(aspect_priority)
 
     all_aspects = cross_chart_data.get("aspects", [])
     tight, moderate, loose = classify_all_aspects(all_aspects)

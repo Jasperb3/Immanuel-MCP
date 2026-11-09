@@ -1,6 +1,47 @@
 """create_subject helper function"""
 
+from datetime import datetime, timezone as dt_timezone
+from zoneinfo import ZoneInfo
+
 from immanuel import charts
+
+from .call_context import add_warning
+
+
+def _utc_offset(local: datetime) -> str:
+    minutes = int(local.utcoffset().total_seconds() // 60)
+    sign = "+" if minutes >= 0 else "-"
+    hours, rest = divmod(abs(minutes), 60)
+    return f"UTC{sign}{hours}" + (f":{rest:02d}" if rest else "")
+
+
+def _warn_on_clock_change(subject: charts.Subject) -> None:
+    """
+    Say which reading was used when a local time falls in a clock change.
+
+    A time inside a spring-forward gap never happened, and one inside a
+    fall-back overlap happened twice. immanuel accepts both silently and
+    flags them only as `date_time_ambiguous`; the offset it actually used is
+    on the resolved datetime, which is what this reports.
+    """
+    local = subject.date_time
+    zone = local.tzinfo
+    if not isinstance(zone, ZoneInfo):
+        return
+    wall = local.replace(tzinfo=None)
+    same_instant = local.astimezone(dt_timezone.utc).astimezone(zone)
+    clock, day = f"{wall:%H:%M}", wall.date().isoformat()
+    used = f"{clock} {local.tzname()} ({_utc_offset(local)})"
+    if same_instant.replace(tzinfo=None) != wall:
+        add_warning(
+            f"{clock} did not exist on {day} in {zone.key} (the clocks went "
+            f"forward); using {used}, the same instant as {same_instant:%H:%M} "
+            f"{same_instant.tzname()} ({_utc_offset(same_instant)})")
+    elif local.replace(fold=1 - local.fold).utcoffset() != local.utcoffset():
+        add_warning(
+            f"{clock} occurred twice on {day} in {zone.key} (the clocks went "
+            f"back); using {used}, the {'first' if local.fold == 0 else 'second'} "
+            f"of the two")
 
 
 def create_subject(date_time: str, latitude: float, longitude: float, timezone: str = None) -> charts.Subject:
@@ -23,7 +64,9 @@ def create_subject(date_time: str, latitude: float, longitude: float, timezone: 
     }
     if timezone:
         subject_kwargs['timezone'] = timezone
-    return charts.Subject(**subject_kwargs)
+    subject = charts.Subject(**subject_kwargs)
+    _warn_on_clock_change(subject)
+    return subject
 
 
 def effective_timezone(subject: charts.Subject) -> str:

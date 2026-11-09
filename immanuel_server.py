@@ -20,6 +20,7 @@ from immanuel import charts
 from immanuel.const import chart as chart_const
 from immanuel.tools import convert
 from immanuel_mcp.serializers import CompactJSONSerializer, serialize_full_chart
+from immanuel_mcp.utils.call_context import reports_warnings
 
 # Configure logging to file only (CRITICAL: logging to stdout/stderr breaks stdio transport)
 # Create logs directory if it doesn't exist
@@ -57,7 +58,8 @@ from immanuel_mcp.app import mcp
 # ============================================================================
 
 from immanuel_mcp.utils.coordinates import parse_coordinate
-from immanuel_mcp.utils.errors import validate_inputs, handle_chart_error
+from immanuel_mcp.utils.errors import (
+    validate_inputs, handle_chart_error, validate_aspect_priority, validate_progression_date)
 from immanuel_mcp.utils.subjects import create_subject, effective_timezone
 from immanuel_mcp.utils.datetimes import parse_datetime_value
 from immanuel_mcp.utils.settings import build_call_config, build_applied_settings
@@ -81,6 +83,7 @@ from immanuel_mcp.interpretations.aspects import (
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_natal_chart(
     date_time: str,
     latitude: str,
@@ -161,6 +164,7 @@ def generate_compact_natal_chart(
         return handle_chart_error(e)
 
 @mcp.tool()
+@reports_warnings
 def generate_natal_chart(
     date_time: str,
     latitude: str,
@@ -237,6 +241,7 @@ def generate_natal_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def get_chart_summary(
     date_time: str,
     latitude: str,
@@ -336,6 +341,7 @@ def get_chart_summary(
 
 
 @mcp.tool()
+@reports_warnings
 def get_planetary_positions(
     date_time: str,
     latitude: str,
@@ -402,6 +408,7 @@ def get_planetary_positions(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_solar_return_chart(
     date_time: str,
     latitude: str,
@@ -441,7 +448,9 @@ def generate_solar_return_chart(
     Returns:
         The full SolarReturn chart object serialized to a JSON dictionary, plus
         return-to-natal aspects under 'natal_cross_aspects' (each entry carries
-        'return_object' and 'natal_object') and a 'return_location' echo.
+        'return_object' and 'natal_object'), a 'return_location' echo, and
+        'solar_return_info.return_date': the return moment, naive ISO in the
+        birth timezone (relocation does not change it).
     """
     try:
         logger.info(f"Generating solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
@@ -531,6 +540,12 @@ def generate_solar_return_chart(
             result["lifecycle_events"] = None
             result["lifecycle_summary"] = None
 
+        # When the return happens, in the birth timezone (relocation keeps
+        # it), in the same form as lunar_return_info.return_date.
+        result["solar_return_info"] = {
+            "return_date": solar_return.solar_return_date_time.datetime.replace(
+                tzinfo=None).isoformat(),
+        }
         result["return_location"] = {
             "latitude": return_lat,
             "longitude": return_lon,
@@ -547,6 +562,7 @@ def generate_solar_return_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_solar_return_chart(
     date_time: str,
     latitude: str,
@@ -593,13 +609,16 @@ def generate_compact_solar_return_chart(
     Returns:
         A compact SolarReturn chart object serialized to a JSON dictionary, plus
         return-to-natal aspects under 'natal_cross_aspects' (each entry carries
-        'return_object' and 'natal_object') and a 'return_location' echo.
+        'return_object' and 'natal_object'), a 'return_location' echo, and
+        'solar_return_info.return_date': the return moment, naive ISO in the
+        birth timezone (relocation does not change it).
     """
     try:
         logger.info(f"Generating compact solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
 
         # Validate inputs first
         validate_inputs(date_time, latitude, longitude)
+        validate_aspect_priority(aspect_priority)
 
         # Validate return year
         if not 1900 <= return_year <= 2100:
@@ -684,6 +703,12 @@ def generate_compact_solar_return_chart(
             result["lifecycle_events"] = None
             result["lifecycle_summary"] = None
 
+        # When the return happens, in the birth timezone (relocation keeps
+        # it), in the same form as lunar_return_info.return_date.
+        result["solar_return_info"] = {
+            "return_date": solar_return.solar_return_date_time.datetime.replace(
+                tzinfo=None).isoformat(),
+        }
         result["return_location"] = {
             "latitude": return_lat,
             "longitude": return_lon,
@@ -700,6 +725,7 @@ def generate_compact_solar_return_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_progressed_chart(
     date_time: str,
     latitude: str,
@@ -734,6 +760,7 @@ def generate_progressed_chart(
 
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
+        validate_progression_date(date_time, progression_date_time)
         validate_inputs(progression_date_time, latitude, longitude)  # Reuse validation for progression date
 
         # Parse coordinates
@@ -817,6 +844,7 @@ def generate_progressed_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_progressed_chart(
     date_time: str,
     latitude: str,
@@ -858,6 +886,8 @@ def generate_compact_progressed_chart(
 
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
+        validate_progression_date(date_time, progression_date_time)
+        validate_aspect_priority(aspect_priority)
         validate_inputs(progression_date_time, latitude, longitude)  # Reuse validation for progression date
 
         # Parse coordinates
@@ -942,6 +972,7 @@ def generate_compact_progressed_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_composite_chart(
     native_date_time: str,
     native_latitude: str,
@@ -1008,6 +1039,7 @@ def generate_composite_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_composite_chart(
     native_date_time: str,
     native_latitude: str,
@@ -1078,6 +1110,7 @@ def generate_compact_composite_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_synastry_aspects(
     native_date_time: str,
     native_latitude: str,
@@ -1151,6 +1184,7 @@ def generate_synastry_aspects(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_synastry_aspects(
     native_date_time: str,
     native_latitude: str,
@@ -1242,6 +1276,7 @@ def generate_compact_synastry_aspects(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_transit_chart(
     latitude: str,
     longitude: str,
@@ -1284,6 +1319,7 @@ def generate_transit_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_transit_chart(
     latitude: str,
     longitude: str,
@@ -1330,6 +1366,7 @@ def generate_compact_transit_chart(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_transit_to_natal(
     natal_date_time: str,
     natal_latitude: str,
@@ -1382,6 +1419,7 @@ def generate_transit_to_natal(
         if aspect_priority is None:
             aspect_priority = "tight"
             logger.info(f"[TRANSIT-FULL] aspect_priority was None, defaulting to 'tight'")
+        validate_aspect_priority(aspect_priority)
 
         # Validate natal inputs
         logger.debug(f"[TRANSIT-FULL] Validating inputs")
@@ -1504,12 +1542,6 @@ def generate_transit_to_natal(
             logger.warning("[TRANSIT-FULL] include_all_aspects=True (deprecated) - treating as aspect_priority='all'")
             aspect_priority = "all"
 
-        # Validate aspect_priority parameter
-        valid_priorities = ["tight", "moderate", "loose", "all"]
-        if aspect_priority not in valid_priorities:
-            logger.warning(f"[TRANSIT-FULL] Invalid aspect_priority '{aspect_priority}', defaulting to 'tight'")
-            aspect_priority = "tight"
-
         # Auto-adjust priority when lifecycle events enabled to avoid MCP size limits.
         # Full aspect data (~59 KB for "all" priority) + lifecycle events (~5-7 KB) exceeds ~50 KB MCP limit
         if include_lifecycle_events and aspect_priority == "all":
@@ -1595,6 +1627,7 @@ def generate_transit_to_natal(
 
 
 @mcp.tool()
+@reports_warnings
 def generate_compact_transit_to_natal(
     natal_date_time: str,
     natal_latitude: str,

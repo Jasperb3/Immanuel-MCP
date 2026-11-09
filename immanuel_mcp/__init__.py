@@ -26,7 +26,11 @@ import re
 from importlib import metadata
 
 from .app import mcp
+from .compat import polar as _polar
 from .constants import CELESTIAL_BODIES
+
+# Charts inside the polar circles need this before any chart is built.
+_polar.install()
 
 
 def _detect_version() -> str:

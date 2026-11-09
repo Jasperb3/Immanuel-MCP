@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.10.1 · 23 tools · 246 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.10.2 · 23 tools · 290 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -264,6 +264,11 @@ Every chart tool accepts, in addition to the parameters listed per tool:
 Every response carries:
 - `status`: `"success"` or `"error"` (error responses keep the existing `error`/`message`/`type`/`suggestion` keys).
 - `applied_settings`: `{"house_system": "<display name>", "source": "per-call" | "session-global"}` on chart responses — lets the consuming LLM verify which settings produced the chart instead of assuming.
+- `warnings` (v0.10.2): a list of strings, present only when there is something to say. Today:
+  - **Polar fallback.** A chart inside a polar circle can't have Placidus, Koch or other polar-sensitive houses, so the Swiss Ephemeris uses Porphyry cusps. `applied_settings.house_system` then reads `"Porphyry (polar fallback from Placidus)"`. The Ascendant and MC are unaffected. Pass `house_system="WHOLE_SIGN"` (or another non-polar system) to get that system with no warning. Before v0.10.2 every chart tool failed inside the polar circles, Whole Sign included.
+  - **Clock changes.** A local time that never happened (spring forward) or happened twice (fall back) is accepted, and the warning says which reading was used, e.g. "01:30 occurred twice on 1990-10-28 in Europe/London (the clocks went back); using 01:30 BST (UTC+1), the first of the two".
+
+Invalid input is rejected rather than guessed at (v0.10.2): an unknown `aspect_priority` (valid: `tight`, `moderate`, `loose`, `all`), a `progression_date_time` before birth, and an unknown timezone ("Unknown IANA timezone 'Mars/Olympus'"; tzdata is suggested only when no zone database is installed).
 
 ### `generate_natal_chart`
 Generates a complete birth chart with full astrological data.
@@ -314,6 +319,8 @@ Calculates a solar return chart for a specific year.
 - `include_natal_aspects`: Include return-planet-to-natal aspects under `natal_cross_aspects` (default: true). Each entry carries explicit `return_object`/`natal_object` keys.
 - `return_latitude` / `return_longitude`: Optional coordinates to relocate the return chart to where the person is at the return moment (the astrological convention). The return *moment* is unchanged; only houses/angles move. The response echoes `return_location: {latitude, longitude, relocated}`.
 
+Both solar return tools report the return moment in `solar_return_info.return_date` (v0.10.2): naive ISO in the birth timezone, like `lunar_return_info.return_date`, e.g. `"2026-05-15T05:04:25.519850"` for a 1990-05-15 London chart.
+
 ### `generate_compact_solar_return_chart`
 Generates a streamlined solar return chart optimized for LLM processing.
 
@@ -339,6 +346,7 @@ Calculates the monthly lunar return chart (the moment the Moon returns to its na
 - `return_month`: Month for the lunar return (1–12)
 - `include_natal_aspects`: Include return-to-natal aspects under `natal_cross_aspects` (default: true)
 - `return_latitude` / `return_longitude`: Optional relocation coordinates; the return instant is preserved and reported in the return location's zone
+- `occurrence` (v0.10.2): which return in the month, default 1. The sidereal month is ~27.3 days, so about one month in three has two returns, and the second is reachable only with `occurrence=2` (for a 1990-05-15 London chart, July 2026 has 1 July and 28 July). `lunar_return_info.returns_in_month` always lists every return in the month, and asking for one that doesn't exist returns an error naming those that do.
 
 ### `generate_compact_lunar_return_chart`
 Streamlined lunar return chart optimized for LLM processing. Same parameters as the full tool, plus `aspect_priority` for the natal cross-aspects (see compact solar return).
