@@ -20,7 +20,7 @@ import swisseph as swe
 from immanuel.const import calc as calc_const
 from immanuel.const import chart as chart_const
 from immanuel.tools import date as date_tools
-from immanuel.tools import ephemeris, transit
+from immanuel.tools import ephemeris
 
 # Bracketing budget: aim to advance this many degrees per probe, but never
 # more than this many days. The degree budget keeps a fast body from stepping
@@ -46,6 +46,14 @@ MAX_STEP_DAYS = 10.0
 _MAX_STEP_DAYS_BY_BODY = {
     chart_const.TRUE_NORTH_NODE: 0.25,
     chart_const.TRUE_SOUTH_NODE: 0.25,
+}
+
+# Fixed steps for bodies that never station. The Moon moves 12-15 deg a
+# day and never turns back, so two crossings of one longitude are ~27 days
+# apart and a quarter-day step (3-4 deg) cannot hold two; the 0.5-deg
+# budget would sample it six times as often for nothing.
+_FIXED_STEP_DAYS = {
+    chart_const.MOON: 0.25,
 }
 
 # Upper bounds on each body's geocentric |speed| in degrees/day: the maximum
@@ -125,7 +133,8 @@ def find_state_changes(
                 return hits
 
         previous_jd, previous_state = jd, current_state
-        step = min(STEP_DEGREES / max(abs(planet["speed"]), 1e-9), max_step)
+        step = _FIXED_STEP_DAYS.get(index) or min(
+            STEP_DEGREES / max(abs(planet["speed"]), 1e-9), max_step)
         if safe_skip is not None:
             step = max(step, safe_skip(planet))
         jd += step
@@ -279,11 +288,75 @@ def find_pass_cluster(index: int, point: float, aspect: float, reference_jd: flo
     return min(clusters, key=distance)
 
 
+# find_return_jd: the first scan covers this many days and doubles until a
+# return turns up, up to the cap (~82 years, beyond any tracked body's period).
+_RETURN_FIRST_WINDOW_DAYS = 30.0
+_RETURN_MAX_WINDOW_DAYS = 30000.0
+# A return this close to from_jd counts as at from_jd: twice the bisection's
+# own precision, so a search started on a return it found finds it again.
+RETURN_TIE_DAYS = 2 * calc_const.MAX_ERROR
+# Each scan starts this far before from_jd, so a return exactly at from_jd
+# has a sample before it to bracket against.
+_RETURN_LEAD_DAYS = 1e-4
+
+
 def find_return_jd(index: int, target_longitude: float, from_jd: float) -> float:
-    """Julian date of an object's next return to a fixed longitude."""
-    return transit.next_aspect_to(
-        index, target_longitude % 360, from_jd, calc_const.CONJUNCTION
-    )
+    """
+    Julian date of an object's first return to a fixed longitude at or after
+    from_jd (a return within RETURN_TIE_DAYS of from_jd counts as at it).
+
+    This used immanuel's transit.next_aspect_to, whose _fixed_aspect_search
+    steps a whole day on the unsigned distance while it is at least the
+    day's speed. A Moon that accelerates during the day overshoots the
+    target, the distance grows, and the loop runs on to the next cycle: 6 of
+    528 month searches skipped a return. This is the station-safe signed
+    scan (_crossings) instead.
+
+    Each attempt is one continuous scan from just before from_jd, doubling
+    its window until a return turns up, so there are no seams inside a scan
+    for a return to fall between, and a given from_jd always gives the same
+    answer.
+
+    Raises:
+        ValueError: if no return turns up within _RETURN_MAX_WINDOW_DAYS.
+    """
+    target = target_longitude % 360
+    window = _RETURN_FIRST_WINDOW_DAYS
+    while window <= _RETURN_MAX_WINDOW_DAYS:
+        hits = [jd for jd in _crossings(index, target, from_jd - _RETURN_LEAD_DAYS,
+                                        from_jd + window)
+                if jd >= from_jd - RETURN_TIE_DAYS]
+        if hits:
+            return _interpolate_crossing(index, target, hits[0])
+        window *= 2
+    raise ValueError(
+        f"No return of object {index} to {target:.4f} deg within "
+        f"{_RETURN_MAX_WINDOW_DAYS:.0f} days of JD {from_jd}")
+
+
+def _interpolate_crossing(index: int, target: float, jd: float) -> float:
+    """
+    Refine a bisected crossing. Bisection returns the first sampled instant
+    past the crossing, up to MAX_ERROR (0.09 s) late, which moves a return
+    chart's Ascendant by about 1 arcsec. Over that interval the motion is
+    linear, so interpolating across it puts the crossing within milliseconds.
+    """
+    lo = jd - calc_const.MAX_ERROR
+    before = swe.difdeg2n(body_position(index, lo)["lon"], target)
+    after = swe.difdeg2n(body_position(index, jd)["lon"], target)
+    if after == before:
+        return jd
+    return lo + calc_const.MAX_ERROR * (-before) / (after - before)
+
+
+def crossed_by(index: int, target_longitude: float, jd: float) -> bool:
+    """
+    Whether the body sits on the far side of the target at jd, i.e. a
+    crossing just before jd has happened. Evaluated at jd itself, so two
+    searches that share a boundary JD agree on which side of it a crossing
+    within the search precision falls.
+    """
+    return swe.difdeg2n(body_position(index, jd)["lon"], target_longitude % 360) >= 0
 
 
 def jd_to_datetime(jd: float, latitude: float = 0.0, longitude: float = 0.0,

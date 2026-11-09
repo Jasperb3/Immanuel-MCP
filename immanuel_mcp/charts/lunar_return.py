@@ -29,7 +29,7 @@ from ..utils.coordinates import parse_coordinate
 from ..utils.subjects import create_subject
 from ..utils.errors import handle_chart_error, validate_aspect_priority, validate_inputs
 from ..utils.settings import build_call_config, build_applied_settings
-from ..utils.search import find_return_jd
+from ..utils.search import crossed_by, find_return_jd
 from ..optimizers.cross_aspects import (
     build_full_cross_aspects,
     build_compact_cross_aspects,
@@ -41,6 +41,8 @@ logger = logging.getLogger(__name__)
 # Restart the search this far past a found return, so it can't find the
 # same one again; the next is ~27.3 days on.
 _RESTART_DAYS = 1.0
+# Returns this close to a month boundary are placed by crossed_by().
+_BOUNDARY_DAYS = 1e-5
 
 
 def _find_lunar_return_jds(
@@ -63,10 +65,23 @@ def _find_lunar_return_jds(
     start_jd = date_tools.to_jd(month_start, lat=lat, lon=lon, time_zone=timezone)
     end_jd = date_tools.to_jd(month_end, lat=lat, lon=lon, time_zone=timezone)
 
+    def in_month(jd: float) -> bool:
+        # Decided on full precision, never on a rounded timestamp. A return
+        # within the search precision of either boundary is placed by the
+        # Moon's side of the target at the boundary JD itself, which the
+        # neighbouring month computes identically, so it lands in exactly
+        # one month.
+        for boundary, inside_if_crossed in ((start_jd, False), (end_jd, True)):
+            if abs(jd - boundary) < _BOUNDARY_DAYS:
+                return crossed_by(chart_const.MOON, natal_moon_longitude, boundary) == inside_if_crossed
+        return start_jd <= jd < end_jd
+
     found = []
-    return_jd = find_return_jd(chart_const.MOON, natal_moon_longitude, start_jd)
-    while return_jd < end_jd:
-        found.append(return_jd)
+    return_jd = find_return_jd(
+        chart_const.MOON, natal_moon_longitude, start_jd - _BOUNDARY_DAYS)
+    while return_jd < end_jd + _BOUNDARY_DAYS:
+        if in_month(return_jd):
+            found.append(return_jd)
         return_jd = find_return_jd(
             chart_const.MOON, natal_moon_longitude, return_jd + _RESTART_DAYS)
     return found
