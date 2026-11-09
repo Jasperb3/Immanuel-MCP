@@ -27,7 +27,7 @@ from ..utils.call_context import reports_warnings
 from ..lifecycle.attach import attach_lifecycle_section
 from ..utils.coordinates import parse_coordinate
 from ..utils.subjects import create_subject
-from ..utils.errors import handle_chart_error, validate_inputs
+from ..utils.errors import handle_chart_error, validate_aspect_priority, validate_inputs
 from ..utils.settings import build_call_config, build_applied_settings
 from ..utils.search import find_return_jd
 from ..optimizers.cross_aspects import (
@@ -395,6 +395,7 @@ def generate_compact_lunar_return_chart(
 
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
+        validate_aspect_priority(aspect_priority)
 
         if not 1 <= return_month <= 12:
             raise ValueError(f"Return month must be between 1 and 12. Got: {return_month}")

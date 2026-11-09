@@ -1,8 +1,44 @@
 """Error handling functions"""
 
+import re
+import zoneinfo
 from datetime import datetime
 from typing import Any, Dict
 from .coordinates import parse_coordinate
+from .datetimes import parse_datetime_value
+
+VALID_ASPECT_PRIORITIES = ("tight", "moderate", "loose", "all")
+
+
+def validate_aspect_priority(aspect_priority: str) -> None:
+    """Reject an unknown tier instead of quietly treating it as 'tight'."""
+    if aspect_priority not in VALID_ASPECT_PRIORITIES:
+        raise ValueError(
+            f"Unknown aspect_priority '{aspect_priority}'. Valid values: "
+            f"{', '.join(VALID_ASPECT_PRIORITIES)}")
+
+
+def validate_progression_date(birth_date_time: str, progression_date_time: str) -> None:
+    """Secondary progressions run forward from birth."""
+    if parse_datetime_value(progression_date_time) < parse_datetime_value(birth_date_time):
+        raise ValueError(
+            f"progression_date_time {progression_date_time} is before the birth "
+            f"date_time {birth_date_time}. Progressions run forward from birth, "
+            f"so the progression date must be on or after it.")
+
+
+def _timezone_error(e: Exception) -> tuple:
+    """(message, suggestion) for a zone that could not be loaded. A name
+    that is not in the database is a typo, not a missing tzdata; tzdata is
+    suggested only when no zone database is installed at all."""
+    match = re.search(r"key (.+?)'?$", str(e))
+    key = match.group(1) if match else str(e)
+    if zoneinfo.available_timezones():
+        return (f"Unknown IANA timezone '{key}'.",
+                "Use an IANA Region/City name, e.g. 'Europe/London' or 'America/New_York'.")
+    return (f"Timezone '{key}' could not be loaded: no IANA time zone database is "
+            f"installed. Try installing tzdata: pip install tzdata",
+            "Install timezone data: pip install tzdata")
 
 
 def validate_inputs(date_time: str, latitude: str, longitude: str) -> None:
@@ -43,9 +79,7 @@ def get_error_suggestion(error_type: str, message: str) -> str:
     Returns:
         Helpful suggestion string
     """
-    if "ZoneInfoNotFoundError" in error_type:
-        return "Install timezone data: pip install tzdata"
-    elif "ValueError" in error_type and "coordinate" in message.lower():
+    if "ValueError" in error_type and "coordinate" in message.lower():
         return "Use formats like: 51.38, 51n23, or 51°23'0\""
     elif "ValueError" in error_type and "datetime" in message.lower():
         return "Use ISO format: 1984-01-11 18:45:00"
@@ -64,11 +98,11 @@ def handle_chart_error(e: Exception) -> Dict[str, Any]:
         Structured error response dictionary
     """
     error_type = type(e).__name__
+    suggestion = get_error_suggestion(error_type, str(e))
 
     # Provide more specific error messages
-    if "No time zone found" in str(e):
-        message = (f"Timezone error: {str(e)}. "
-                  f"Try installing tzdata: pip install tzdata")
+    if isinstance(e, zoneinfo.ZoneInfoNotFoundError):
+        message, suggestion = _timezone_error(e)
     elif "Invalid coordinate" in str(e):
         message = str(e)
     elif "Invalid datetime" in str(e):
@@ -81,5 +115,5 @@ def handle_chart_error(e: Exception) -> Dict[str, Any]:
         "error": True,  # kept for backward compatibility alongside "status"
         "message": message,
         "type": error_type,
-        "suggestion": get_error_suggestion(error_type, str(e))
+        "suggestion": suggestion
     }

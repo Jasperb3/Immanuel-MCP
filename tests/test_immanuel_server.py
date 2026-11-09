@@ -257,12 +257,14 @@ class TestHandleChartError:
         function_name = 'handle_chart_error'
         
         try:
-            error = Exception("No time zone found")
+            # An unknown name is a typo, not a missing tzdata (v0.10.2)
+            import zoneinfo
+            error = zoneinfo.ZoneInfoNotFoundError("'No time zone found with key Mars/Olympus'")
             result = immanuel_server.handle_chart_error(error)
             
             assert result["error"] is True
-            assert "tzdata" in result["message"]
-            assert result["type"] == "Exception"
+            assert "Unknown IANA timezone 'Mars/Olympus'" in result["message"]
+            assert result["type"] == "ZoneInfoNotFoundError"
             assert "suggestion" in result
             recorder.record_test(function_name, 'timezone_error_handling', 'PASSED')
         except Exception as e:

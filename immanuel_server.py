@@ -58,7 +58,8 @@ from immanuel_mcp.app import mcp
 # ============================================================================
 
 from immanuel_mcp.utils.coordinates import parse_coordinate
-from immanuel_mcp.utils.errors import validate_inputs, handle_chart_error
+from immanuel_mcp.utils.errors import (
+    validate_inputs, handle_chart_error, validate_aspect_priority, validate_progression_date)
 from immanuel_mcp.utils.subjects import create_subject, effective_timezone
 from immanuel_mcp.utils.datetimes import parse_datetime_value
 from immanuel_mcp.utils.settings import build_call_config, build_applied_settings
@@ -607,6 +608,7 @@ def generate_compact_solar_return_chart(
 
         # Validate inputs first
         validate_inputs(date_time, latitude, longitude)
+        validate_aspect_priority(aspect_priority)
 
         # Validate return year
         if not 1900 <= return_year <= 2100:
@@ -742,6 +744,7 @@ def generate_progressed_chart(
 
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
+        validate_progression_date(date_time, progression_date_time)
         validate_inputs(progression_date_time, latitude, longitude)  # Reuse validation for progression date
 
         # Parse coordinates
@@ -867,6 +870,8 @@ def generate_compact_progressed_chart(
 
         # Validate inputs
         validate_inputs(date_time, latitude, longitude)
+        validate_progression_date(date_time, progression_date_time)
+        validate_aspect_priority(aspect_priority)
         validate_inputs(progression_date_time, latitude, longitude)  # Reuse validation for progression date
 
         # Parse coordinates
@@ -1398,6 +1403,7 @@ def generate_transit_to_natal(
         if aspect_priority is None:
             aspect_priority = "tight"
             logger.info(f"[TRANSIT-FULL] aspect_priority was None, defaulting to 'tight'")
+        validate_aspect_priority(aspect_priority)
 
         # Validate natal inputs
         logger.debug(f"[TRANSIT-FULL] Validating inputs")
@@ -1519,12 +1525,6 @@ def generate_transit_to_natal(
         if include_all_aspects:
             logger.warning("[TRANSIT-FULL] include_all_aspects=True (deprecated) - treating as aspect_priority='all'")
             aspect_priority = "all"
-
-        # Validate aspect_priority parameter
-        valid_priorities = ["tight", "moderate", "loose", "all"]
-        if aspect_priority not in valid_priorities:
-            logger.warning(f"[TRANSIT-FULL] Invalid aspect_priority '{aspect_priority}', defaulting to 'tight'")
-            aspect_priority = "tight"
 
         # Auto-adjust priority when lifecycle events enabled to avoid MCP size limits.
         # Full aspect data (~59 KB for "all" priority) + lifecycle events (~5-7 KB) exceeds ~50 KB MCP limit
