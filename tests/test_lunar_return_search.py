@@ -143,3 +143,33 @@ def test_a_return_on_a_month_boundary_is_in_exactly_one_month():
     august = _find_lunar_return_jds(target, 2026, 8, lat, lon, tz)
     at_boundary = [jd for jd in july + august if abs(jd - boundary) < 1e-4]
     assert len(at_boundary) == 1, (july, august)
+
+
+# --- the return chart is cast at the return instant -------------------------
+# The chart was rebuilt from the naive local time string, so a return in the
+# repeated hour of a fall-back night took the first reading. A 1995-03-04
+# 07:31:37 London birth returns at 01:30 GMT on 2026-10-25 (the second
+# 01:30); the chart was cast at 01:30 BST, an hour early.
+
+FALL_BACK_BIRTH = ("1995-03-04 07:31:37", "51n30", "0w07")
+
+
+@pytest.mark.parametrize("build", [
+    lunar_return.generate_lunar_return_chart,
+    lunar_return.generate_compact_lunar_return_chart,
+], ids=["full", "compact"])
+def test_a_return_in_the_repeated_fall_back_hour_is_cast_at_that_instant(build):
+    result = build(*FALL_BACK_BIRTH, 2026, 10, "Europe/London")
+    assert result["status"] == "success", result.get("message")
+    info = result["lunar_return_info"]
+    true_jd = find_return_jd(chart_const.MOON, info["natal_moon_longitude"], 2461337.5)
+    assert abs(true_jd - 2461338.5625) < 1 / 1440  # 01:30 GMT
+    moment = datetime.fromisoformat(info["return_date"])
+    if moment.tzinfo is not None:
+        assert moment.utcoffset().total_seconds() == 0  # GMT, the second 01:30
+    # The chart itself: its Moon is on the natal Moon
+    chart = lunar_return.generate_lunar_return_chart(*FALL_BACK_BIRTH, 2026, 10, "Europe/London")
+    chart_moon = chart["objects"][str(chart_const.MOON)]["longitude"]["raw"]
+    assert abs(swe.difdeg2n(chart_moon, info["natal_moon_longitude"])) < 1 / 3600
+    # A computed moment is not the user's input: no clock-change warning
+    assert "warnings" not in result

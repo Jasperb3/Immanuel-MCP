@@ -87,6 +87,20 @@ def _find_lunar_return_jds(
     return found
 
 
+def _subject_at(jd: float, lat: float, lon: float, timezone: str = None) -> charts.Subject:
+    """
+    A Subject at the return instant, given by its Julian date. Never by a
+    wall-clock time: in the repeated hour of a fall-back night immanuel
+    resolves a local time - and even an aware datetime, UTC included - to
+    the first reading, so a return at 01:30 GMT on 2026-10-25 was cast at
+    01:30 BST, an hour early. The Julian date has no such ambiguity.
+    """
+    kwargs = {"date_time": jd, "latitude": lat, "longitude": lon}
+    if timezone:
+        kwargs["timezone"] = timezone
+    return charts.Subject(**kwargs)
+
+
 def _local_iso(jd: float, lat: float, lon: float, timezone: str = None) -> str:
     """A return moment as the naive local ISO string return_date uses."""
     return date_tools.to_datetime(
@@ -262,9 +276,9 @@ def generate_lunar_return_chart(
             timezone,
             occurrence
         )
-        lunar_return_dt = date_tools.to_datetime(
-            return_jd, lat=lat, lon=lon, time_zone=timezone
-        ).replace(tzinfo=None)
+        return_moment = date_tools.to_datetime(
+            return_jd, lat=lat, lon=lon, time_zone=timezone)
+        lunar_return_dt = return_moment.replace(tzinfo=None)
 
         # Generate chart for the return moment. Relocation must preserve the
         # absolute instant, not the wall-clock string: the timezone-aware
@@ -272,19 +286,10 @@ def generate_lunar_return_chart(
         # the Subject.
         if relocated:
             return_local_dt = date_tools.to_datetime(return_jd, lat=return_lat, lon=return_lon)
-            return_subject = charts.Subject(
-                date_time=return_local_dt,
-                latitude=return_lat,
-                longitude=return_lon
-            )
+            return_subject = _subject_at(return_jd, return_lat, return_lon)
             return_date_value = return_local_dt.isoformat()
         else:
-            return_subject = create_subject(
-                lunar_return_dt.isoformat(),
-                lat,
-                lon,
-                timezone
-            )
+            return_subject = _subject_at(return_jd, lat, lon, timezone)
             return_date_value = lunar_return_dt.isoformat()
         lunar_return_chart = charts.Natal(return_subject, config=call_config)
 
@@ -448,9 +453,9 @@ def generate_compact_lunar_return_chart(
             timezone,
             occurrence
         )
-        lunar_return_dt = date_tools.to_datetime(
-            return_jd, lat=lat, lon=lon, time_zone=timezone
-        ).replace(tzinfo=None)
+        return_moment = date_tools.to_datetime(
+            return_jd, lat=lat, lon=lon, time_zone=timezone)
+        lunar_return_dt = return_moment.replace(tzinfo=None)
 
         # Generate chart for the return moment. Relocation must preserve the
         # absolute instant, not the wall-clock string: the timezone-aware
@@ -458,19 +463,10 @@ def generate_compact_lunar_return_chart(
         # the Subject.
         if relocated:
             return_local_dt = date_tools.to_datetime(return_jd, lat=return_lat, lon=return_lon)
-            return_subject = charts.Subject(
-                date_time=return_local_dt,
-                latitude=return_lat,
-                longitude=return_lon
-            )
+            return_subject = _subject_at(return_jd, return_lat, return_lon)
             return_date_value = return_local_dt.isoformat()
         else:
-            return_subject = create_subject(
-                lunar_return_dt.isoformat(),
-                lat,
-                lon,
-                timezone
-            )
+            return_subject = _subject_at(return_jd, lat, lon, timezone)
             return_date_value = lunar_return_dt.isoformat()
         lunar_return_chart = charts.Natal(return_subject, config=call_config)
 
