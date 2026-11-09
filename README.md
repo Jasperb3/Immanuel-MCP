@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.10.4 · 23 tools · 388 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.10.5 · 23 tools · 402 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -267,7 +267,7 @@ Every response carries:
 - `status`: `"success"` or `"error"` (error responses keep the existing `error`/`message`/`type`/`suggestion` keys).
 - `applied_settings`: `{"house_system": "<display name>", "source": "per-call" | "session-global"}` on chart responses — lets the consuming LLM verify which settings produced the chart instead of assuming.
 - `warnings` (v0.10.2): a list of strings, present only when there is something to say. Today:
-  - **Polar fallback.** A chart inside a polar circle can't have Placidus, Koch or other polar-sensitive houses, so the Swiss Ephemeris uses Porphyry cusps. `applied_settings.house_system` then reads `"Porphyry (polar fallback from Placidus)"`. The Ascendant and MC are unaffected. Pass `house_system="WHOLE_SIGN"` (or another non-polar system) to get that system with no warning. Before v0.10.2 every chart tool failed inside the polar circles, Whole Sign included.
+  - **Polar fallback.** A chart inside a polar circle can't have Placidus, Koch or other polar-sensitive houses, so the Swiss Ephemeris uses Porphyry cusps. `applied_settings.house_system` then reads `"Porphyry (polar fallback from Placidus)"`, and the full chart tools' top-level `house_system` reads `"Porphyrius"` (immanuel's name for Porphyry, and the value `house_system=` accepts) since v0.10.5. The Ascendant and MC are unaffected. Pass `house_system="WHOLE_SIGN"` (or another non-polar system) to get that system with no warning. Before v0.10.2 every chart tool failed inside the polar circles, Whole Sign included.
   - **Clock changes.** A local time that never happened (spring forward) or happened twice (fall back) is accepted, and the warning says which reading was used, e.g. "01:30 occurred twice on 1990-10-28 in Europe/London (the clocks went back); using 01:30 BST (UTC+1), the first of the two".
 
 Invalid input is rejected rather than guessed at (v0.10.2): an unknown `aspect_priority` (valid: `tight`, `moderate`, `loose`, `all`), a `progression_date_time` before birth, and an unknown timezone ("Unknown IANA timezone 'Mars/Olympus'"; tzdata is suggested only when no zone database is installed).
