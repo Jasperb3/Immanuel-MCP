@@ -283,9 +283,9 @@ Lunar return charts are a monthly predictive technique that calculates the chart
 
 **Implementation Details:**
 - Delegates to `immanuel.tools.transit.next_aspect_to()` (1.5.4+) via `immanuel_mcp/utils/search.py`, converging to within 1e-6° of the natal longitude
-- A 30/31-day month occasionally contains two lunar returns (~27.3-day cycle); the first is returned
+- A 30/31-day month occasionally contains two lunar returns (~27.3-day cycle). `_find_lunar_return_jds` finds them all; `occurrence` (default 1) selects one, `lunar_return_info.returns_in_month` lists them, and a missing occurrence is an error naming the returns that exist (v0.10.2)
 - Generates a standard natal chart for the return moment
-- Includes metadata: return_date, natal_moon_longitude, return_year, return_month
+- Includes metadata: return_date, natal_moon_longitude, return_year, return_month, occurrence, returns_in_month. Solar returns carry `solar_return_info.return_date` in the same form (v0.10.2)
 - Includes lifecycle events context calculated at the return moment
 
 **Function Signatures:**
@@ -341,6 +341,14 @@ result = generate_lunar_return_chart(
 **Same-planet aspects (v0.10.0):** in a chart built against another chart, `active == passive` means the same planet in both charts (transit Saturn conjunct natal Saturn), not a self-aspect. Never filter them: they are the returns and major life transits. `normalize_aspects_to_list` no longer has a `filter_self_aspects` option.
 
 **Aspect patterns (v0.10.0):** always serialize full charts with `serialize_full_chart()` (`immanuel_mcp/serializers.py`), never `json.loads(json.dumps(chart, cls=ToJSON))`. It rebuilds `aspect_patterns` from the planets and Chiron only (`PATTERN_OBJECTS`), by re-running immanuel's own search on planet-only aspects. Filtering its output would be wrong, because vertices are clusters of conjunct objects with pooled aspects. For charts built with `aspects_to` it sets `aspect_patterns` to `None`: transit and natal objects share indices, and immanuel's search merges both charts into the same vertices.
+
+**Polar charts (v0.10.2):** immanuel hard-codes Placidus for the Part of Fortune Ascendant and the diurnal check, and pysweph raises the Swiss Ephemeris "within polar circle, switched to Porphyry" warning as `swisseph.Error`, so every chart inside a polar circle failed. `immanuel_mcp/compat/polar.py` (installed from `immanuel_mcp/__init__.py`) replaces the `swe` seen by `immanuel.tools.sweph` only, not the swisseph module, with a proxy whose `houses_ex2`/`houses_armc_ex2` retry that one error with Porphyry and record the fallback. It is version-guarded to immanuel 1.6 and raises on anything else; `tests/test_polar_charts.py` fails if immanuel changes the wrapped calls. `build_applied_settings` reports a fallback only when the *requested* system's own code fell back (a Whole Sign chart still triggers immanuel's internal Placidus fallback, which doesn't matter).
+
+**Per-call warnings (v0.10.2):** chart and calendar tools are decorated `@reports_warnings` (`immanuel_mcp/utils/call_context.py`), which gives each call a fresh `CallState` in a ContextVar. Helpers deep in the call record into it (`add_warning`, `note_polar_fallback`), and the decorator attaches `warnings` only when there is one, so ordinary responses are byte-identical. Decorate any new chart tool the same way, under `@mcp.tool()`. `create_subject` warns on clock-change local times, reading the offset immanuel actually used from the resolved datetime.
+
+**Input validation (v0.10.2):** `validate_aspect_priority` and `validate_progression_date` (`utils/errors.py`) reject bad input; nothing silently becomes `tight` any more. `handle_chart_error` names an unknown zone as unknown and suggests tzdata only when `zoneinfo.available_timezones()` is empty.
+
+**Node crossings (v0.10.2):** the true node wobbles (~1.5°, half-month period), so a node return crosses the natal node several times, days apart. `utils/search._MAX_STEP_DAYS_BY_BODY` caps the nodes' scan step at 6 hours so every crossing is found; with the 10-day cap, two fell inside one step and the reported crossing depended on the query date.
 
 **Do not treat a house-system display name as its constant name.** They diverge: `EQUAL` displays as "Equal House", `VEHLOW_EQUAL` as "Vehlow Equal House", `POLICH_PAGE` as "Polich Page". `resolve_house_system` in `immanuel_mcp/utils/settings.py` normalizes and accepts both, plus numeric codes; anything comparing the two forms directly will reject values the tools advertise.
 

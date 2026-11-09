@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.2] - 2026-11-09
+
+Fixes from a sweep of all 23 tools against independent Swiss Ephemeris
+calculations on seven charts. Everything else matched.
+
+### Added
+- **Lunar return `occurrence`.** About one month in three holds two lunar
+  returns, and the second was unreachable: 1990-05-15 London's July 2026 has
+  1 July 13:51 BST and 28 July, and August gives 25 August. Both lunar-return
+  tools take `occurrence` (default 1). `lunar_return_info.returns_in_month`
+  lists every return of the month, and `lunar_return_info.occurrence` echoes
+  the choice. A missing occurrence is an error naming the returns that exist.
+- **`solar_return_info.return_date`** on both solar-return tools: the return
+  moment, naive ISO in the birth timezone, like the lunar one. The compact
+  tool reported no moment at all.
+- A **`warnings`** list on chart and calendar responses, present only when
+  there is something to report (polar fallback, clock changes).
+
+### Fixed
+- **Charts inside the polar circles.** Every chart tool failed with
+  "swisseph.houses_ex2: within polar circle, switched to Porphyry" (e.g.
+  1988-12-21 Tromsø), Whole Sign included, because immanuel hard-codes
+  Placidus for the Part of Fortune and the diurnal check, and pysweph raises
+  the Swiss Ephemeris warning as an error. A version-guarded shim retries that
+  error with Porphyry. Placidus and other polar-sensitive systems get
+  Porphyry cusps, `applied_settings.house_system` reads "Porphyry (polar
+  fallback from Placidus)", and a warning says why. A non-polar system such
+  as Whole Sign gets that system with no warning. Non-polar charts are
+  byte-identical.
+- **North Node returns list every crossing.** The true node wobbles, so
+  1990-05-15 London's node crosses the natal node on 2027-09-22, 25 and 26.
+  `exact_dates` held one of them, chosen by the query date (09-22 from
+  2026-11-08, 09-26 from 2019-12-01). The nodes now scan at 6-hour steps:
+  `exact_dates` lists all three, `exact_date` is the first ahead,
+  `date_range` spans them (2027-09-22 to 2027-09-26, where it used to be a
+  mean-speed orb window), and none of it depends on the query date.
+- **Validation.**
+  - An unknown `aspect_priority` is rejected with the valid list, instead of
+    silently becoming `tight`.
+  - A `progression_date_time` before birth is rejected.
+  - An unknown timezone reads "Unknown IANA timezone 'Mars/Olympus'"; tzdata
+    is suggested only when no zone database is installed.
+  - A local time inside a clock change is still accepted, but now carries a
+    warning naming the reading used. Example: "01:30 did not exist on
+    1990-03-25 in Europe/London (the clocks went forward); using 01:30 GMT
+    (UTC+0), the same instant as 02:30 BST (UTC+1)".
+
 ## [0.10.1] - 2026-11-08
 
 Follow-ups from the 0.10.0 smoke test. Two lifecycle fields now come from
