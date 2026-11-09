@@ -448,7 +448,9 @@ def generate_solar_return_chart(
     Returns:
         The full SolarReturn chart object serialized to a JSON dictionary, plus
         return-to-natal aspects under 'natal_cross_aspects' (each entry carries
-        'return_object' and 'natal_object') and a 'return_location' echo.
+        'return_object' and 'natal_object'), a 'return_location' echo, and
+        'solar_return_info.return_date': the return moment, naive ISO in the
+        birth timezone (relocation does not change it).
     """
     try:
         logger.info(f"Generating solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
@@ -538,6 +540,12 @@ def generate_solar_return_chart(
             result["lifecycle_events"] = None
             result["lifecycle_summary"] = None
 
+        # When the return happens, in the birth timezone (relocation keeps
+        # it), in the same form as lunar_return_info.return_date.
+        result["solar_return_info"] = {
+            "return_date": solar_return.solar_return_date_time.datetime.replace(
+                tzinfo=None).isoformat(),
+        }
         result["return_location"] = {
             "latitude": return_lat,
             "longitude": return_lon,
@@ -601,7 +609,9 @@ def generate_compact_solar_return_chart(
     Returns:
         A compact SolarReturn chart object serialized to a JSON dictionary, plus
         return-to-natal aspects under 'natal_cross_aspects' (each entry carries
-        'return_object' and 'natal_object') and a 'return_location' echo.
+        'return_object' and 'natal_object'), a 'return_location' echo, and
+        'solar_return_info.return_date': the return moment, naive ISO in the
+        birth timezone (relocation does not change it).
     """
     try:
         logger.info(f"Generating compact solar return chart for {date_time} at {latitude}, {longitude} for year {return_year}")
@@ -693,6 +703,12 @@ def generate_compact_solar_return_chart(
             result["lifecycle_events"] = None
             result["lifecycle_summary"] = None
 
+        # When the return happens, in the birth timezone (relocation keeps
+        # it), in the same form as lunar_return_info.return_date.
+        result["solar_return_info"] = {
+            "return_date": solar_return.solar_return_date_time.datetime.replace(
+                tzinfo=None).isoformat(),
+        }
         result["return_location"] = {
             "latitude": return_lat,
             "longitude": return_lon,
