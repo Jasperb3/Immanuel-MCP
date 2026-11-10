@@ -21,6 +21,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tool, both people in composite and synastry included.
   `progression_date_time` still drops its offset (it goes to immanuel
   directly; the error there is minutes of arc at most).
+- **Solar return lifecycle reference off by the zone difference.** The
+  chart that lifecycle events are measured against was rebuilt from the
+  return time as a zone-less clock string, read back in the coordinates'
+  zone. A `timezone` other than that zone moved it by the difference (an
+  hour for London with `timezone="UTC"`, five for `America/New_York`), a
+  return in a fall-back night's repeated hour landed on the first reading,
+  and every call lost the return's fractional second. It is now built from
+  the return's Julian date, and the silent fallback to 1 January of the
+  return year is gone. Lifecycle separations move by thousandths of a
+  degree at most; the solar return chart itself was never affected.
 
 ### Changed
 - The fall-back clock-change warning ends with the two offset spellings

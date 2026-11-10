@@ -558,24 +558,19 @@ def generate_solar_return_chart(
         else:
             result["natal_cross_aspects"] = None
 
-        # Extract solar return datetime (handle wrapped DateTime object)
-        solar_return_dt_obj = getattr(solar_return, 'solar_return_date_time', None)
-        if solar_return_dt_obj and hasattr(solar_return_dt_obj, 'datetime'):
-            # It's a wrapped DateTime object, extract the datetime
-            solar_return_dt = solar_return_dt_obj.datetime.strftime("%Y-%m-%d %H:%M:%S")
-        elif solar_return_dt_obj:
-            # Try to convert to string
-            solar_return_dt = str(solar_return_dt_obj)
-        else:
-            # Fallback to result dict or default
-            solar_return_dt = result.get('solar_return_date_time', f"{return_year}-01-01 00:00:00")
-
-        # Create a transit chart for lifecycle event detection (SolarReturn object doesn't work)
+        # Create a transit chart for lifecycle event detection (SolarReturn
+        # object doesn't work), at the return instant given by its Julian
+        # date. A clock-time string would be read back in the coordinates'
+        # zone rather than the birth zone, and a fall-back night's repeated
+        # hour as its first reading. Ages compare local wall clocks, so the
+        # reference datetime goes in as the birth zone's.
+        return_moment = solar_return.solar_return_date_time
         try:
             transit_subject = charts.Subject(
-                date_time=solar_return_dt,
+                date_time=return_moment.julian,
                 latitude=lat,
-                longitude=lon
+                longitude=lon,
+                timezone=effective_timezone(subject)
             )
             transit_chart_for_lifecycle = charts.Natal(transit_subject, config=call_config)
 
@@ -584,7 +579,7 @@ def generate_solar_return_chart(
                 natal_chart=natal_chart,
                 comparison_chart=transit_chart_for_lifecycle,
                 birth_datetime=date_time,
-                comparison_datetime=solar_return_dt
+                comparison_datetime=return_moment.datetime.replace(tzinfo=None)
             )
         except Exception as e:
             logger.warning(f"Could not attach lifecycle events to solar return: {e}")
@@ -729,24 +724,15 @@ def generate_compact_solar_return_chart(
         else:
             result["natal_cross_aspects"] = None
 
-        # Extract solar return datetime (handle wrapped DateTime object)
-        solar_return_dt_obj = getattr(solar_return, 'solar_return_date_time', None)
-        if solar_return_dt_obj and hasattr(solar_return_dt_obj, 'datetime'):
-            # It's a wrapped DateTime object, extract the datetime
-            solar_return_dt = solar_return_dt_obj.datetime.strftime("%Y-%m-%d %H:%M:%S")
-        elif solar_return_dt_obj:
-            # Try to convert to string
-            solar_return_dt = str(solar_return_dt_obj)
-        else:
-            # Fallback to result dict or default
-            solar_return_dt = result.get('solar_return_date_time', f"{return_year}-01-01 00:00:00")
-
-        # Create a transit chart for lifecycle event detection (SolarReturn object doesn't work)
+        # Lifecycle reference at the return instant, from its Julian date
+        # (see generate_solar_return_chart).
+        return_moment = solar_return.solar_return_date_time
         try:
             transit_subject = charts.Subject(
-                date_time=solar_return_dt,
+                date_time=return_moment.julian,
                 latitude=lat,
-                longitude=lon
+                longitude=lon,
+                timezone=effective_timezone(subject)
             )
             transit_chart_for_lifecycle = charts.Natal(transit_subject, config=call_config)
 
@@ -755,7 +741,7 @@ def generate_compact_solar_return_chart(
                 natal_chart=natal_chart,
                 comparison_chart=transit_chart_for_lifecycle,
                 birth_datetime=date_time,
-                comparison_datetime=solar_return_dt
+                comparison_datetime=return_moment.datetime.replace(tzinfo=None)
             )
         except Exception as e:
             logger.warning(f"Could not attach lifecycle events to compact solar return: {e}")
