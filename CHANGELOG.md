@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **UTC offsets in `date_time` were dropped.** Given coordinates, immanuel
+  replaces a time's own zone with the one it looks up from them (by design,
+  [theriftlab/immanuel-python#33](https://github.com/theriftlab/immanuel-python/issues/33)),
+  so `2026-06-01T12:00:00+05:00` in London was cast at 12:00 BST, five hours
+  out, and `2026-10-25T01:30:00Z` at the first 01:30 (BST), an hour early.
+  An offset now has to be one the location's zone has at that local time.
+  On a clock-change night it chooses the reading, which makes the second
+  01:30 of a fall-back night castable for the first time; any other offset
+  is an error naming the offsets that fit. Times without an offset are
+  unchanged. Applies to every birth and transit time passed to a chart
+  tool, both people in composite and synastry included.
+  `progression_date_time` still drops its offset (it goes to immanuel
+  directly; the error there is minutes of arc at most).
+
+### Changed
+- The fall-back clock-change warning ends with the two offset spellings
+  that choose each reading, unless the input already carried one.
+
 ## [0.11.0] - 2026-11-09
 
 Migration to immanuel 1.7.0, released the same day. Known-time output is

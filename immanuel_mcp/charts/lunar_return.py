@@ -93,10 +93,12 @@ def _subject_at(jd: float, lat: float, lon: float, timezone: str = None,
                 birth_time_status: int = chart_const.TIME_KNOWN) -> charts.Subject:
     """
     A Subject at the return instant, given by its Julian date. Never by a
-    wall-clock time: in the repeated hour of a fall-back night immanuel
-    resolves a local time - and even an aware datetime, UTC included - to
-    the first reading, so a return at 01:30 GMT on 2026-10-25 was cast at
-    01:30 BST, an hour early. The Julian date has no such ambiguity.
+    wall-clock time: given coordinates, immanuel replaces a datetime's own
+    zone with the one it looks up from them (by design,
+    theriftlab/immanuel-python#33) and resolves the repeated hour of a
+    fall-back night to the first reading, so a return at 01:30 GMT on
+    2026-10-25, even passed as an aware UTC datetime, was cast at 01:30 BST,
+    an hour early. The Julian date has no such ambiguity.
 
     From an untimed birth the instant itself is uncertain, so the return
     chart is TIME_APPROXIMATE (no houses or angles). Never TIME_UNKNOWN:
