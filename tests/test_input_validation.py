@@ -52,7 +52,8 @@ def test_a_progression_before_birth_is_rejected(build):
      "using 01:30 GMT (UTC+0), the same instant as 02:30 BST (UTC+1)"),
     ("1990-10-28 01:30:00",
      "01:30 occurred twice on 1990-10-28 in Europe/London (the clocks went back); "
-     "using 01:30 BST (UTC+1), the first of the two"),
+     "using 01:30 BST (UTC+1), the first of the two. Write the UTC offset to "
+     "choose: 1990-10-28T01:30:00+01:00 (BST) or 1990-10-28T01:30:00+00:00 (GMT)"),
 ])
 def test_a_clock_change_time_is_accepted_with_a_warning(date_time, expected):
     result = immanuel_server.generate_compact_natal_chart(date_time, "51n30", "0w07", TZ)
@@ -62,6 +63,89 @@ def test_a_clock_change_time_is_accepted_with_a_warning(date_time, expected):
 
 def test_an_ordinary_time_carries_no_warning():
     assert "warnings" not in immanuel_server.generate_compact_natal_chart(*LONDON, TZ)
+
+
+# An explicit UTC offset in date_time. immanuel replaces the datetime's own
+# zone with the one it looks up from the coordinates (by design, upstream
+# #33), so the offset used to be dropped without a word: 12:00+05:00 in
+# London was cast at 12:00 BST, and the second 01:30 of a fall-back night
+# could not be asked for at all.
+
+FALL_BACK_FIRST = 2461338.5208333335   # 2026-10-25 00:30 UTC = 01:30 BST
+FALL_BACK_SECOND = 2461338.5625        # 2026-10-25 01:30 UTC = 01:30 GMT
+
+
+def _julian(result):
+    assert result["status"] == "success", result.get("message")
+    return result["native"]["date_time"]["julian"]
+
+
+@pytest.mark.parametrize("date_time, julian, reading", [
+    ("2026-10-25T01:30:00+00:00", FALL_BACK_SECOND, "01:30 GMT (UTC+0), the second"),
+    ("2026-10-25T01:30:00Z", FALL_BACK_SECOND, "01:30 GMT (UTC+0), the second"),
+    ("2026-10-25 01:30:00+0000", FALL_BACK_SECOND, "01:30 GMT (UTC+0), the second"),
+    ("2026-10-25T01:30:00+01:00", FALL_BACK_FIRST, "01:30 BST (UTC+1), the first"),
+])
+@pytest.mark.parametrize("timezone", [None, TZ], ids=["inferred", "explicit"])
+def test_an_offset_chooses_the_reading_on_a_fall_back_night(date_time, julian, reading, timezone):
+    result = immanuel_server.generate_natal_chart(date_time, "51n30", "0w07", timezone)
+    assert _julian(result) == pytest.approx(julian, abs=1e-9)
+    assert reading in result["warnings"][0]
+
+
+@pytest.mark.parametrize("date_time, julian, used", [
+    # 01:30 never happened on 1990-03-25 in London; each offset names a real
+    # instant, and the chart is cast at that instant.
+    ("1990-03-25T01:30:00+00:00", 2447975.5625, "using 01:30 GMT (UTC+0)"),
+    ("1990-03-25T01:30:00+01:00", 2447975.5208333335, "using 01:30 BST (UTC+1)"),
+])
+def test_an_offset_names_the_instant_in_a_spring_forward_gap(date_time, julian, used):
+    result = immanuel_server.generate_natal_chart(date_time, "51n30", "0w07", TZ)
+    assert _julian(result) == pytest.approx(julian, abs=1e-9)
+    assert used in result["warnings"][0]
+
+
+def test_an_offset_that_matches_the_zone_changes_nothing():
+    plain = immanuel_server.generate_natal_chart(*LONDON, TZ)
+    offset = immanuel_server.generate_natal_chart("1990-05-15T12:00:00+01:00", "51n30", "0w07", TZ)
+    assert _julian(offset) == _julian(plain)
+    assert "warnings" not in offset
+
+
+@pytest.mark.parametrize("date_time, timezone, given, actual", [
+    ("2026-06-01T12:00:00+05:00", None, "UTC+5", "UTC+1 (BST)"),
+    ("2026-06-01T12:00:00Z", TZ, "UTC+0", "UTC+1 (BST)"),
+    ("2026-10-25T01:30:00+02:00", TZ, "UTC+2", "UTC+1 (BST) or UTC+0 (GMT)"),
+])
+def test_an_offset_that_contradicts_the_zone_is_rejected(date_time, timezone, given, actual):
+    result = immanuel_server.generate_natal_chart(date_time, "51n30", "0w07", timezone)
+    assert result["status"] == "error"
+    assert f"gives {given}" in result["message"]
+    assert f"Europe/London is {actual}" in result["message"]
+
+
+def test_an_offset_carries_into_every_birth_chart_of_a_call():
+    # Composite and synastry build two subjects, relocated returns a second
+    # one in the birth zone: each must honour its own offset.
+    second = "2026-10-25T01:30:00+00:00"
+    bad = "2026-06-01T12:00:00+05:00"
+    composite = immanuel_server.generate_composite_chart(
+        *LONDON, second, "51n30", "0w07", TZ, TZ)
+    assert composite["status"] == "success", composite.get("message")
+    rejected = immanuel_server.generate_synastry_aspects(
+        *LONDON, bad, "51n30", "0w07", TZ, TZ)
+    assert rejected["status"] == "error"
+    assert "Partner" in rejected["message"]
+    relocated = immanuel_server.generate_solar_return_chart(
+        second, "51n30", "0w07", 2030, TZ, return_latitude="40n43", return_longitude="74w00")
+    assert relocated["status"] == "success", relocated.get("message")
+
+
+def test_an_offset_is_moot_for_an_unknown_birth_time():
+    # The chart is cast for local noon whatever the clock time says.
+    result = immanuel_server.generate_compact_natal_chart(
+        "2026-06-01T03:00:00+05:00", "51n30", "0w07", TZ, time_status="unknown")
+    assert result["status"] == "success", result.get("message")
 
 
 def test_an_unknown_timezone_is_named_as_unknown():
