@@ -2,12 +2,12 @@
 """
 Charts inside the polar circles.
 
-immanuel hard-codes Placidus for the Part of Fortune Ascendant
-(tools/part.py) and the diurnal check (tools/condition.py). Inside the polar
-circles the Swiss Ephemeris falls back to Porphyry and pysweph raises that
-warning as swisseph.Error, so every chart failed, Whole Sign included.
-immanuel_mcp.compat.polar retries those calls with Porphyry. The Ascendant
-and MC don't depend on the house system, so nothing else changes.
+immanuel 1.6/1.7 hard-coded Placidus for the Part of Fortune Ascendant and
+the diurnal check, so every polar chart failed, Whole Sign included. 1.8
+uses Equal houses there (theriftlab/immanuel-python#32) and raises a
+ValueError only when the chart's own system is Placidus or Koch, whose
+houses the Swiss Ephemeris cannot cast there. immanuel_mcp.compat.polar
+retries those with Porphyry, so the default (Placidus) still builds.
 """
 
 import inspect
@@ -119,6 +119,27 @@ def test_other_swisseph_errors_still_raise():
         raise swe.Error("swisseph.houses_ex2: something else")
     with pytest.raises(swe.Error, match="something else"):
         polar._polar_safe(failing)(2448026.958, 51.5, -0.12, b"P")
+
+
+def _natal_without_shim(monkeypatch, house_system):
+    monkeypatch.setattr(sweph, "swe", swe)
+    config = charts.Config()
+    config.house_system = house_system
+    subject = charts.Subject(TROMSO[0], LAT, LON, timezone=TROMSO_TZ)
+    return charts.Natal(subject, config=config)
+
+
+def test_immanuel_builds_polar_whole_sign_without_the_shim(monkeypatch):
+    """Fixed upstream in 1.8: no internal Placidus call any more."""
+    natal = _natal_without_shim(monkeypatch, sweph_const("WHOLE_SIGN"))
+    assert natal.diurnal is not None
+
+
+@pytest.mark.parametrize("system", ["PLACIDUS", "KOCH"])
+def test_immanuel_refuses_polar_placidus_and_koch_without_the_shim(monkeypatch, system):
+    """Why the shim stays: 1.8 raises for these, and Placidus is the default."""
+    with pytest.raises(ValueError, match="cannot be calculated at latitude"):
+        _natal_without_shim(monkeypatch, sweph_const(system))
 
 
 def test_the_shim_matches_the_immanuel_it_was_written_for():

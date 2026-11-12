@@ -138,16 +138,16 @@ wheels = [
 
 [[package]]
 name = "immanuel"
-version = "1.7.0"
+version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pysweph" },
     { name = "python-dateutil" },
     { name = "timezonefinder" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/22/05/7e8a3bb4eb083252afd92e627377a45845976d89d4f69cdd75f7ba74d5d7/immanuel-1.7.0.tar.gz", hash = "sha256:7e34e56448d3589c67d688381d8ac2c498663f88a2c4cbcda8a820199f55ce4d", size = 11490353, upload-time = "2026-11-09T02:08:43.975Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2f/75/be04cf7eeb8ef5d0d7a20d25f9f2221c4a006b03d98a0dd4afec36fffd40/immanuel-1.8.0.tar.gz", hash = "sha256:22fbfb41a5f5460b7854dde4f778f1797889deedb3f5f6e7414ad84a926a36f2", size = 11491501, upload-time = "2026-11-12T04:38:53.603Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2f/81/431cb35048119fe55617f971fadb092d726c0af1d9124e995bb566e1967c/immanuel-1.7.0-py3-none-any.whl", hash = "sha256:3c1ebff05f7f2149c4aa88b8750c3286daebc586c7101484b72b143e1b05927d", size = 11389431, upload-time = "2026-11-09T02:08:35.631Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/44/b9c8a0c1a18ff00feb76c6978ad8b53b755168ff4179ce406e00ac08a740/immanuel-1.8.0-py3-none-any.whl", hash = "sha256:43319b072405232138c859193f556b0cfca9d24720d1a1582fdd840c7beee1e3", size = 11389787, upload-time = "2026-11-12T04:38:24.326Z" },
 ]
 
 [[package]]
@@ -167,7 +167,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "immanuel", specifier = ">=1.7.0,<1.8" },
+    { name = "immanuel", specifier = ">=1.8.0,<1.9" },
     { name = "mcp", extras = ["cli"] },
     { name = "tzdata", specifier = ">=2025.2" },
 ]

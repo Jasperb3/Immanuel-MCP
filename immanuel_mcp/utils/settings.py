@@ -21,11 +21,19 @@ from immanuel.const import chart as chart_const
 from immanuel.const import names as names_const
 from immanuel.tools import sweph
 
+from ..constants import PATTERN_OBJECTS
 from .call_context import add_warning, polar_fell_back
 from .subjects import TIME_STATUS_NAMES
 
 
-_session_config = charts.Config()
+def new_config() -> charts.Config:
+    """A library-default Config with the server's aspect-pattern objects."""
+    config = charts.Config()
+    config.aspect_pattern_objects = list(PATTERN_OBJECTS)
+    return config
+
+
+_session_config = new_config()
 
 # Captured once, at import, before any configure_immanuel_settings call can
 # run. reset_immanuel_settings restores this rather than a fresh Config, so if
@@ -131,7 +139,7 @@ def build_call_config(house_system: str = None) -> charts.Config:
     # TODO: 1.6 makes "session config + override" trivial
     # (get_session_config().copy() then set house_system) if that semantic is
     # ever wanted; the documented contract today is "override ignores session".
-    call_config = charts.Config()
+    call_config = new_config()
     call_config.house_system = resolve_house_system(house_system)
     return call_config
 
