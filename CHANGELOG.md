@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **`applying` on transit-to-natal aspects** (`generate_transit_to_natal`,
+  `generate_compact_transit_to_natal`). `true` when the transiting object's
+  motion is closing the orb to the natal point. Neither tool said this
+  reliably before: the compact tool's signed `orb` is the separation minus
+  the aspect angle, not a direction, and the full tool's `movement` is
+  immanuel's label, which takes the faster object as the mover and calls any
+  retrograde one "Applicative". For a 1988-03-14 06:20 Leeds chart on
+  2026-11-12, transiting Saturn (8°39' Aries, retrograde) square natal
+  Neptune (9°58' Capricorn) read `movement: "Applicative"` while backing
+  away; it now also reads `applying: false`. `movement` is unchanged.
+- **`natal_house` on transit positions** (both tools): the natal house a
+  transiting object falls in. The existing `house` is a house of the transit
+  moment's own chart (the same Saturn reads `house: 2`, `natal_house: 1`).
+  `null` for an untimed natal chart.
+
 ## [0.12.3] - 2026-11-12
 
 ### Fixed

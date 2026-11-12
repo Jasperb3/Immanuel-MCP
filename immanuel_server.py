@@ -81,6 +81,7 @@ from immanuel_mcp.utils.settings import build_call_config, build_applied_setting
 from immanuel_mcp.optimizers.positions import build_optimized_transit_positions
 from immanuel_mcp.optimizers.dignities import build_dignities_section
 from immanuel_mcp.optimizers.aspects import build_optimized_aspects
+from immanuel_mcp.optimizers.transit_direction import annotate_transit_aspects, natal_houses_by_name
 from immanuel_mcp.optimizers.cross_aspects import (
     build_full_cross_aspects,
     build_compact_cross_aspects,
@@ -1745,7 +1746,11 @@ def generate_transit_to_natal(
 
         # === OPTIMIZE RESPONSE STRUCTURE ===
         # Use optimized builders to reduce response size by 60-70%
+        annotate_transit_aspects(aspects_to_return, transit_chart, natal_chart)
         optimized_positions = build_optimized_transit_positions(transit_data)
+        natal_houses = natal_houses_by_name(transit_chart, natal_chart)
+        for name, position in optimized_positions.items():
+            position['natal_house'] = natal_houses.get(name)
         optimized_aspects = build_optimized_aspects(aspects_to_return)
         dignities = build_dignities_section(transit_data)
 
@@ -1884,6 +1889,15 @@ def generate_compact_transit_to_natal(
             if isinstance(aspect, dict):
                 aspect['transiting_object'] = aspect.pop('from_object', None)
                 aspect['natal_object'] = aspect.pop('to_object', None)
+        # immanuel's own movement can't be trusted across charts; say whether
+        # the transiting object is closing on the fixed natal point.
+        annotate_transit_aspects(aspects, transit_chart, natal_chart)
+        # 'house' on a transit position is a house of the transit moment;
+        # 'natal_house' is the natal house the position falls in.
+        natal_houses = natal_houses_by_name(transit_chart, natal_chart)
+        for position in transit_data.get('objects', {}).values():
+            if isinstance(position, dict):
+                position['natal_house'] = natal_houses.get(position.get('name'))
         if include_interpretations:
             aspects = add_aspect_interpretations(aspects)
 

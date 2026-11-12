@@ -57,6 +57,11 @@ def build_optimized_aspects(aspects: List[Dict[str, Any]]) -> List[Dict[str, Any
             'priority': classify_aspect_priority(aspect)
         }
 
+        # Whether the transiting object is closing on the natal point
+        # (transit-to-natal only; see transit_direction.py)
+        if 'applying' in aspect:
+            optimized_aspect['applying'] = aspect['applying']
+
         # Add interpretation if present
         if 'interpretation' in aspect:
             optimized_aspect['interpretation'] = aspect['interpretation']
