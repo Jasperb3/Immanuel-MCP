@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-immanuel 1.7.0 drops in_sect from every night chart.
+in_sect on day and night charts of every chart class.
 
-Chart.wrap_objects computes `in_sect ... if self._time_known and is_daytime
-else None`, so a nocturnal chart (diurnal False) reports null for every sect
-planet. immanuel_mcp/compat/sect.py restores 1.6's values when, and only
-when, the installed immanuel shows the bug. Before these tests nothing
-covered in_sect: all 402 tests passed on 1.7.0 with the bug in place.
+immanuel 1.7.0 dropped in_sect from every night chart (Chart.wrap_objects
+tested `is_daytime` instead of `is_daytime is not None`), and the server
+shimmed it back until 1.8.0 fixed it upstream (theriftlab/immanuel-python#31).
+These now guard against a regression: before them nothing covered in_sect,
+and all 402 tests passed on 1.7.0 with the bug in place.
 """
 
 import datetime as _dt
@@ -17,7 +17,6 @@ from immanuel.const import chart as chart_const
 from immanuel.tools import condition
 
 import immanuel_mcp  # noqa: F401  (installs the compat shims)
-from immanuel_mcp.compat import sect
 
 SECT_PLANETS = (chart_const.SUN, chart_const.MOON, chart_const.MERCURY, chart_const.VENUS,
                 chart_const.MARS, chart_const.JUPITER, chart_const.SATURN)
@@ -116,24 +115,3 @@ def test_full_serialized_night_chart_carries_sect():
     sun = result["objects"][str(chart_const.SUN)]
     assert sun.get("in_sect") is False
 
-
-def test_probe_decides_whether_to_patch():
-    """The shim is guarded on behaviour, not on a version list."""
-    assert sect.probe_shows_bug(sect.unpatched_wrap_objects()) in (True, False)
-    if sect.STATE == "patched":
-        assert sect.probe_shows_bug(sect.unpatched_wrap_objects()) is True
-    else:
-        assert sect.STATE == "not-needed"
-    # Whatever the case, the installed wrap_objects must not show the bug.
-    assert sect.probe_shows_bug(charts.Chart.wrap_objects) is False
-
-
-def test_install_leaves_a_fixed_immanuel_alone(monkeypatch):
-    """Simulate a release that fixed the bug: install() must not patch."""
-    fixed = charts.Chart.wrap_objects  # the shim's result behaves like a fixed release
-    monkeypatch.setattr(sect, "_original", None)
-    monkeypatch.setattr(sect, "STATE", "not-installed")
-    monkeypatch.setattr(charts.Chart, "wrap_objects", fixed)
-    sect.install()
-    assert sect.STATE == "not-needed"
-    assert charts.Chart.wrap_objects is fixed
