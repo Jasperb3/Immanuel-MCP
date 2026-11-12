@@ -207,3 +207,71 @@ def test_a_return_relocated_out_of_the_polar_circle_keeps_its_own_name():
         *TROMSO, 2026, TROMSO_TZ, return_latitude="51n30", return_longitude="0w07")
     assert result["status"] == "success", result.get("message")
     assert result["house_system"] == "Placidus"
+
+
+# --- reversed cusps (0.12.1) -------------------------------------------------
+# At some moments inside a polar circle the Swiss Ephemeris returns
+# Regiomontanus, Campanus and Polich Page cusps in reverse (clockwise) order,
+# with the MC and IC swapped. immanuel's house lookup assumes zodiacal order:
+# it raised KeyError('index'), which reached callers as the message "'index'",
+# or (Polich Page) built a chart with the houses scrambled. Each is now a
+# PolarHouseError naming the systems that work.
+
+REVERSED = "2020-08-13 20:55:00"            # Regiomontanus / Campanus reversed
+PP_SILENT = "1999-03-25 02:08:00"           # Polich Page reversed, used to build
+REVERSED_PROGRESSED = "2019-02-19 07:00:00"  # progressed to 2026-11-12 reversed
+REVERSED_SOLAR_RETURN = "2011-08-23 05:03:00"  # 2026 return reversed
+REVERSED_SUGGESTION = "Use house_system='PORPHYRIUS', 'EQUAL' or 'WHOLE_SIGN' for this chart."
+
+
+def _tromso_natal(when, **kw):
+    return immanuel_server.generate_natal_chart(when, *TROMSO[1:], TROMSO_TZ, **kw)
+
+
+def _assert_reversed_error(result, name):
+    assert result["status"] == "error", result.get("applied_settings")
+    assert result["type"] == "PolarHouseError"
+    assert name in result["message"] and "reverse" in result["message"], result["message"]
+    assert result["suggestion"] == REVERSED_SUGGESTION
+
+
+@pytest.mark.parametrize("system,name,when", [
+    ("REGIOMONTANUS", "Regiomontanus", REVERSED),
+    ("CAMPANUS", "Campanus", REVERSED),
+    ("POLICH_PAGE", "Polich Page", PP_SILENT),
+])
+def test_reversed_cusps_are_a_clear_error(system, name, when):
+    _assert_reversed_error(_tromso_natal(when, house_system=system), name)
+
+
+def test_reversed_cusps_on_the_armc_path_are_a_clear_error():
+    result = immanuel_server.generate_progressed_chart(
+        REVERSED_PROGRESSED, *TROMSO[1:], "2026-11-12 12:00:00", TROMSO_TZ,
+        house_system="REGIOMONTANUS")
+    _assert_reversed_error(result, "Regiomontanus")
+
+
+def test_reversed_return_cusps_are_a_clear_error():
+    result = immanuel_server.generate_solar_return_chart(
+        REVERSED_SOLAR_RETURN, *TROMSO[1:], 2026, TROMSO_TZ, house_system="REGIOMONTANUS")
+    _assert_reversed_error(result, "Regiomontanus")
+
+
+@pytest.mark.parametrize("system", ["PORPHYRIUS", "EQUAL", "WHOLE_SIGN"])
+def test_the_suggested_systems_work_at_a_reversed_moment(system):
+    assert _tromso_natal(REVERSED, house_system=system)["status"] == "success"
+
+
+def test_cusp_order_check():
+    in_order = [0.0] + [30.0 * i for i in range(12)]
+    assert not polar.cusps_reversed(in_order)
+    assert polar.cusps_reversed([0.0] + [(360 - 30.0 * i) % 360 for i in range(12)])
+    # Wrapping past 0 Aries is still zodiacal order.
+    assert not polar.cusps_reversed([0.0] + [(300 + 30.0 * i) % 360 for i in range(12)])
+
+
+@pytest.mark.parametrize("system", ["REGIOMONTANUS", "CAMPANUS", "POLICH_PAGE"])
+def test_these_systems_still_work_outside_the_polar_circle(system):
+    result = immanuel_server.generate_natal_chart(REVERSED, "51n30", "0w07", "Europe/London",
+                                                  house_system=system)
+    assert result["status"] == "success", result.get("message")

@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.12.0 · 23 tools · 489 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.12.1 · 23 tools · 501 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -269,6 +269,7 @@ Every response carries:
 - `applied_settings`: `{"house_system": "<display name>", "source": "per-call" | "session-global"}` on chart responses — lets the consuming LLM verify which settings produced the chart instead of assuming.
 - `warnings` (v0.10.2): a list of strings, present only when there is something to say. Today:
   - **Polar fallback.** A chart inside a polar circle can't have Placidus, Koch or other polar-sensitive houses, so the Swiss Ephemeris uses Porphyry cusps. `applied_settings.house_system` then reads `"Porphyry (polar fallback from Placidus)"`, and the full chart tools' top-level `house_system` reads `"Porphyrius"` (immanuel's name for Porphyry, and the value `house_system=` accepts) since v0.10.5. The Ascendant and MC are unaffected. Pass `house_system="WHOLE_SIGN"` (or another non-polar system) to get that system with no warning. Before v0.10.2 every chart tool failed inside the polar circles, Whole Sign included.
+  - **Reversed cusps.** At some moments inside a polar circle (a quarter to a third of them for Regiomontanus and Campanus at Tromsø and beyond, more for Polich Page), the Swiss Ephemeris returns these systems' cusps in reverse order with the MC and IC swapped. Since v0.12.1 that is an error, `type: "PolarHouseError"`, suggesting Porphyry, Equal or Whole Sign; before, it was the message `'index'`, or for Polich Page a chart with scrambled houses. Porphyry, Equal, Whole Sign, Vehlow, Morinus, Meridian, Azimuthal and Alcabitus are never affected.
   - **Clock changes.** A local time that never happened (spring forward) or happened twice (fall back) is accepted, and the warning says which reading was used, e.g. "01:30 occurred twice on 1990-10-28 in Europe/London (the clocks went back); using 01:30 BST (UTC+1), the first of the two. Write the UTC offset to choose: 1990-10-28T01:30:00+01:00 (BST) or 1990-10-28T01:30:00+00:00 (GMT)".
   - **UTC offsets in `date_time`.** A time can carry its offset (`1990-10-28T01:30:00+00:00`, `...Z`). It must be an offset the location's zone has at that local time: on a clock-change night it picks which reading is meant, and any other offset is an error naming the offsets that would fit (`12:00+05:00` in London used to be cast at 12:00 BST without a word). To give a time in UTC for a place elsewhere, pass `timezone="UTC"` with it.
 
