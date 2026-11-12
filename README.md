@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.11.0 · 23 tools · 489 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.12.0 · 23 tools · 489 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -67,8 +67,8 @@ Every chart-generating tool accepts a per-call `house_system` override and retur
 - Python 3.10 or higher
 - [uv](https://docs.astral.sh/uv/) package manager
 
-> **Run this server in its own environment.** It requires immanuel 1.7
-> (1.6 since v0.9.0, 1.7 since v0.11.0), which depends on `pysweph`. `pysweph` and `pyswisseph`
+> **Run this server in its own environment.** It requires immanuel 1.8
+> (1.6 since v0.9.0, 1.7 since v0.11.0, 1.8 since v0.12.0), which depends on `pysweph`. `pysweph` and `pyswisseph`
 > (required by kerykeion below 6, and by `kerykeion[swiss]`) install the same
 > `swisseph` module, so only one can be present, and with `pysweph` installed
 > kerykeion silently returns `house = None` for some planets. Never co-install
