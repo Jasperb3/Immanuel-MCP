@@ -48,3 +48,10 @@ def test_lifecycle_keeps_bodies_the_list_leaves_out():
     planets = {e.get("natal_object") or e.get("planet") for e in custom["lifecycle_events"]}
     assert {"Uranus", "Neptune", "Pluto", "Chiron"} & planets
     assert all(e.get("prediction_basis", "ephemeris") == "ephemeris" for e in custom["lifecycle_events"])
+
+
+def test_listed_default_object_appears_in_compact_output():
+    # Chiron is in immanuel's default list, so "added to the defaults" missed it.
+    immanuel_server.configure_immanuel_settings("objects", OBJECTS + ",CHIRON,TRUE_NORTH_NODE")
+    names = _names(immanuel_server.generate_compact_natal_chart(**BIRTH))
+    assert {"Chiron", "Ceres", "True North Node"} <= names

@@ -41,7 +41,7 @@ def serialize_full_chart(chart) -> Dict[str, Any]:
     return chart_json
 
 
-# immanuel's default object list; compact output keeps anything added to it.
+# immanuel's default object list. A customised list is kept whole in compact output.
 _DEFAULT_OBJECTS = frozenset(charts.Config().objects)
 
 
@@ -56,10 +56,10 @@ class CompactJSONSerializer(ToJSON):
         - Major planets: Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto
         - Key angles: Ascendant (ASC), Midheaven (MC)
 
-    Objects the session config adds to immanuel's defaults are kept too.
+    When the session object list is customised, every object in it is kept too.
 
     Objects Excluded:
-        - Minor asteroids (e.g., Chiron, Ceres, Pallas, Juno, Vesta) unless added
+        - Minor asteroids (e.g., Chiron, Ceres, Pallas, Juno, Vesta) unless listed
         - Fixed stars
         - Arabic parts
         - Other minor celestial bodies
@@ -120,11 +120,16 @@ class CompactJSONSerializer(ToJSON):
         return isinstance(obj, charts.Chart)
 
     def _included_objects(self, chart: Any) -> set:
-        """The major objects, plus any the chart's config adds to immanuel's
-        defaults (configure_immanuel_settings objects=[..., 'CERES']): the
-        caller asked for those, so dropping them was silent data loss."""
-        added = set(chart._config.objects) - _DEFAULT_OBJECTS
-        return set(self.INCLUDED_OBJECTS) | added
+        """The major objects, plus every object a customised object list
+        names (configure_immanuel_settings objects=[..., 'CHIRON', 'CERES']):
+        the caller asked for those, so dropping them was silent data loss.
+        Comparing against immanuel's defaults isn't enough: Chiron, the nodes
+        and Lilith are in them, so an explicit request for one was dropped.
+        With the default list, output is the major set as before."""
+        configured = set(chart._config.objects)
+        if configured == _DEFAULT_OBJECTS:
+            return set(self.INCLUDED_OBJECTS)
+        return set(self.INCLUDED_OBJECTS) | configured
 
     def _convert_to_dict(self, obj: Any) -> Any:
         """
