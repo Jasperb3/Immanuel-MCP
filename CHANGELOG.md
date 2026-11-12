@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-12
+
+### Fixed
+- **Polar charts with reversed house cusps.** At some moments inside a
+  polar circle the Swiss Ephemeris returns Regiomontanus, Campanus and
+  Polich Page cusps in reverse (clockwise) order, with the MC and IC
+  swapped. Over 60 random moments per place, Regiomontanus and Campanus
+  were reversed at 12 of 60 at Tromsø, 24 at Longyearbyen and 17 at
+  McMurdo; Polich Page more often. immanuel's house lookup assumes
+  zodiacal order, so these returned the error message `'index'`, or, for
+  Polich Page, sometimes a chart with the houses scrambled. They are now
+  an error with `type: "PolarHouseError"`, a message naming the system and
+  latitude, and a suggestion to use Porphyry, Equal or Whole Sign. No other
+  system and no chart outside the polar circles is affected.
+
 ## [0.12.0] - 2026-11-12
 
 Requires immanuel 1.8 (`immanuel>=1.8.0,<1.9`), which fixes three of the
