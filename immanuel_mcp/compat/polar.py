@@ -146,12 +146,13 @@ def reported_house_system(chart) -> str:
     if not polar_fell_back(code):
         return chart.house_system
     subjects = [getattr(chart, name, None) for name in ("_native", "_partner")]
-    if not any(_falls_back(subject, code) for subject in subjects if subject is not None):
+    if not any(falls_back(subject, code) for subject in subjects if subject is not None):
         return chart.house_system
     return localize(names.HOUSE_SYSTEMS[chart_const.PORPHYRIUS], chart._config.locale)
 
 
-def _falls_back(subject, code: bytes) -> bool:
+def falls_back(subject, code: bytes) -> bool:
+    """Whether this subject's houses fall back to Porphyry for this system."""
     try:
         swe.houses_ex2(subject.julian_date, subject.latitude, subject.longitude, code)
     except swe.Error as error:

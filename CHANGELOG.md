@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-11-12
+
+### Fixed
+- **Polar composites mixed two house systems.** A composite's cusps are
+  midpoints of each person's own cusps. With one person inside a polar
+  circle (Svalbard) and one outside (London), the first fell back to
+  Porphyry while the second kept real Placidus, so the composite houses
+  were neither system, although `applied_settings` reported Porphyry. Both
+  charts are now cast in Porphyry when either falls back, as the kerykeion
+  server already did. For London 1985-06-21 12:00 + Svalbard 1990-01-15
+  12:00 the 2nd and 3rd cusps move from 287.47° and 324.38° to 290.66° and
+  327.61°, and the composite Moon (146.08°) from house 9 to house 8,
+  matching kerykeion to 0.004°.
+
 ## [0.12.2] - 2026-11-12
 
 Fixes from testing in Claude Desktop.
