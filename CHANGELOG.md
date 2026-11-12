@@ -29,9 +29,9 @@ Fixes from testing in Claude Desktop.
   location or relocated return) is now an error, `type: "PoleError"`,
   suggesting `time_status="unknown"` or 89.99°. Untimed charts there still
   build, with their lifecycle section.
-- **Custom object lists.** Compact charts now include objects added to
-  immanuel's defaults with `configure_immanuel_settings` (e.g. Ceres); they
-  were silently dropped. Lifecycle events no longer depend on the session's
+- **Custom object lists.** When the session object list is customised with
+  `configure_immanuel_settings`, compact charts include every object in it
+  (e.g. Chiron, Ceres, the nodes); they were silently dropped. Lifecycle events no longer depend on the session's
   object list: a list without Uranus or Chiron lost those events and pushed
   the timeline onto estimated dates.
 - **Input errors.** An impossible date (1990-02-30) is reported as one, not

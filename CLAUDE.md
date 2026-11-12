@@ -473,7 +473,7 @@ The `configure_immanuel_settings` tool allows dynamic modification of astrology 
 
 ### Compact Chart Design
 The `CompactJSONSerializer` filters chart data to include:
-- **Major Objects Only**: Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto, Ascendant, Midheaven, plus any object the session config adds to immanuel's defaults (v0.12.2)
+- **Major Objects Only**: Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto, Ascendant, Midheaven, plus every object in a customised session object list (v0.12.2; comparing against immanuel's defaults missed Chiron, the nodes and Lilith, which are in them)
 - **Major Aspects Only**: Conjunction, Opposition, Square, Trine, Sextile
 - **Essential Data**: Object positions, house placements, aspect orbs
 - **Flattened Houses (v0.8.0)**: house cusps are reduced to `number`, `sign`, `sign_longitude` and raw `longitude`. They were previously copied verbatim from the full chart, which left every "compact" response carrying immanuel's full nested wrapper for all twelve cusps — flattening them cuts the houses block by ~84% (8.5 KB → 1.4 KB on a natal chart)
