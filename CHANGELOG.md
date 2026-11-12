@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-11-12
+
+Requires immanuel 1.8 (`immanuel>=1.8.0,<1.9`), which fixes three of the
+issues filed against 1.7. Tool output is unchanged: 22 representative
+responses (day/night, polar, untimed, every chart type) are identical to
+0.11.0's.
+
+### Changed
+- **Night-chart sect is immanuel's own again.** 1.8.0 restores `in_sect` on
+  night charts ([theriftlab/immanuel-python#31](https://github.com/theriftlab/immanuel-python/issues/31)),
+  so `compat/sect.py` is removed. Its tests stay as `tests/test_sect.py`.
+- **Aspect patterns come from immanuel's `aspect_pattern_objects`.** 1.8
+  added the setting (default Sun to Pluto) and stopped searching
+  `aspects_to` charts ([#34](https://github.com/theriftlab/immanuel-python/issues/34)).
+  Every Config the server builds sets it to the planets and Chiron, which
+  replaces the serializer's own re-run of the search. On 1.8 that re-run
+  would have silently dropped Chiron, because immanuel's default now
+  filters it out. Cross-chart outputs still report `aspect_patterns: None`.
+- **Polar shim narrowed.** 1.8 no longer hard-codes Placidus internally
+  ([#32](https://github.com/theriftlab/immanuel-python/issues/32)), so polar
+  Whole Sign, Equal, Porphyry etc. build without help. Placidus and Koch
+  now raise `ValueError` upstream; the shim still retries them with
+  Porphyry, because Placidus is the default.
+- The fall-back clock-change warning ends with the two offset spellings
+  that choose each reading, unless the input already carried one.
+
 ### Fixed
 - **UTC offsets in `date_time` were dropped.** Given coordinates, immanuel
   replaces a time's own zone with the one it looks up from them (by design,
@@ -31,10 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the return's Julian date, and the silent fallback to 1 January of the
   return year is gone. Lifecycle separations move by thousandths of a
   degree at most; the solar return chart itself was never affected.
-
-### Changed
-- The fall-back clock-change warning ends with the two offset spellings
-  that choose each reading, unless the input already carried one.
 
 ## [0.11.0] - 2026-11-09
 

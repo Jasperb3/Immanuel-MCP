@@ -3,16 +3,16 @@
 Aspect patterns are built from the planets and Chiron only, and never across
 two charts.
 
-immanuel's pattern search runs over every aspect in a chart, so angles and
-points (Asc, MC, Part of Fortune, Lilith) became pattern vertices. Its
-vertices are clusters of conjunct objects whose aspects are pooled, so the
-patterns are recomputed from planet-only aspects rather than filtered after
-the fact.
+Before 1.8, immanuel's pattern search ran over every aspect in a chart, so
+angles and points (Asc, MC, Part of Fortune, Lilith) became pattern vertices,
+and the server recomputed patterns from planet-only aspects. 1.8 added
+Config.aspect_pattern_objects (default Sun to Pluto); every Config the
+server builds sets it to PATTERN_OBJECTS, which adds Chiron.
 
 Charts built against another chart are a different problem: transit and
-natal objects share indices (both Suns are 4000001), so the search merges
-the two charts' objects into the same vertices. No tool output exposes those
-patterns today; serialize_full_chart nulls them so none ever does.
+natal objects share indices (both Suns are 4000001), so the search merged
+the two charts' objects into the same vertices (immanuel-python#34). 1.8
+skips the search there; serialize_full_chart reports None.
 """
 
 import json
@@ -23,7 +23,9 @@ from immanuel.const import chart as chart_const
 
 import immanuel_server
 from immanuel_mcp.charts import lunar_return
-from immanuel_mcp.serializers import PATTERN_OBJECTS, serialize_full_chart
+from immanuel_mcp.constants import PATTERN_OBJECTS
+from immanuel_mcp.serializers import serialize_full_chart
+from immanuel_mcp.utils import settings
 from immanuel_mcp.utils.subjects import create_subject
 
 LONDON = ("1984-03-12 12:00:00", "51n30", "0w07")
@@ -40,19 +42,29 @@ def _as_sets(pattern):
     return {frozenset(vertex) for vertex in pattern}
 
 
+PATTERN_SET = set(PATTERN_OBJECTS)
+
+
 def test_pattern_objects_are_the_planets_and_chiron():
-    assert PATTERN_OBJECTS == {
+    assert PATTERN_SET == {
         chart_const.SUN, chart_const.MOON, chart_const.MERCURY, chart_const.VENUS,
         chart_const.MARS, chart_const.JUPITER, chart_const.SATURN, chart_const.URANUS,
         chart_const.NEPTUNE, chart_const.PLUTO, chart_const.CHIRON}
 
 
+def test_every_server_config_searches_the_pattern_objects():
+    assert settings.get_session_config().aspect_pattern_objects == PATTERN_OBJECTS
+    assert settings.build_call_config("WHOLE_SIGN").aspect_pattern_objects == PATTERN_OBJECTS
+    settings.reset_global_settings()
+    assert settings.get_session_config().aspect_pattern_objects == PATTERN_OBJECTS
+
+
 def test_natal_patterns_use_planets_only_and_keep_planet_patterns():
     result = immanuel_server.generate_natal_chart(*LONDON, timezone=LONDON_TZ)
     patterns = result["aspect_patterns"]
-    assert all(vertex <= PATTERN_OBJECTS for vertex in _vertices(patterns)), patterns
+    assert all(vertex <= PATTERN_SET for vertex in _vertices(patterns)), patterns
     # immanuel's own T-square here was already all-planet: Saturn+Mars, Venus,
-    # Chiron. It must survive the recomputation unchanged.
+    # Chiron. It must survive the object filter unchanged.
     assert {frozenset({chart_const.SATURN, chart_const.MARS}),
             frozenset({chart_const.VENUS}),
             frozenset({chart_const.CHIRON})} in [_as_sets(p) for p in patterns["t_square"]]
@@ -78,7 +90,7 @@ SINGLE_CHART_TOOLS = {
 def test_every_full_chart_tool_uses_planet_only_patterns(tool):
     result = SINGLE_CHART_TOOLS[tool]()
     assert result["status"] == "success", result.get("message")
-    assert all(vertex <= PATTERN_OBJECTS for vertex in _vertices(result["aspect_patterns"]))
+    assert all(vertex <= PATTERN_SET for vertex in _vertices(result["aspect_patterns"]))
 
 
 def test_charts_built_against_another_chart_get_no_patterns():

@@ -9,6 +9,17 @@ KEY_OBJECTS = "objects"
 KEY_HOUSES = "houses"
 KEY_ASPECTS = "aspects"
 
+# Objects that may form aspect-pattern vertices, set as aspect_pattern_objects
+# on every Config the server builds (utils/settings.new_config): immanuel's
+# 1.8 default (Sun to Pluto) plus Chiron. No angles or points: before 1.8
+# immanuel searched every chart aspect, so the Asc, MC, Part of Fortune and
+# Lilith became vertices.
+PATTERN_OBJECTS = [
+    chart_const.SUN, chart_const.MOON, chart_const.MERCURY, chart_const.VENUS,
+    chart_const.MARS, chart_const.JUPITER, chart_const.SATURN, chart_const.URANUS,
+    chart_const.NEPTUNE, chart_const.PLUTO, chart_const.CHIRON,
+]
+
 CELESTIAL_BODIES = {
     # Angles
     3000001: "Asc",

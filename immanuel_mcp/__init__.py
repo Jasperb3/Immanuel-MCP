@@ -27,13 +27,10 @@ from importlib import metadata
 
 from .app import mcp
 from .compat import polar as _polar
-from .compat import sect as _sect
 from .constants import CELESTIAL_BODIES
 
 # Charts inside the polar circles need this before any chart is built.
 _polar.install()
-# Night charts lose in_sect on immanuel 1.7.0; patched only if the bug shows.
-_sect.install()
 
 
 def _detect_version() -> str:

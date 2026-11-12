@@ -1,21 +1,22 @@
 """
-Let charts inside the polar circles build.
+Let Placidus and Koch charts inside the polar circles build.
 
-immanuel 1.6 and 1.7 hard-code Placidus for the Part of Fortune Ascendant
-(tools/part.py) and the diurnal check (tools/condition.py), and use the
-chart's own system for the houses. All three go through
-immanuel.tools.sweph.angles_houses_vertex, which calls swe.houses_ex2 or
-swe.houses_armc_ex2. Inside a polar circle the Swiss Ephemeris C library
-falls back to Porphyry and reports a warning, which pysweph raises as
-swisseph.Error, so every chart failed, Whole Sign included.
+immanuel 1.6 and 1.7 hard-coded Placidus for the Part of Fortune Ascendant
+and the diurnal check, so every polar chart failed, Whole Sign included.
+1.8 fixed that (theriftlab/immanuel-python#32): those calculations now use
+Equal houses, and only a chart whose own system is Placidus or Koch fails.
+It fails on purpose: immanuel.tools.sweph.angles_houses_vertex turns the
+Swiss Ephemeris "within polar circle, switched to Porphyry" error into a
+ValueError. Placidus is the default house system, so without this shim a
+default chart for Tromso would be an error.
 
 install() replaces the `swe` that immanuel.tools.sweph sees (only there, not
 the swisseph module itself) with a proxy whose two house functions retry
 that error with Porphyry, which is what the C library had already switched
-to, and record the fallback for the response. The Ascendant and MC do not
-depend on the house system, so the Part of Fortune and diurnal results are
-unaffected. Every other call, and every other error, passes straight
-through.
+to, and record the fallback for the response. The retry happens inside the
+call, so immanuel's own `except swe.Error` (which resolves to swisseph's
+Error through the proxy) never sees it. Every other call, and every other
+error, passes straight through.
 """
 
 import logging
@@ -32,9 +33,10 @@ from ..utils.call_context import note_polar_fallback, polar_fell_back
 logger = logging.getLogger(__name__)
 
 # The immanuel releases whose sweph.py this was checked against. The pin is
-# immanuel>=1.7.0,<1.8 (angles_houses_vertex is unchanged from 1.6); widen
-# this only after re-reading angles_houses_vertex.
-SUPPORTED = ("1.7.",)
+# immanuel>=1.8.0,<1.9 (1.8 wraps the two house calls in try/except swe.Error
+# but keeps their arguments); widen this only after re-reading
+# angles_houses_vertex.
+SUPPORTED = ("1.8.",)
 POLAR_MESSAGE = "polar circle"
 PORPHYRY = b"O"
 _HSYS_POSITION = 3  # houses_ex2(jd, lat, lon, hsys) / houses_armc_ex2(armc, lat, eps, hsys)
