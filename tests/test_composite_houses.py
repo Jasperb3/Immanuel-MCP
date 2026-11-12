@@ -100,3 +100,29 @@ def test_whole_sign_unchanged():
     ours = CoherentComposite(native, partner, config=config)
     theirs = charts.Composite(native, partner, config=config)
     assert {i: h["lon"] for i, h in ours._houses.items()} == {i: h["lon"] for i, h in theirs._houses.items()}
+
+
+# London (51.5N) casts real Placidus, Svalbard (78.2N) falls back to Porphyry.
+# Midpointing the two mixed systems; both must be Porphyry, as in kerykeion.
+NOON_PAIR = ("1985-06-21 12:00:00", *LONDON, "1990-01-15 12:00:00", *SVALBARD)
+
+
+@pytest.mark.parametrize("house_system", [None, "KOCH"])
+def test_polar_composite_casts_both_charts_in_porphyry(house_system):
+    result = generate_composite_chart(*NOON_PAIR, house_system=house_system)
+    assert result["status"] == "success", result
+    cusps = _cusps(result)
+    for number, expected in ((2, 290.66), (3, 327.61), (5, 27.61), (6, 50.66)):
+        assert cusps[number - 1] == pytest.approx(expected, abs=0.01)
+    sizes = [(cusps[(i + 1) % 12] - cusps[i]) % 360 for i in range(12)]
+    for quadrant in range(4):
+        trio = sizes[quadrant * 3:quadrant * 3 + 3]
+        assert max(trio) - min(trio) < 1e-6
+    assert "Porphyry" in result["applied_settings"]["house_system"]
+
+
+def test_polar_composite_moon_house_matches_kerykeion():
+    result = generate_composite_chart(*NOON_PAIR)
+    moon = _object(result, "Moon")
+    assert moon["longitude"]["raw"] == pytest.approx(146.08, abs=0.01)
+    assert moon["house"]["number"] == 8

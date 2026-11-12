@@ -13,12 +13,20 @@ way from the Ascendant, with the IC and Descendant opposite. Sizes are
 recomputed from the new cusps as immanuel does for any chart. Where no
 midpoint wraps, this is algebraically the same as immanuel's result.
 Whole Sign composites (built from the ARMC midpoint) are left alone.
+
+When either chart is inside a polar circle, where Placidus or Koch fall back
+to Porphyry, both charts' cusps are cast in Porphyry. Otherwise the
+composite took the midpoint of one chart's real Placidus cusps and the
+other's Porphyry ones, which is neither system (London + Svalbard put the
+composite Moon a house away from kerykeion's all-Porphyry composite).
 """
 
 import swisseph as swe
 from immanuel import charts
 from immanuel.const import chart
-from immanuel.tools import ephemeris
+from immanuel.tools import ephemeris, sweph
+
+from .polar import falls_back
 
 
 def _mean_offset(native: float, native_ref: float, partner: float, partner_ref: float) -> float:
@@ -39,13 +47,22 @@ class CoherentComposite(charts.Composite):
         self._rebuild_houses()
         self._rebuild_angles()
 
-    def _subject_kwargs(self, subject) -> dict:
+    def _subject_kwargs(self, subject, house_system=None) -> dict:
         return dict(jd=subject.julian_date, lat=subject.latitude, lon=subject.longitude,
-                    house_system=self._config.house_system)
+                    house_system=house_system or self._config.house_system)
+
+    def _house_system(self) -> int:
+        """The configured system, or Porphyry for both charts when either
+        falls back to it, so the midpoints come from one system."""
+        code = sweph._SWE[self._config.house_system]
+        if falls_back(self._native, code) or falls_back(self._partner, code):
+            return chart.PORPHYRIUS
+        return self._config.house_system
 
     def _rebuild_houses(self) -> None:
-        native = ephemeris.get_houses(**self._subject_kwargs(self._native))
-        partner = ephemeris.get_houses(**self._subject_kwargs(self._partner))
+        system = self._house_system()
+        native = ephemeris.get_houses(**self._subject_kwargs(self._native, system))
+        partner = ephemeris.get_houses(**self._subject_kwargs(self._partner, system))
         first = chart.HOUSE + 1
         n1, p1 = native[first]["lon"], partner[first]["lon"]
         anchor = swe.deg_midp(n1, p1)
