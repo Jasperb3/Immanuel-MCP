@@ -65,31 +65,51 @@ def _timezone_error(e: Exception) -> tuple:
             "Install timezone data: pip install tzdata")
 
 
-def validate_inputs(date_time: str, latitude: str, longitude: str) -> None:
+def validate_inputs(date_time: str, latitude: str, longitude: str, timezone: str = None) -> None:
     """
-    Validate input parameters before processing.
+    Validate input parameters before processing, reporting every bad one.
+
+    Checking one at a time hid later mistakes: a bad timezone only showed
+    once the coordinates were fixed.
 
     Args:
         date_time: Date and time string
         latitude: Latitude string
         longitude: Longitude string
+        timezone: Optional IANA timezone name
 
     Raises:
-        ValueError: If any input is invalid
+        ValueError: naming every invalid input. A bad timezone on its own
+            re-raises the zoneinfo error, as before.
     """
-    # Validate datetime format
+    problems = []
     try:
-        # Try parsing with various formats
-        if 'T' in date_time:
-            datetime.fromisoformat(date_time.replace('T', ' '))
-        else:
-            datetime.fromisoformat(date_time)
+        datetime.fromisoformat(date_time.replace('T', ' ') if 'T' in date_time else date_time)
     except ValueError as e:
-        raise ValueError(f"Invalid datetime format: {date_time}. Use ISO format: YYYY-MM-DD HH:MM:SS")
+        if str(e).startswith("Invalid isoformat"):
+            problems.append(f"Invalid datetime format: {date_time}. Use ISO format: YYYY-MM-DD HH:MM:SS")
+        else:
+            # The format is fine but the date or time doesn't exist (Feb 30).
+            problems.append(f"Invalid datetime {date_time}: {e}.")
 
-    # Validate coordinates (this also validates ranges)
-    parse_coordinate(latitude, is_latitude=True)
-    parse_coordinate(longitude, is_latitude=False)
+    for value, is_latitude in ((latitude, True), (longitude, False)):
+        try:
+            parse_coordinate(value, is_latitude=is_latitude)
+        except ValueError as e:
+            problems.append(str(e))
+
+    timezone_error = None
+    if timezone:
+        try:
+            zoneinfo.ZoneInfo(timezone)
+        except (zoneinfo.ZoneInfoNotFoundError, ValueError) as e:
+            timezone_error = e
+            problems.append(f"Unknown IANA timezone '{timezone}'.")
+
+    if timezone_error is not None and len(problems) == 1:
+        raise timezone_error
+    if problems:
+        raise ValueError(" ".join(problems))
 
 
 class PolarHouseError(ValueError):
@@ -97,6 +117,29 @@ class PolarHouseError(ValueError):
 
 
 POLAR_HOUSE_SUGGESTION = "Use house_system='PORPHYRIUS', 'EQUAL' or 'WHOLE_SIGN' for this chart."
+
+
+class PoleError(ValueError):
+    """Houses and angles cast at exactly 90 degrees north or south."""
+
+
+POLE_SUGGESTION = (
+    "Pass time_status='unknown' for a chart without houses and angles, "
+    "or a latitude just off the pole such as 89.99.")
+
+
+def reject_pole(latitude: float, time_status: int = chart_const.TIME_KNOWN) -> None:
+    """At exactly 90 degrees north or south the horizon is the celestial
+    equator, so the Ascendant and the house cusps are undefined. The Swiss
+    Ephemeris returns 0 Aries (or a point tied to the Sun) with no error,
+    which made spurious exact aspects. Only a known time casts houses."""
+    if isinstance(latitude, str):
+        latitude = parse_coordinate(latitude, is_latitude=True)
+    if time_status == chart_const.TIME_KNOWN and abs(latitude) >= 90:
+        raise PoleError(
+            f"Houses and angles can't be cast at latitude {latitude:g}: at the "
+            f"pole the horizon is the celestial equator, so the Ascendant, the "
+            f"MC and every house cusp are undefined.")
 
 
 def get_error_suggestion(error_type: str, message: str) -> str:
@@ -110,12 +153,19 @@ def get_error_suggestion(error_type: str, message: str) -> str:
     Returns:
         Helpful suggestion string
     """
-    if "ValueError" in error_type and "coordinate" in message.lower():
-        return "Use formats like: 51.38, 51n23, or 51°23'0\""
-    elif "ValueError" in error_type and "datetime" in message.lower():
-        return "Use ISO format: 1984-01-11 18:45:00"
-    else:
+    if "ValueError" not in error_type:
         return "Check the Immanuel documentation for more details"
+    lowered = message.lower()
+    parts = []
+    if "out of range for month" in lowered or " must be in " in lowered:
+        parts.append("Check that the date and time exist (e.g. February has 28 or 29 days).")
+    elif "datetime" in lowered:
+        parts.append("Use ISO format: 1984-01-11 18:45:00")
+    if any(word in lowered for word in ("coordinate", "latitude", "longitude")):
+        parts.append("Use formats like: 51.38, 51n23, or 51°23'0\"")
+    if "timezone" in lowered:
+        parts.append("Use an IANA Region/City name, e.g. 'Europe/London' or 'America/New_York'.")
+    return " ".join(parts) or "Check the Immanuel documentation for more details"
 
 
 def handle_chart_error(e: Exception) -> Dict[str, Any]:
@@ -136,6 +186,8 @@ def handle_chart_error(e: Exception) -> Dict[str, Any]:
         message, suggestion = _timezone_error(e)
     elif isinstance(e, PolarHouseError):
         message, suggestion = str(e), POLAR_HOUSE_SUGGESTION
+    elif isinstance(e, PoleError):
+        message, suggestion = str(e), POLE_SUGGESTION
     elif "Invalid coordinate" in str(e):
         message = str(e)
     elif "Invalid datetime" in str(e):

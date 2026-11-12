@@ -7,6 +7,7 @@ unimportable from a clean checkout; it belongs inside the package.
 
 import json
 from typing import Any, Dict, List, Optional
+from immanuel import charts
 from immanuel.charts import ToJSON
 from immanuel.const import calc as calc_const
 from immanuel.const import chart as chart_const
@@ -40,6 +41,10 @@ def serialize_full_chart(chart) -> Dict[str, Any]:
     return chart_json
 
 
+# immanuel's default object list. A customised list is kept whole in compact output.
+_DEFAULT_OBJECTS = frozenset(charts.Config().objects)
+
+
 class CompactJSONSerializer(ToJSON):
     """
     Custom JSON serializer to create a compact, optimized representation of astrological charts.
@@ -51,8 +56,10 @@ class CompactJSONSerializer(ToJSON):
         - Major planets: Sun, Moon, Mercury, Venus, Mars, Jupiter, Saturn, Uranus, Neptune, Pluto
         - Key angles: Ascendant (ASC), Midheaven (MC)
 
+    When the session object list is customised, every object in it is kept too.
+
     Objects Excluded:
-        - Minor asteroids (e.g., Chiron, Ceres, Pallas, Juno, Vesta)
+        - Minor asteroids (e.g., Chiron, Ceres, Pallas, Juno, Vesta) unless listed
         - Fixed stars
         - Arabic parts
         - Other minor celestial bodies
@@ -108,9 +115,21 @@ class CompactJSONSerializer(ToJSON):
     }
 
     def _is_chart_object(self, obj: Any) -> bool:
-        """Check if object is an Immanuel chart type."""
-        type_name = type(obj).__name__
-        return type_name in ['Natal', 'SolarReturn', 'Progressed', 'Composite', 'Transits']
+        """Check if object is an Immanuel chart type (subclasses included,
+        e.g. compat.composite.CoherentComposite)."""
+        return isinstance(obj, charts.Chart)
+
+    def _included_objects(self, chart: Any) -> set:
+        """The major objects, plus every object a customised object list
+        names (configure_immanuel_settings objects=[..., 'CHIRON', 'CERES']):
+        the caller asked for those, so dropping them was silent data loss.
+        Comparing against immanuel's defaults isn't enough: Chiron, the nodes
+        and Lilith are in them, so an explicit request for one was dropped.
+        With the default list, output is the major set as before."""
+        configured = set(chart._config.objects)
+        if configured == _DEFAULT_OBJECTS:
+            return set(self.INCLUDED_OBJECTS)
+        return set(self.INCLUDED_OBJECTS) | configured
 
     def _convert_to_dict(self, obj: Any) -> Any:
         """
@@ -257,11 +276,13 @@ class CompactJSONSerializer(ToJSON):
             # Build the simplified output dictionary
             compact_chart = {}
 
+            included = self._included_objects(obj)
+
             # Simplify and filter objects
             if KEY_OBJECTS in chart_dict:
                 simplified_objects = {}
                 for k, v in chart_dict[KEY_OBJECTS].items():
-                    if v.get('index') in self.INCLUDED_OBJECTS:
+                    if v.get('index') in included:
                         # Use consolidated position extraction method
                         obj_data = self._extract_position_details(v)
                         simplified_objects[k] = obj_data
@@ -297,7 +318,7 @@ class CompactJSONSerializer(ToJSON):
                                 passive_index = aspect.get('passive')
 
                                 # Filter to only major objects
-                                if active_index in self.INCLUDED_OBJECTS and passive_index in self.INCLUDED_OBJECTS:
+                                if active_index in included and passive_index in included:
                                     active_name = object_names.get(active_index)
                                     passive_name = object_names.get(passive_index)
                                     if active_name and passive_name:

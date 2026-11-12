@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-12
+
+Fixes from testing in Claude Desktop.
+
+### Fixed
+- **Composite houses out of order.** immanuel takes each house cusp's
+  midpoint on its own shorter arc, so when a pair of cusps is nearly 180°
+  apart some composite cusps land on the far side of the circle (11 of 64
+  London 1985 + Svalbard 1990 time pairs). The averaged house sizes also
+  stopped matching the cusps, which put an MC sitting exactly on cusp 10 in
+  house 9 (18 of 48 same-moment London/Svalbard pairs). Composite cusps now
+  keep each chart's order (`immanuel_mcp/compat/composite.py`), sizes are
+  recomputed from the cusps, and the MC, IC and Descendant are placed from
+  the Ascendant the same way. Pairs whose midpoints don't wrap, and Whole
+  Sign composites, are unchanged.
+- **Charts at exactly 90°N or 90°S.** The Ascendant and houses are undefined
+  there, but the Swiss Ephemeris returned 0° Aries (or a point tied to the
+  Sun) with no error, giving spurious exact aspects such as Sun–Asc at
+  0.01°. A chart with a known time at either pole (birth, partner, transit
+  location or relocated return) is now an error, `type: "PoleError"`,
+  suggesting `time_status="unknown"` or 89.99°. Untimed charts there still
+  build, with their lifecycle section.
+- **Custom object lists.** When the session object list is customised with
+  `configure_immanuel_settings`, compact charts include every object in it
+  (e.g. Chiron, Ceres, the nodes); they were silently dropped. Lifecycle events no longer depend on the session's
+  object list: a list without Uranus or Chiron lost those events and pushed
+  the timeline onto estimated dates.
+- **Input errors.** An impossible date (1990-02-30) is reported as one, not
+  as a format error. Every bad input (date, latitude, longitude, timezone)
+  is reported in one message, where a bad timezone used to show only after
+  the coordinates were fixed. Coordinate errors suggest the accepted formats
+  instead of "Check the Immanuel documentation".
+
+### Changed
+- **Compact JSON text.** Tool results' text content is compact JSON instead
+  of FastMCP's indent=2 (structured content is unchanged). A full natal
+  chart's text drops from about 122k characters to 82k.
+- **`include_lifecycle_events`** on natal, solar return, progressed and
+  lunar return tools (full and compact), as transit-to-natal already had.
+  Default `true`; `false` returns `lifecycle_events: null`.
+
 ## [0.12.1] - 2026-11-12
 
 ### Fixed

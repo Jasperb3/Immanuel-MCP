@@ -502,7 +502,7 @@ class TestCompactChart:
         
         try:
             with patch('immanuel_server.charts.Subject') as mock_subject, \
-                 patch('immanuel_server.charts.Composite') as mock_composite:
+                 patch('immanuel_server.CoherentComposite') as mock_composite:
                 
                 mock_chart = MagicMock()
                 mock_composite.return_value = mock_chart
@@ -788,7 +788,7 @@ class TestMCPTools:
         
         try:
             with patch('immanuel_server.charts.Subject') as mock_subject, \
-                 patch('immanuel_server.charts.Composite') as mock_composite:
+                 patch('immanuel_server.CoherentComposite') as mock_composite:
                 
                 mock_chart = MagicMock()
                 mock_composite.return_value = mock_chart

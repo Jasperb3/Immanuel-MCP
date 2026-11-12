@@ -12,6 +12,7 @@ from immanuel.tools import convert, position, sweph
 from immanuel.tools import date as date_tools
 
 from .call_context import add_warning
+from .errors import reject_pole
 
 TIME_STATUS_NAMES = {
     chart_const.TIME_KNOWN: "known",
@@ -240,6 +241,7 @@ def create_subject(date_time: str, latitude: float, longitude: float, timezone: 
     Returns:
         Configured Subject instance
     """
+    reject_pole(latitude, time_status)
     subject_kwargs = {
         'date_time': date_time,
         'latitude': latitude,

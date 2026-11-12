@@ -29,7 +29,8 @@ from ..utils.coordinates import parse_coordinate
 from ..utils.datetimes import iso_timestamp
 from ..utils.subjects import create_subject, warn_on_untimed_derived_chart
 from ..utils.errors import (
-    handle_chart_error, validate_aspect_priority, validate_inputs, validate_time_status)
+    handle_chart_error, reject_pole, validate_aspect_priority, validate_inputs,
+    validate_time_status)
 from ..utils.settings import build_call_config, build_applied_settings
 from ..utils.search import crossed_by, find_return_jd
 from ..optimizers.cross_aspects import (
@@ -203,7 +204,8 @@ def generate_lunar_return_chart(
     return_latitude: str = None,
     return_longitude: str = None,
     occurrence: int = 1,
-    time_status: str = "known"
+    time_status: str = "known",
+    include_lifecycle_events: bool = True
 ) -> Dict[str, Any]:
     """
     Calculate lunar return chart for specified month/year.
@@ -244,6 +246,8 @@ def generate_lunar_return_chart(
                      is then searched from that natal Moon, its instant is
                      uncertain (up to ~12 hours for "unknown", see warnings),
                      and the return chart omits houses and angles.
+        include_lifecycle_events: Include lifecycle events analysis (planetary returns,
+                                  major life transits, future timeline). Default: True.
 
     Returns:
         Full lunar return chart with all positions and aspects, plus
@@ -255,7 +259,7 @@ def generate_lunar_return_chart(
         logger.info(f"Generating lunar return chart for {date_time} at {latitude}, {longitude} for {return_year}-{return_month:02d}")
 
         # Validate inputs
-        validate_inputs(date_time, latitude, longitude)
+        validate_inputs(date_time, latitude, longitude, timezone)
         status = validate_time_status(time_status)
 
         if not 1 <= return_month <= 12:
@@ -271,6 +275,7 @@ def generate_lunar_return_chart(
 
         relocated = return_latitude is not None or return_longitude is not None
         return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
+        reject_pole(return_lat, status)
         return_lon = parse_coordinate(return_longitude, is_latitude=False) if return_longitude else lon
 
         # Get natal Moon's position
@@ -348,15 +353,19 @@ def generate_lunar_return_chart(
             'relocated': relocated
         }
 
-        # Lifecycle context at the return moment (the return chart doubles
-        # as the transit reference)
-        attach_lifecycle_section(
-            result,
-            natal_chart=natal_chart,
-            comparison_chart=lunar_return_chart,
-            birth_datetime=date_time,
-            comparison_datetime=lunar_return_dt
-        )
+        if include_lifecycle_events:
+            # Lifecycle context at the return moment (the return chart doubles
+            # as the transit reference)
+            attach_lifecycle_section(
+                result,
+                natal_chart=natal_chart,
+                comparison_chart=lunar_return_chart,
+                birth_datetime=date_time,
+                comparison_datetime=lunar_return_dt
+            )
+        else:
+            result["lifecycle_events"] = None
+            result["lifecycle_summary"] = None
 
         result["applied_settings"] = build_applied_settings(house_system, status)
         result["status"] = "success"
@@ -383,7 +392,8 @@ def generate_compact_lunar_return_chart(
     return_latitude: str = None,
     return_longitude: str = None,
     occurrence: int = 1,
-    time_status: str = "known"
+    time_status: str = "known",
+    include_lifecycle_events: bool = True
 ) -> Dict[str, Any]:
     """
     Calculate compact lunar return chart with optimized response.
@@ -428,6 +438,8 @@ def generate_compact_lunar_return_chart(
                      is then searched from that natal Moon, its instant is
                      uncertain (up to ~12 hours for "unknown", see warnings),
                      and the return chart omits houses and angles.
+        include_lifecycle_events: Include lifecycle events analysis (planetary returns,
+                                  major life transits, future timeline). Default: True.
 
     Returns:
         Compact lunar return chart optimized for LLM processing, plus
@@ -439,7 +451,7 @@ def generate_compact_lunar_return_chart(
         logger.info(f"Generating compact lunar return chart for {date_time} at {latitude}, {longitude} for {return_year}-{return_month:02d}")
 
         # Validate inputs
-        validate_inputs(date_time, latitude, longitude)
+        validate_inputs(date_time, latitude, longitude, timezone)
         status = validate_time_status(time_status)
         validate_aspect_priority(aspect_priority)
 
@@ -456,6 +468,7 @@ def generate_compact_lunar_return_chart(
 
         relocated = return_latitude is not None or return_longitude is not None
         return_lat = parse_coordinate(return_latitude, is_latitude=True) if return_latitude else lat
+        reject_pole(return_lat, status)
         return_lon = parse_coordinate(return_longitude, is_latitude=False) if return_longitude else lon
 
         # Get natal Moon's position
@@ -534,15 +547,19 @@ def generate_compact_lunar_return_chart(
             'relocated': relocated
         }
 
-        # Lifecycle context at the return moment (the return chart doubles
-        # as the transit reference)
-        attach_lifecycle_section(
-            result,
-            natal_chart=natal_chart,
-            comparison_chart=lunar_return_chart,
-            birth_datetime=date_time,
-            comparison_datetime=lunar_return_dt
-        )
+        if include_lifecycle_events:
+            # Lifecycle context at the return moment (the return chart doubles
+            # as the transit reference)
+            attach_lifecycle_section(
+                result,
+                natal_chart=natal_chart,
+                comparison_chart=lunar_return_chart,
+                birth_datetime=date_time,
+                comparison_datetime=lunar_return_dt
+            )
+        else:
+            result["lifecycle_events"] = None
+            result["lifecycle_summary"] = None
 
         result["applied_settings"] = build_applied_settings(house_system, status)
         result["status"] = "success"
