@@ -92,6 +92,13 @@ def validate_inputs(date_time: str, latitude: str, longitude: str) -> None:
     parse_coordinate(longitude, is_latitude=False)
 
 
+class PolarHouseError(ValueError):
+    """A house system the Swiss Ephemeris returns unusable cusps for here."""
+
+
+POLAR_HOUSE_SUGGESTION = "Use house_system='PORPHYRIUS', 'EQUAL' or 'WHOLE_SIGN' for this chart."
+
+
 def get_error_suggestion(error_type: str, message: str) -> str:
     """
     Provide helpful suggestions based on error type.
@@ -127,6 +134,8 @@ def handle_chart_error(e: Exception) -> Dict[str, Any]:
     # Provide more specific error messages
     if isinstance(e, zoneinfo.ZoneInfoNotFoundError):
         message, suggestion = _timezone_error(e)
+    elif isinstance(e, PolarHouseError):
+        message, suggestion = str(e), POLAR_HOUSE_SUGGESTION
     elif "Invalid coordinate" in str(e):
         message = str(e)
     elif "Invalid datetime" in str(e):

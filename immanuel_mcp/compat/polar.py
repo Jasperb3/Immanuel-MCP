@@ -17,6 +17,15 @@ to, and record the fallback for the response. The retry happens inside the
 call, so immanuel's own `except swe.Error` (which resolves to swisseph's
 Error through the proxy) never sees it. Every other call, and every other
 error, passes straight through.
+
+The proxy also rejects reversed cusps. At some moments inside a polar
+circle the Swiss Ephemeris returns Regiomontanus, Campanus and Polich Page
+cusps in clockwise order, with the MC and IC swapped. immanuel's house
+lookup assumes zodiacal order, so it raised KeyError('index') or, for Polich
+Page, built a chart with the houses scrambled. Those casts now raise
+PolarHouseError, which names the systems that work. They are not swapped
+for Porphyry: the Swiss Ephemeris doesn't refuse these systems, so a
+fallback would override a valid request.
 """
 
 import logging
@@ -29,6 +38,7 @@ from immanuel.support.localize import localize
 from immanuel.tools import sweph
 
 from ..utils.call_context import note_polar_fallback, polar_fell_back
+from ..utils.errors import PolarHouseError
 
 logger = logging.getLogger(__name__)
 
@@ -40,25 +50,51 @@ SUPPORTED = ("1.8.",)
 POLAR_MESSAGE = "polar circle"
 PORPHYRY = b"O"
 _HSYS_POSITION = 3  # houses_ex2(jd, lat, lon, hsys) / houses_armc_ex2(armc, lat, eps, hsys)
+_LAT_POSITION = 1
+
+
+def cusps_reversed(cusps) -> bool:
+    """Whether twelve cusps run clockwise. The binding returns 13 values,
+    the first a placeholder. In zodiacal order the forward gaps add up to one
+    turn; reversed, they add up to eleven."""
+    cusps = cusps[-12:]
+    return sum((cusps[(i + 1) % 12] - cusps[i]) % 360 for i in range(12)) > 361
+
+
+def _argument(args, kwargs, position, name):
+    return kwargs[name] if name in kwargs else args[position]
 
 
 def _polar_safe(function):
     def call(*args, **kwargs):
+        requested = _argument(args, kwargs, _HSYS_POSITION, "hsys")
         try:
-            return function(*args, **kwargs)
+            result = function(*args, **kwargs)
         except swe.Error as error:
             if POLAR_MESSAGE not in str(error):
                 raise
             if "hsys" in kwargs:
-                requested = kwargs["hsys"]
                 kwargs = {**kwargs, "hsys": PORPHYRY}
             else:
-                requested = args[_HSYS_POSITION]
                 args = (*args[:_HSYS_POSITION], PORPHYRY, *args[_HSYS_POSITION + 1:])
             note_polar_fallback(requested)
-            return function(*args, **kwargs)
+            result = function(*args, **kwargs)
+        if cusps_reversed(result[0]):
+            raise PolarHouseError(
+                f"{_system_name(requested)} houses can't be cast at latitude "
+                f"{_argument(args, kwargs, _LAT_POSITION, 'lat'):.4f} at this moment: "
+                f"inside the polar circle the Swiss Ephemeris returns them in reverse "
+                f"order, with the MC below the horizon.")
+        return result
     call.__name__ = function.__name__
     return call
+
+
+def _system_name(code: bytes) -> str:
+    for system, swe_code in sweph._SWE.items():
+        if swe_code == code:
+            return names.HOUSE_SYSTEMS[system]
+    return code.decode()
 
 
 class _PolarSafeSwisseph:
