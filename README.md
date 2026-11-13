@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes the powerful [Immanuel Python astrology library](https://github.com/theriftlab/immanuel-python) as a set of tools accessible to MCP-compatible clients like Claude Desktop.
 
-**v0.12.3 · 23 tools · 668 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+**v0.12.3 · 23 tools · 686 tests passing · tropical zodiac, structured data only** (see [Scope and Division of Labour](#scope-and-division-of-labour)). See [`CHANGELOG.md`](CHANGELOG.md) for release history.
 
 ## Features
 
@@ -487,6 +487,8 @@ Calculates transiting planet aspects to a natal chart with intelligent paginatio
 - `transit_positions`: Named keys (`"Sun"` not `4000001`), consolidated position strings
 - `dignities`: Consolidated section (not scattered in each position)
 - `transit_to_natal_aspects`: Streamlined aspects with `planets` field (`"Venus → Chiron"`)
+- `applying` on each aspect (both transit-to-natal tools): `true` when the transiting object's present motion is closing the orb to the natal point, `false` when it is widening it. The natal point is fixed, so this follows from the transiting object alone. Prefer it to `movement`, which is immanuel's own label and is wrong for transits: it treats the faster of the two objects as the mover, and calls any retrograde one "Applicative" (on 2026-11-12, Saturn retrograde at 8°39' Aries backing away from a square to a natal Neptune at 9°58' Capricorn reads `movement: "Applicative"`, `applying: false`). A retrograde planet that has just passed exact is `applying: false` now and may return after it stations.
+- `natal_house` on each transit position (both tools): the house of the natal chart the transiting object falls in. `house` is a house of the transit moment's own chart, cast for the transit location, and says nothing about the natal chart. `null` when the natal chart is untimed.
 - `aspect_summary`: Counts for tight/moderate/loose/total aspects
 - `pagination`: Current page, total pages, next page instructions
 

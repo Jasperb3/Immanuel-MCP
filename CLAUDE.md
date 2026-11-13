@@ -132,6 +132,9 @@ These need no birth data — they read the ephemeris directly and build no chart
 
 **Timezone echo (v0.8.1):** both transit-to-natal tools report the timezone the chart was actually built in, not the raw parameter. `Subject.timezone` holds only what the caller passed and stays `None` for an inferred zone, so use `effective_timezone()` in `immanuel_mcp/utils/subjects.py` (it reads the resolved `date_time.tzinfo`) rather than the attribute when echoing a timezone in any new tool.
 
+### Transit direction and natal house
+Both transit-to-natal tools add `applying` to each aspect and `natal_house` to each transit position (`immanuel_mcp/optimizers/transit_direction.py`). `applying` is computed from the transiting object's signed speed against the fixed natal longitude; immanuel's `movement` is left in the full output but is not reliable across charts (it picks the faster object as "active" and treats any retrograde active object as applicative). `house` on a transit position is the transit chart's own house; `natal_house` uses the natal cusps and is `None` for an untimed natal chart.
+
 ### Transit-to-Natal Pagination System
 
 The `generate_transit_to_natal` endpoint includes intelligent pagination to comply with MCP transport limits (~50 KB) while organizing aspects by astrological significance.
